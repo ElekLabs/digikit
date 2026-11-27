@@ -1,0 +1,48 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/services/samples-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/services/samples",
+    "core/sample-pool",
+    "core/runtime-storage",
+    "dkrt-svc-samples"
+  ],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "samples-live.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "modules": [],
+        "sources": [
+          "packages/workbench-core/src/transfer/sample-upload.ts"
+        ],
+        "plusdrive": true,
+        "dksampleWasm": true
+      },
+      {
+        "files": [
+          "samples-store-live.device.test.ts"
+        ],
+        "devices": [
+          "dn2"
+        ],
+        "modules": [],
+        "sources": [
+          "packages/workbench-core/src/transfer/sample-upload.ts"
+        ],
+        "dksampleWasm": true
+      }
+    ],
+    "mergeTests": [
+      "samples-live.device.test.ts",
+      "samples-store-live.device.test.ts"
+    ]
+  }
+}

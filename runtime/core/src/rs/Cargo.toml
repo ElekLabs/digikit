@@ -1,0 +1,49 @@
+[package]
+name = "dkrt"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+# `package-image` builds the package artifact (`[system_package]` of module.toml, `--no-default-features --features package-image`); the resident object is built without it.
+[features]
+default = []
+package-image = []
+
+[dependencies]
+dkrt-sdk = { path = "../../sdk" }
+dkrt-abi = { path = "../../abi" }
+dkrt-fit = { path = "../../fit" }
+dkrt-link = { path = "../../link" }
+dkrt-lifecycle = { path = "../../lifecycle" }
+dkneeds = { path = "../../../../packages/dkneeds" }
+dkfw = { path = "../../../../ports/bindings/rs" }
+
+[dev-dependencies]
+dkrt-test-support = { path = "../../test-support" }
+dkrt-lifecycle = { path = "../../lifecycle", features = ["fake"] }
+dkrt-svc-rt = { path = "../../svc-rt" }
+toml = "0.9.12"
+dkrt-svc-lfo = { path = "../../../../services/lfo" }
+dkrt-svc-fx = { path = "../../../../services/fx" }
+dkrt-svc-machines = { path = "../../../../services/machines" }
+dkrt-svc-machines-dks = { path = "../../../../services/machines/dks" }
+dkrt-svc-fx-dks = { path = "../../../../services/fx/dks" }
+dkrt-svc-lfo-dks = { path = "../../../../services/lfo/dks" }
+dkrt-svc-shortcuts-dks = { path = "../../../../services/shortcuts/dks" }
+dkrt-svc-samples-dks = { path = "../../../../services/samples/dks" }
+dkrt-svc-project-dks = { path = "../../../../services/project/dks" }
+dkrt-fixture-local-ping = { path = "../../../../tests/fixtures/modules/local-ping" }
+dkrt-fixture-local-step = { path = "../../../../tests/fixtures/modules/local-step" }
+
+# This crate sits inside the repository's cargo workspace but is built on its own (`patchkit build`).
+[workspace]
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+lto = false
+codegen-units = 1
+debug = false

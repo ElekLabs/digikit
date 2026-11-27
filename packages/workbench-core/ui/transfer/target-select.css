@@ -1,0 +1,16 @@
+/* The target selector (TargetSelect.tsx), used by the Transfer page and, in the desktop app, the Remote page. */
+.target-select {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.target-select select {
+  height: 26px;
+  border: 1px solid var(--tp-border, var(--content-border));
+  background: var(--panel-2);
+  color: var(--ink);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+}

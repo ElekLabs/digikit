@@ -3,8 +3,8 @@
 
 The proof that used to live here (a machine loaded through the mailbox while the firmware ran, against the patched-in one) was
 hot-reload only and is archived (tag `digikit-hot-reload-v1`, docs/plans/digikit-hot-reload.md). Its boot-time successor is
-tools/patchkit/pk_digikit_scen.py (equivalence scenarios: the same PCM, sample for sample, from a module selected at boot; finding 37),
-which uses `Rig`, `pcm_check`, `parse_dsp_section` and `relocate` from here.
+tools/patchkit/pk_digikit_scen.py (equivalence scenarios: the pinned PCM from a module selected at boot; finding 37),
+which uses `Rig`, `pcm_pin`, `parse_dsp_section` and `relocate` from here.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 from tools.coldfire import arena_safety  # noqa: E402
 from tools.control.digi_client import Emu  # noqa: E402
 from tools.device.dkproto import SETTINGS_SECTORS  # noqa: E402
-from tools.patchkit import hook_ab  # noqa: E402
+from tools.patchkit import hook_ab, pk_device, pk_hostdir  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit.pk_dkrt import (  # noqa: E402
     ProofError,
@@ -37,12 +37,10 @@ STATE_IDLE, STATE_LOADING = 0, 1
 FREE_TYPE = 0xFFFF_FFFF
 L2_BYTE_BASE, L2_SW_BASE = 0x2000_0000, 0x00B8_0000
 TRACK_OBJ_WORD = 0x4265338C  # the type byte is the third byte of this word (finding 02)
-MODULES_STATIC = "core/runtime,core/dynreg,core/dyndsp"
-PLUCK_STATIC_TYPE = 9
+MODULES_STATIC = "core/runtime,core/rows,core/dyndsp"
 MODULE = "test/sine"
 MACHINE = "sine"  # its machine
-# DspState (modules/core/runtime/src/rs/src/dsp.rs), byte offsets of the fields the proof reads
-D_MAGIC, D_PHASE, D_STEP, D_TRANSFERS, D_ROW_WRITES, D_FAILURES = 0, 4, 12, 36, 40, 44
+# DspState (runtime/core/abi/src/dsp.rs), byte offsets of the fields the proof reads
 D_MOD_OFF, D_MOD_LEN, D_ROW_TYPE, D_ROW_PC, D_ROW_OWNER = 52, 84, 148, 180, 212
 # State: last_result at 12; Mailbox: cmd 0, seq 4, result 8, arg 12
 ST_LAST = 12
@@ -167,7 +165,9 @@ def runtime_watch_env(
         plan["base"]["device"] + "-" + plan["base"]["version"]
     )
     # the card reads land by DMA in the runtime's staging buffer (and the 512-byte record buffer): left out of the watch
-    holes = [(sym(plan, "core/runtime", "DKRT_STAGE"), 64 * 1024)]
+    holes = [
+        (sym(plan, "core/runtime", "DKRT_STAGE"), pk_device.shared_limits().stage_bytes)
+    ]
     with contextlib.suppress(
         ProofError
     ):  # an image of an older runtime has no record buffer
@@ -182,6 +182,10 @@ def runtime_watch_env(
         ProofError
     ):  # the I/O task's stack, TCB and semaphore: the kernel writes them
         holes.append((sym(plan, "core/runtime", "DKRT_IO_TASK"), 16496))
+    with contextlib.suppress(
+        ProofError
+    ):  # the helper task's stack, TCB and semaphores: the kernel writes them
+        holes.append((sym(plan, "core/runtime", "DKRT_AUX_TASK"), 4208))
     with contextlib.suppress(
         ProofError
     ):  # nor the store-peek sector (the card read of the store's header DMAs into it)
@@ -279,10 +283,11 @@ class Rig:
         self.s.card_img = card_img
         self.syx = syx
         self.checks: list[tuple[str, bool, str]] = []
-        # (a reference image without the runtime, `ref_plain` scenarios, has none of these)
         self.mb = sym(plan, "core/runtime", "DKRT_MAILBOX") if has_rt(plan) else 0
         self.state = sym(plan, "core/runtime", "DKRT_STATE") if has_rt(plan) else 0
-        self.dsp = sym(plan, "core/runtime", "DKRT_DSP") if has_rt(plan) else 0
+        self.host_dir = (
+            sym(plan, "core/runtime", "DKRT_HOST_DIR") if has_rt(plan) else 0
+        )
 
     def check(self, name: str, ok: bool, detail: str = "") -> None:
         self.checks.append((f"{self.tag}: {name}", bool(ok), detail))
@@ -324,8 +329,9 @@ class Rig:
         r = self.w(self.state + ST_LAST)
         return r - (1 << 32) if r >= 1 << 31 else r
 
-    def dsp_phase(self) -> int:
-        return self.w(self.dsp + D_PHASE)
+    def package_symbol(self, name: str) -> int:
+        """The address of a static of the system package (`DSP` is `DKRT_DSP`), through the host directory; raises `pk_hostdir.NoPackage` when none is loaded."""
+        return pk_hostdir.read_package_address(self.w, self.host_dir, name)
 
     def dsp_bytes(self, addr: int, n: int) -> bytes:
         out = bytearray()
@@ -346,11 +352,11 @@ class Rig:
             "<II", raw
         )  # dsp_peek returns memory bytes: DSP words are little endian
 
-    # -- the firmware's machine rows (core/machines): the name pointer marks a row as used
+    # -- the firmware's machine rows (core/rows): the name pointer marks a row as used
     def machine_listed(self, typ: int) -> bool:
-        rows = sym(self.plan, "core/machines", "machines.rows")
-        first = sym(self.plan, "core/machines", "machines.first")
-        size = sym(self.plan, "core/machines", "machines.row_size")
+        rows = sym(self.plan, "core/rows", "machines.rows")
+        first = sym(self.plan, "core/rows", "machines.first")
+        size = sym(self.plan, "core/rows", "machines.row_size")
         name = self.w(rows + (typ - first) * size + 56)
         return bool(name) and (self.w(name) >> 24) != 0
 
@@ -443,44 +449,6 @@ class Rig:
         return out
 
 
-def pcm_check(
-    run: Rig,
-    ref_pcm: np.ndarray,
-    run_pcm: np.ndarray,
-    report: dict[str, Any],
-    what: str,
-    until: int | None = None,
-    max_shift: int = 128,
-) -> None:
-    """The run-time PCM equals the reference's: exactly, or sample for sample from the note's onset on. The two images do not
-    reach the audition at the same ColdFire instruction (the run-time image has loaded a module, the Digitone II reference has
-    a machine module's code on the key path) and the PCM tap starts at the block in progress, so the capture may start up to a
-    few frames apart; the sound, from the onset on, must not differ in a single sample. UNTIL (interleaved samples after the onset)
-    cuts the comparison before the key is released: on the Digitone II the release reaches the engine a block apart in the two images.
-    MAX_SHIFT is the largest onset shift (samples) that is accepted."""
-    exact = len(run_pcm) == len(ref_pcm) and bool(np.array_equal(run_pcm, ref_pcm))
-    shift, aligned_differ = aligned_compare(ref_pcm, run_pcm, until)
-    report["pcm"] = {
-        "samples": len(run_pcm),
-        "exact": exact,
-        "onset_shift_samples": shift,
-        "differ_after_alignment": aligned_differ,
-        "compared_samples_after_onset": until,
-        "peak": float(abs(run_pcm).max()),
-    }
-    run.check(
-        f"PCM of the run-time {what} equals the patched-in {what}'s (exact, or sample for sample from the onset on)",
-        (exact and until is None)
-        or (
-            shift is not None
-            and shift % 2 == 0
-            and abs(shift) <= max_shift
-            and aligned_differ == 0
-        ),
-        f"{len(run_pcm)} samples, exact {exact}, onset shift {shift}, {aligned_differ} differ after alignment",
-    )
-
-
 def pcm_pin(
     run: Rig,
     run_pcm: np.ndarray,
@@ -491,7 +459,7 @@ def pcm_pin(
 ) -> None:
     """The run-time PCM from the note's onset on, N interleaved samples as little-endian float32, has the SHA-256 PIN.
 
-    The onset is the first sample above 1e-6 (as `aligned_compare`); it must lie on a whole stereo frame, and the N samples must
+    The onset is the first sample above 1e-6 (the first sample the note makes); it must lie on a whole stereo frame, and the N samples must
     end before the key is released (the release reaches the engine a block apart in two images). PIN "record" fails and reports
     the hash, to record a pin: the value is approved by Em, not by a run."""
     nz = np.flatnonzero(np.abs(run_pcm) > 1e-6)
@@ -511,24 +479,6 @@ def pcm_pin(
         onset >= 0 and onset % 2 == 0 and len(window) == n and got == pin,
         f"sha256 {got}, onset {onset}, {len(window)} samples",
     )
-
-
-def aligned_compare(
-    ref: np.ndarray, run: np.ndarray, until: int | None = None
-) -> tuple[int | None, int]:
-    """(onset of RUN minus onset of REF in samples, samples that differ over the common length from the onsets on)."""
-
-    def onset(x: np.ndarray) -> int:
-        nz = np.flatnonzero(np.abs(x) > 1e-6)
-        return int(nz[0]) if len(nz) else -1
-
-    a, b = onset(ref), onset(run)
-    if a < 0 or b < 0:
-        return None, -1
-    n = min(len(ref) - a, len(run) - b)
-    if until is not None:
-        n = min(n, until)
-    return b - a, int((ref[a : a + n] != run[b : b + n]).sum())
 
 
 def run_imports(run: Rig, plan: dict) -> dict[str, int]:

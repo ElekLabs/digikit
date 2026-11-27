@@ -42,15 +42,24 @@ pub struct Plan {
     /// region name -> bytes used / capacity
     pub regions: BTreeMap<String, (u64, u64)>,
     pub symbols: BTreeMap<String, u64>,
+    /// The ColdFire code the plan placed and the port's code anchors, as address map entries (`patchkit apply --addrmap`).
+    #[serde(skip)]
+    pub addr_entries: Vec<dkaddrmap::Entry>,
     /// P2: registries and their entries with the assigned indices
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub registries: Vec<prim::PlanRegistry>,
     /// P1: sections copied from the image
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub sections: Vec<prim::PlanSection>,
+    /// The entries of the image's info table (`dkrt_info_table`), with the words of each data entry as the image holds them
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub info: Vec<PlanInfo>,
     /// P4: hooks
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hooks: Vec<prim::PlanHook>,
+    /// `<owner>:<name>` of every optional anchor or hook (`optional_anchors` of a manifest) that the port lacks: what the module does without
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub disabled: Vec<String>,
     pub record: Record,
     pub output: Option<PlanOutput>,
 }
@@ -66,6 +75,24 @@ impl Plan {
     }
 }
 
+/// One entry of the image's info table (`prim::build_info_table`): `kind` is `prim::INFO_KIND_SLOT` or `prim::INFO_KIND_DATA`; `words` are up to
+/// `INFO_WORDS` big endian words at `addr` of a data entry (read from the placed object that holds it; empty when no placed object does).
+#[derive(Clone, Debug, Serialize)]
+pub struct PlanInfo {
+    pub name: String,
+    pub hash: u32,
+    pub addr: u64,
+    pub kind: u32,
+    pub words: Vec<u32>,
+}
+
+/// The most words of a data entry the plan records.
+const INFO_WORDS: usize = 16;
+
+/// The info table entry patchkit adds to every table it builds: the first 8 bytes of the SHA-256 of the stock `.syx` this image was made from (two words, a data
+/// entry). The loader finds the port file whose `FW` item equals it.
+pub const FW_ID_ENTRY: &str = "fw_id";
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PlanBase {
     pub device: String,
@@ -79,6 +106,9 @@ pub struct PlanOutput {
     pub syx_bytes: u64,
     pub container_bytes: u64,
     pub changed_sections: Vec<(u32, u64, u64)>,
+    /// `bootstrap margin 9.1 KB, container 31.4 KB free` (the in-place margin of MAIN at the bootstrap's stage and the container space left).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget: Option<crate::verify::Budget>,
 }
 
 pub struct Applied {
@@ -98,7 +128,8 @@ fn anchor_value(a: &Anchor) -> u64 {
 
 /// Memory of both CPUs as the firmware loads it.
 struct Mem {
-    stream: Stream,
+    /// The DSP boot stream; `None` on a device without a DSP.
+    stream: Option<Stream>,
     main: Vec<u8>,
     main_base: u64,
     stream_dirty: bool,
@@ -109,6 +140,8 @@ impl Mem {
     fn read(&self, cpu: &str, addr: u64, len: u64) -> Result<Vec<u8>> {
         if cpu == SHARC {
             self.stream
+                .as_ref()
+                .ok_or_else(|| err!("DSP {addr:#x}+{len}: the device has no DSP"))?
                 .read(addr as u32, len as usize)
                 .ok_or_else(|| err!("DSP {addr:#x}+{len}: not loaded by the boot stream"))
         } else {
@@ -124,7 +157,10 @@ impl Mem {
     fn write(&mut self, cpu: &str, addr: u64, data: &[u8]) -> Result<()> {
         if cpu == SHARC {
             self.stream_dirty = true;
-            self.stream.write(addr as u32, data)
+            self.stream
+                .as_mut()
+                .ok_or_else(|| err!("DSP {addr:#x}: the device has no DSP"))?
+                .write(addr as u32, data)
         } else {
             self.read(cpu, addr, data.len() as u64)?;
             let o = (addr - self.main_base) as usize;
@@ -234,15 +270,27 @@ pub fn compatible(m: &Module, port: &Port) -> Result<()> {
         }
         for sy in dko.symbols.iter().filter(|s| s.section.is_none()) {
             let name = o.externs.get(&sy.name).unwrap_or(&sy.name);
-            // an export of another object cannot be seen here; only names that look like anchors are checked
-            if (name.starts_with("dsp.") || name.starts_with("cf.")) && port.anchor(name).is_none()
+            // an export of another object cannot be seen here; only names that look like anchors are checked; an optional anchor may be missing
+            if (name.starts_with("dsp.") || name.starts_with("cf."))
+                && port.anchor(name).is_none()
+                && !disabled_anchors(m, port).contains(name)
             {
                 missing.push(format!("anchor {name}"));
             }
         }
     }
+    let off = disabled_anchors(m, port);
     for op in &m.manifest.op {
         if !on(&op.devices, dev) {
+            continue;
+        }
+        // an optional hook or anchor the port lacks switches the op off instead of refusing the module
+        let name = op
+            .hook
+            .as_deref()
+            .filter(|_| op.op == "hook")
+            .unwrap_or(&op.anchor);
+        if off.iter().any(|n| n == name) {
             continue;
         }
         let op = &match expand_op(m, port, op) {
@@ -263,12 +311,23 @@ pub fn compatible(m: &Module, port: &Port) -> Result<()> {
             }
             None => {}
         }
-        if op.op == "hook" {
+        if matches!(op.op.as_str(), "hook" | "stub") {
             let place = hook_place(port, op);
             let runs = op.displaced.as_deref() == Some("run");
             if port.region(&place).is_none() && runs {
                 missing.push(format!("region {place}"));
             }
+        }
+    }
+    for sl in m
+        .manifest
+        .slot
+        .iter()
+        .filter(|s| on(&s.devices, dev) && !s.is_dsp())
+    {
+        let place = slot_place(sl);
+        if port.region(&place).is_none() {
+            missing.push(format!("region {place}"));
         }
     }
     for s in m.manifest.section.iter().filter(|s| on(&s.devices, dev)) {
@@ -318,7 +377,11 @@ fn glob_anchors<'a>(port: &'a Port, pattern: &str) -> Vec<&'a Anchor> {
 /// A manifest `hook` op in the form the later steps read: the site anchor and offset of the declared hook,
 /// and `hook` (displaced code runs), `hook` with `displaced = drop` or `retarget` by its mode.
 fn expand_op(m: &Module, port: &Port, op: &Op) -> Result<Op> {
-    let Some(name) = op.hook.as_deref().filter(|_| op.op == "hook") else {
+    let Some(name) = op
+        .hook
+        .as_deref()
+        .filter(|_| matches!(op.op.as_str(), "hook" | "stub"))
+    else {
         return Ok(op.clone());
     };
     let h = port
@@ -327,6 +390,14 @@ fn expand_op(m: &Module, port: &Port, op: &Op) -> Result<Op> {
     let mut x = op.clone();
     x.anchor = h.site.clone();
     x.offset = h.offset;
+    if op.op == "stub" {
+        // a stub sits in front of the displaced instructions whatever the hook's mode is
+        if h.mode == "retarget" {
+            return Err(err!("{}: stub {name}: a retarget hook has no stub", m.id()));
+        }
+        x.displaced = Some("run".into());
+        return Ok(x);
+    }
     match h.mode.as_str() {
         "before" => x.displaced = Some("run".into()),
         "replace" => x.displaced = Some("drop".into()),
@@ -336,14 +407,99 @@ fn expand_op(m: &Module, port: &Port, op: &Op) -> Result<Op> {
     Ok(x)
 }
 
-/// The ops of a module that are active on the port's device, hook ops expanded.
+/// The names in the module's `optional_anchors` that the port has neither as an anchor nor as a hook: what the module does without on this firmware.
+pub fn disabled_anchors(m: &Module, port: &Port) -> Vec<String> {
+    m.manifest
+        .module
+        .optional_anchors
+        .iter()
+        .filter(|n| port.anchor(n).is_none() && port.hook(n).is_none())
+        .cloned()
+        .collect()
+}
+
+/// The ops of a module that are active on the port's device, hook ops expanded. An op whose hook or anchor is optional and missing is left out.
 fn device_ops(m: &Module, port: &Port) -> Result<Vec<Op>> {
+    let off = disabled_anchors(m, port);
     m.manifest
         .op
         .iter()
         .filter(|o| on(&o.devices, &port.port.device))
+        .filter(|o| match o.hook.as_deref().filter(|_| o.op == "hook") {
+            Some(h) => !off.iter().any(|n| n == h),
+            None => !off.contains(&o.anchor),
+        })
         .map(|o| expand_op(m, port, o))
         .collect()
+}
+
+/// One range of ColdFire code or data that a module of the image changes on a firmware.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatchedRange {
+    pub module: String,
+    pub what: String,
+    pub lo: u64,
+    pub hi: u64,
+}
+
+/// The ColdFire ranges that module `m` changes on `port` (its active ops, no firmware needed): a hook or stub op takes the bytes of the displaced whole instructions
+/// (`len` of the hook in the port, at least the 6 bytes of the jump; a hook that no service uses has no `len`, so 6 is a lower bound), a write op its width or bytes,
+/// a retarget the 6 bytes of a call or jump. SHARC ops are not listed.
+pub fn patched_ranges(m: &Module, port: &Port) -> Result<Vec<PatchedRange>> {
+    let mut out = vec![];
+    for op in device_ops(m, port)? {
+        let anchors: Vec<&Anchor> = match &op.anchors {
+            Some(g) => glob_anchors(port, g),
+            None => port.anchor(&op.anchor).into_iter().collect(),
+        };
+        for a in anchors.into_iter().filter(|a| a.cpu != SHARC) {
+            let site = if a.kind == "value" {
+                a.src.unwrap_or(a.addr)
+            } else {
+                a.addr
+            };
+            let lo = (site as i64 + op.offset) as u64;
+            let len = match op.op.as_str() {
+                "hook" | "stub" => op
+                    .hook
+                    .as_deref()
+                    .and_then(|h| port.hook(h))
+                    .and_then(|h| h.len)
+                    .map_or(6, |l| u64::from(l).max(6)),
+                "write" => op
+                    .width
+                    .map(u64::from)
+                    .or_else(|| op.hex.as_ref().map(|h| h.len() as u64 / 2))
+                    .unwrap_or(a.len),
+                _ => 6,
+            };
+            out.push(PatchedRange {
+                module: m.id().to_string(),
+                what: format!("{} {}{:+}", op.op, a.name, op.offset),
+                lo,
+                hi: lo + len,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// Is `name`, an undefined symbol's anchor name, one that an optional anchor switched off: the optional anchor itself, or a tail
+/// (`hook.<site>.tail`, `hook.<site>.return`) of a hook whose site is one?
+fn switched_off(name: &str, off: &[String]) -> bool {
+    if off.iter().any(|n| n == name) {
+        return true;
+    }
+    let site = name.strip_prefix("hook.").and_then(|r| {
+        r.strip_suffix(".tail")
+            .or_else(|| r.strip_suffix(".return"))
+    });
+    site.is_some_and(|s| off.iter().any(|n| n == s))
+}
+
+/// Region of the slot words of a `[[slot]]`.
+fn slot_place(s: &crate::module::SlotDef) -> String {
+    s.place.clone().unwrap_or_else(|| "cf.expansion".into())
 }
 
 /// Region of a hook's tail: `place`, else the CPU's code region.
@@ -382,12 +538,102 @@ fn verify_anchor(mem: &Mem, a: &Anchor) -> Result<()> {
 pub struct Options {
     /// Write the `DKPR` record (always on for real patches; oracles compare against images made without).
     pub record: bool,
+    /// Refuse a container over the port's `container_max`. The limit protects the OS-upgrade flash path (the receiver
+    /// copies the image into a RAM stage without a size check); an image that is only booted in the emulator turns it off.
+    pub flash_cap: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options { record: true }
+        Options {
+            record: true,
+            flash_cap: true,
+        }
     }
+}
+
+/// A `[[repack]]` of a module of the set, checked against the device: the section it names and the module that claims it.
+struct RepackClaim<'a> {
+    module: &'a Module,
+    def: &'a crate::module::RepackDef,
+    section: u32,
+}
+
+/// The `[[repack]]` claims of the set: refuses a claim on a section that the device does not list in `[container] repack`, and two claims on one role.
+fn repack_claims<'a>(
+    fw: &Firmware,
+    lib: &'a Library,
+    order: &[String],
+    dev: &str,
+) -> Result<Vec<RepackClaim<'a>>> {
+    let mut claimed: BTreeMap<String, String> = BTreeMap::new();
+    let mut out = vec![];
+    for id in order {
+        let m = lib.get(id).unwrap();
+        for r in m.manifest.repack.iter().filter(|r| on(&r.devices, dev)) {
+            let section = fw
+                .device
+                .role_section(&r.role)
+                .filter(|s| fw.device.is_repackable(*s))
+                .ok_or_else(|| {
+                    err!(
+                        "{id}: [[repack]] role {:?}: {} has no such section that can be stored packed ([container] repack {:?})",
+                        r.role,
+                        fw.device.short(),
+                        fw.device.repack_roles()
+                    )
+                })?;
+            if let Some(first) = claimed.insert(r.role.clone(), id.clone()) {
+                return Err(err!(
+                    "{id}: [[repack]] role {:?} is already claimed by {first}",
+                    r.role
+                ));
+            }
+            out.push(RepackClaim {
+                module: m,
+                def: r,
+                section,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// Store the sections of `claims` packed and check each stored stream against its module's buffer layout: the stock section is the one the module
+/// checks, the stream fits, and the in-place margin is above 0 (a margin of 0 or less would overwrite stream bytes that are not read yet).
+fn store_repacked(fw: &mut Firmware, claims: &[RepackClaim]) -> Result<()> {
+    for c in claims {
+        let (id, r, sec) = (c.module.id(), c.def, c.section);
+        let data = &fw.section(sec).unwrap().data;
+        if data.len() as u64 != r.len || sha256_hex(data) != r.sha256 {
+            return Err(err!(
+                "{id}: section {sec} of this image is not the one the module unpacks and checks ({} bytes, sha256 {}; expected {} bytes, {})",
+                data.len(),
+                sha256_hex(data),
+                r.len,
+                r.sha256
+            ));
+        }
+        let stored = fw.repack(sec)?;
+        let stream = &fw.section(sec).unwrap().stored;
+        if r.stage_end < r.dest + stored as u64 {
+            return Err(err!(
+                "{id}: the packed section {sec} ({stored} bytes) does not fit the buffer {:#x}..{:#x}",
+                r.dest,
+                r.stage_end
+            ));
+        }
+        let stage = r.stage_end - stored as u64;
+        let margin = crate::aplib::inplace_margin(stream, r.dest, stage)
+            .map_err(|e| err!("{id}: section {sec}: {e}"))?;
+        if let Some(m) = margin.filter(|m| *m <= 0) {
+            return Err(err!(
+                "{id}: unpacking section {sec} in place from {:#x} over the stream staged at {stage:#x} has margin {m}: it would overwrite bytes that are not read yet",
+                r.dest
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub fn apply(fw_bytes: &[u8], reg: &Registry, lib: &Library, ids: &[String]) -> Result<Applied> {
@@ -406,6 +652,22 @@ struct Chunk {
     bss: u64,
     /// plan text: `object in <region>`, `section <name>`, ...
     what: String,
+}
+
+/// The words at `addr` in the ColdFire object of `chunks` that holds it (at most `INFO_WORDS`, to the end of the object's image); empty when none does.
+fn placed_words(chunks: &[Chunk], addr: u64) -> Vec<u32> {
+    let Some(c) = chunks
+        .iter()
+        .find(|c| c.cpu == CF && c.addr <= addr && addr < c.addr + c.image.len() as u64)
+    else {
+        return vec![];
+    };
+    let at = (addr - c.addr) as usize;
+    c.image[at..]
+        .chunks_exact(4)
+        .take(INFO_WORDS)
+        .map(|w| u32::from_be_bytes([w[0], w[1], w[2], w[3]]))
+        .collect()
 }
 
 /// An in-place change of firmware bytes.
@@ -437,9 +699,14 @@ fn uses_expansion(lib: &Library, ids: &[String], dev: &str, port: &Port) -> bool
                 .registry
                 .iter()
                 .any(|r| r.region == exp && on(&r.devices, dev))
+            || mf
+                .slot
+                .iter()
+                .any(|s| slot_place(s) == exp && on(&s.devices, dev))
+            || mf.info.iter().any(|i| on(&i.devices, dev))
             || device_ops(m, port).is_ok_and(|ops| {
                 ops.iter().any(|o| {
-                    o.op == "hook"
+                    matches!(o.op.as_str(), "hook" | "stub")
                         && o.displaced.as_deref() == Some("run")
                         && hook_place(port, o) == exp
                 })
@@ -511,7 +778,16 @@ struct SecStage {
     total: usize,
 }
 
-/// A `hook` op, decoded.
+/// The `stub` fields of a hook stage.
+struct StubStage {
+    slot: String,
+    scratch: u8,
+    tail: Option<String>,
+    /// `when`: `Some(true)` tests the slot where the stock branch is taken, `Some(false)` where it falls through
+    when: Option<bool>,
+}
+
+/// A `hook` or `stub` op, decoded.
 struct HookStage<'a> {
     module: &'a Module,
     op_idx: usize,
@@ -524,6 +800,8 @@ struct HookStage<'a> {
     cf: Option<prim::CfSite>,
     run: bool,
     tail_len: usize,
+    /// `op = "stub"`: the slot, the scratch register and the hand-written stock path
+    stub: Option<StubStage>,
     place: String,
     /// `hook.<anchor>` (with `.<offset>` when not 0)
     base_name: String,
@@ -629,12 +907,14 @@ fn stage<'a>(
     for id in order {
         let m = lib.get(id).unwrap();
         for (oi, op) in device_ops(m, port)?.into_iter().enumerate() {
-            if op.op != "hook" {
+            if !matches!(op.op.as_str(), "hook" | "stub") {
                 continue;
             }
+            let is_stub = op.op == "stub";
             let who = format!(
-                "{}: hook {}",
+                "{}: {} {}",
                 m.id(),
+                op.op,
                 op.hook.as_deref().unwrap_or(&op.anchor)
             );
             let a = port.anchor(&op.anchor).unwrap();
@@ -675,11 +955,73 @@ fn stage<'a>(
                     }
                 }
             }
+            let mut stub = None;
+            if is_stub {
+                let Some(site) = &cf else {
+                    return Err(err!("{who}: a stub is ColdFire only"));
+                };
+                let scratch = prim::parse_scratch(op.scratch.as_deref().unwrap())
+                    .map_err(|e| err!("{who}: {e}"))?;
+                let tail = op.tail.clone();
+                let when = op.when.as_deref().map(|w| w == "taken");
+                if when.is_some() {
+                    // the instructions before the branch run before the slot test: the test overwrites `scratch` only on the path that tests the slot, which the hook's
+                    // `regs` (the registers dead there, found from the stock bytes) must allow
+                    prim::guarded_stub_len(site).map_err(|e| err!("{who}: {e}"))?;
+                    let hook = op.hook.as_deref().unwrap_or_default();
+                    let listed = port
+                        .hook(hook)
+                        .map(|h| crate::fwgen::expand_regs(hook, true, &h.clobbers))
+                        .transpose()?
+                        .unwrap_or_default();
+                    let sc = op.scratch.as_deref().unwrap();
+                    if !listed.iter().any(|r| r == sc) {
+                        return Err(err!(
+                            "{who}: scratch {sc} is not in the hook's regs.clobbers ({}): the slot test overwrites it, so the declaration must list it",
+                            listed.join(" ")
+                        ));
+                    }
+                } else if tail.is_none() {
+                    prim::cf_tail(site, 0, 0).map_err(|e| {
+                        err!(
+                            "{who}: the stock path of the site cannot be re-encoded: {e}; give `tail = \"<symbol>\"` for a hand-written stock path"
+                        )
+                    })?;
+                    if let Some(d) = prim::scratch_read_by(&site.insns, scratch) {
+                        return Err(err!(
+                            "{who}: scratch {} is read by the displaced instruction at {:#x} ({}): choose another register from the hook's regs.clobbers",
+                            op.scratch.as_deref().unwrap(),
+                            d.addr,
+                            d.insn
+                        ));
+                    }
+                }
+                stub = Some(StubStage {
+                    slot: op.slot.clone().unwrap(),
+                    scratch,
+                    tail,
+                    when,
+                });
+            }
             let tail_len = match (&cf, run) {
                 (_, false) => 0,
-                (Some(s), true) => prim::cf_tail(s, 0, 0)
-                    .map_err(|e| err!("{who}: {e}"))?
-                    .len(),
+                (Some(s), true) if stub.as_ref().is_some_and(|t| t.when.is_some()) => {
+                    prim::guarded_stub_len(s).map_err(|e| err!("{who}: {e}"))?
+                }
+                (Some(s), true) => {
+                    let stock = match &stub {
+                        Some(StubStage { tail: Some(_), .. }) => prim::CF_JMP_LEN,
+                        _ => prim::cf_tail(s, 0, 0)
+                            .map_err(|e| err!("{who}: {e}"))?
+                            .len(),
+                    };
+                    stock
+                        + if stub.is_some() {
+                            prim::STUB_PREFIX_LEN
+                        } else {
+                            0
+                        }
+                }
                 (None, true) => 12,
             };
             let place = hook_place(port, &op);
@@ -700,12 +1042,178 @@ fn stage<'a>(
                 cf,
                 run,
                 tail_len,
+                stub,
                 place,
                 base_name,
             });
         }
     }
     Ok(st)
+}
+
+/// A declared ColdFire hook resolved on a stock image.
+#[derive(Clone, Debug)]
+pub struct HookSite {
+    pub port_id: String,
+    pub anchor: String,
+    /// The hook mode of the port: `before`, `replace` or `retarget`.
+    pub mode: String,
+    pub site: u64,
+    pub site_len: usize,
+    /// The stock bytes at the site.
+    pub old: Vec<u8>,
+    pub cf: prim::CfSite,
+    /// Where the code continues after the displaced instructions: `site + site_len`.
+    pub ret: u64,
+}
+
+/// The site of the declared hook `hook` on the stock image `fw`: the anchor address plus the hook offset, the whole instructions the
+/// 6-byte jump covers and their stock bytes. The image must be a stock one the registry has a port for.
+pub fn resolve_hook_site(fw: &[u8], reg: &Registry, hook: &str) -> Result<HookSite> {
+    resolve_site(fw, reg, hook, None)
+}
+
+/// The site of the declared patch `hook` (a `[[hook]]` with `patch = N`) on the stock image `fw`: the anchor address plus the offset and the `len` stock bytes there (1, 2 or 4).
+/// No instruction is decoded: a patch is plain bytes (an operand of an instruction, a table word), so the site needs no whole-instruction length.
+pub fn resolve_patch_site(fw: &[u8], reg: &Registry, hook: &str, len: usize) -> Result<HookSite> {
+    resolve_site(fw, reg, hook, Some(len))
+}
+
+fn resolve_site(
+    fw: &[u8],
+    reg: &Registry,
+    hook: &str,
+    patch_len: Option<usize>,
+) -> Result<HookSite> {
+    let fw = Firmware::parse(fw)?;
+    let port = reg.find(&fw.syx_sha256).ok_or_else(|| {
+        err!("no port for firmware {}: it is not a stock image patchkit knows (a patched image is refused too)", fw.syx_sha256)
+    })?;
+    let main_sec = fw
+        .section(3)
+        .ok_or_else(|| err!("image has no MAIN OS section"))?;
+    if sha256_hex(&main_sec.data) != port.port.main_sha256 {
+        return Err(err!(
+            "port {} does not match the MAIN OS section of this image",
+            port.id()
+        ));
+    }
+    let (main, base) = (&main_sec.data, main_sec.dest as u64);
+    let read = |addr: u64, len: u64| -> Result<Vec<u8>> {
+        addr.checked_sub(base)
+            .map(|o| o as usize)
+            .filter(|o| o + len as usize <= main.len())
+            .map(|o| main[o..o + len as usize].to_vec())
+            .ok_or_else(|| err!("MAIN {addr:#x}+{len}: outside the MAIN OS image"))
+    };
+    let who = format!("hook {hook}");
+    let h = port
+        .hook(hook)
+        .ok_or_else(|| err!("{who}: no such hook on {}", port.port.device))?;
+    let a = port
+        .anchor(&h.site)
+        .ok_or_else(|| err!("{who}: no anchor {}", h.site))?;
+    if a.cpu == SHARC || a.kind != "code" {
+        return Err(err!(
+            "{who}: needs a ColdFire code anchor, {} is not",
+            a.name
+        ));
+    }
+    if h.offset < 0 {
+        return Err(err!("{who}: negative offset"));
+    }
+    if sha256_hex(&read(a.addr, a.len)?) != a.sha256 {
+        return Err(err!(
+            "{who}: anchor {} at {:#x}: the bytes do not hash to what the port expects",
+            a.name,
+            a.addr
+        ));
+    }
+    let site = a.addr + h.offset as u64;
+    let cf = match patch_len {
+        None => prim::cf_site(main, base, a.addr, site).map_err(|e| err!("{who}: {e}"))?,
+        Some(len) => prim::CfSite {
+            addr: site,
+            len,
+            insns: vec![],
+        },
+    };
+    if h.offset as u64 + cf.len as u64 > a.len {
+        return Err(err!(
+            "{who}: the {}-byte site reaches past the anchor's {} bytes",
+            cf.len,
+            a.len
+        ));
+    }
+    let old = read(site, cf.len as u64)?;
+    Ok(HookSite {
+        port_id: port.id(),
+        anchor: a.name.clone(),
+        mode: h.mode.clone(),
+        site,
+        site_len: cf.len,
+        old,
+        ret: site + cf.len as u64,
+        cf,
+    })
+}
+
+/// The anchors of the port of a stock image, resolved to their addresses with the check `resolve_hook_site` makes: the port must match the image's MAIN OS section
+/// and the bytes an anchor names must hash to what the port records.
+pub struct AnchorView<'a> {
+    port: &'a Port,
+    main: &'a [u8],
+    base: u64,
+}
+
+impl<'a> AnchorView<'a> {
+    /// The view of `fw` through `port` (the port found for `fw` in the registry).
+    pub fn new(fw: &'a Firmware, port: &'a Port) -> Result<AnchorView<'a>> {
+        let main_sec = fw
+            .section(3)
+            .ok_or_else(|| err!("image has no MAIN OS section"))?;
+        if sha256_hex(&main_sec.data) != port.port.main_sha256 {
+            return Err(err!(
+                "port {} does not match the MAIN OS section of this image",
+                port.id()
+            ));
+        }
+        Ok(AnchorView {
+            port,
+            main: &main_sec.data,
+            base: main_sec.dest as u64,
+        })
+    }
+
+    /// The address of the ColdFire anchor `name` (for a `value` anchor, the number it holds). An unknown name, a SHARC anchor or bytes that do not hash to the
+    /// port's value are errors naming the anchor.
+    pub fn addr(&self, name: &str) -> Result<u64> {
+        let a = self
+            .port
+            .anchor(name)
+            .ok_or_else(|| err!("no anchor {name} on {}", self.port.port.device))?;
+        if a.cpu == SHARC {
+            return Err(err!("anchor {name} is a SHARC anchor"));
+        }
+        let at = if a.kind == "value" {
+            a.src
+                .ok_or_else(|| err!("anchor {name}: value without src"))?
+        } else {
+            a.addr
+        };
+        let bytes = at
+            .checked_sub(self.base)
+            .map(|o| o as usize)
+            .filter(|o| o + a.len as usize <= self.main.len())
+            .map(|o| &self.main[o..o + a.len as usize])
+            .ok_or_else(|| err!("anchor {name} {at:#x}+{}: outside the MAIN OS image", a.len))?;
+        if sha256_hex(bytes) != a.sha256 {
+            return Err(err!(
+                "anchor {name} at {at:#x}: the bytes do not hash to what the port expects"
+            ));
+        }
+        Ok(a.addr)
+    }
 }
 
 pub fn apply_with(
@@ -721,21 +1229,26 @@ pub fn apply_with(
     })?;
     let dev = port.port.device.clone();
     let main_sec = fw
-        .section(3)
+        .main()
         .ok_or_else(|| err!("image has no MAIN OS section"))?;
-    let dsp_sec = fw
-        .section(7)
-        .ok_or_else(|| err!("image has no DSP section"))?;
-    if sha256_hex(&main_sec.data) != port.port.main_sha256
-        || sha256_hex(&dsp_sec.data) != port.port.dsp_sha256
-    {
+    // the DSP section is the device's `[container] dsp`; a device without a DSP has none and its port no `dsp_sha256`
+    let dsp_sec = match fw.device.dsp_section() {
+        Some(_) => Some(fw.dsp().ok_or_else(|| err!("image has no DSP section"))?),
+        None => None,
+    };
+    let dsp_ok = match (dsp_sec, &port.port.dsp_sha256) {
+        (Some(d), Some(h)) => sha256_hex(&d.data) == *h,
+        (None, None) => true,
+        _ => false,
+    };
+    if sha256_hex(&main_sec.data) != port.port.main_sha256 || !dsp_ok {
         return Err(err!(
             "port {} does not match the sections of this image",
             port.id()
         ));
     }
     let mut mem = Mem {
-        stream: Stream::parse(dsp_sec.data.clone())?,
+        stream: dsp_sec.map(|d| Stream::parse(d.data.clone())).transpose()?,
         main: main_sec.data.clone(),
         main_base: main_sec.dest as u64,
         stream_dirty: false,
@@ -753,6 +1266,15 @@ pub fn apply_with(
             ));
         }
         selected.push(EXPANSION.to_string());
+    }
+    if let Some(info) = crate::devdata::by_short(&dev) {
+        crate::devgen::check_needed_when(
+            lib,
+            &dev,
+            &info.switches,
+            &selected,
+            "the module selection",
+        )?;
     }
     let order = order_modules(lib, &selected)?;
     for id in &order {
@@ -847,6 +1369,9 @@ pub fn apply_with(
                 if op.op == "hook" {
                     add(&mut names, op.to.as_deref().unwrap())?;
                 }
+                if let Some(t) = op.tail.as_deref().filter(|_| op.op == "stub") {
+                    add(&mut names, t)?;
+                }
             }
         }
         for s in &active.sections {
@@ -900,6 +1425,102 @@ pub fn apply_with(
     let mut sec_at: Vec<(u64, &'static str)> = vec![(0, CF); active.sections.len()];
     let mut reg_at: Vec<(u64, &'static str)> = vec![(0, CF); active.regs.len()];
     let mut tail_at: Vec<Option<(u64, &'static str)>> = vec![None; stg.hooks.len()];
+    // pointer slots: per module, the declared slots active on this device and where their table is placed
+    let slot_defs: Vec<(&Module, Vec<&crate::module::SlotDef>)> = order
+        .iter()
+        .map(|id| lib.get(id).unwrap())
+        .map(|m| {
+            (
+                m,
+                m.manifest
+                    .slot
+                    .iter()
+                    .filter(|s| on(&s.devices, &dev) && !s.is_dsp())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .filter(|(_, v)| !v.is_empty())
+        .collect();
+    // DSP slots: no word in the image, an info table entry with the slot's index in core/dsp-link's slot block (the order of `[dsp.slots]`)
+    let dsp_names = crate::sdkgen::dsp_slot_names();
+    let dsp_slots: Vec<(&Module, &crate::module::SlotDef, u32)> = order
+        .iter()
+        .map(|id| lib.get(id).unwrap())
+        .flat_map(|m| {
+            m.manifest
+                .slot
+                .iter()
+                .filter(|s| on(&s.devices, &dev) && s.is_dsp())
+                .map(move |s| (m, s))
+        })
+        .map(|(m, s)| {
+            let at = dsp_names.iter().position(|n| *n == s.name).unwrap_or(0) as u32;
+            (m, s, at)
+        })
+        .collect();
+    // the slot words of one module are one chunk in the region of its first slot: a slot with another `place` would be put in the wrong region
+    for (m, defs) in &slot_defs {
+        if let Some(d) = defs.iter().find(|d| slot_place(d) != slot_place(defs[0])) {
+            return Err(err!(
+                "{}: slot {} has place {} but the slots of one module share the place of the first ({})",
+                m.id(),
+                d.name,
+                slot_place(d),
+                slot_place(defs[0])
+            ));
+        }
+    }
+    let mut slot_at: Vec<(u64, &'static str)> = vec![(0, CF); slot_defs.len()];
+    // the image's one info table: every slot word and every `[[info]]` of the library on this device, with one hash each
+    let info_defs: Vec<(&Module, &crate::module::InfoDef)> = order
+        .iter()
+        .map(|id| lib.get(id).unwrap())
+        .flat_map(|m| {
+            m.manifest
+                .info
+                .iter()
+                .filter(|i| on(&i.devices, &dev))
+                .map(move |i| (m, i))
+        })
+        .collect();
+    // the entries of the modules, and patchkit's own `fw_id` (the first 8 bytes of the stock image's SHA-256: the port file of this firmware is found by it) in every table that exists
+    let n_modules =
+        slot_defs.iter().map(|(_, d)| d.len()).sum::<usize>() + dsp_slots.len() + info_defs.len();
+    let n_info = n_modules + usize::from(n_modules > 0);
+    if n_info > dkneeds::INFO_MAX as usize {
+        return Err(err!(
+            "{n_info} [[slot]] and [[info]] entries (with fw_id) on {dev}, over the {} of `[limits.format] info_max`",
+            dkneeds::INFO_MAX
+        ));
+    }
+    {
+        let mut seen: Vec<(u32, String)> = vec![];
+        let names = slot_defs
+            .iter()
+            .flat_map(|(m, d)| d.iter().map(move |s| (m.id().to_string(), s.name.as_str())))
+            .chain(
+                dsp_slots
+                    .iter()
+                    .map(|(m, s, _)| (m.id().to_string(), s.name.as_str())),
+            )
+            .chain(
+                info_defs
+                    .iter()
+                    .map(|(m, i)| (m.id().to_string(), i.name.as_str())),
+            )
+            .chain((n_modules > 0).then(|| ("patchkit".to_string(), FW_ID_ENTRY)));
+        for (owner, name) in names {
+            let h = dkneeds::keys::name_hash(name);
+            if let Some((_, other)) = seen.iter().find(|(x, _)| *x == h) {
+                return Err(err!(
+                    "two entries of the info table have the name hash {h:#010x}: {other} and {owner}: {name}"
+                ));
+            }
+            seen.push((h, format!("{owner}: {name}")));
+        }
+    }
+    let mut info_at: Option<(u64, &'static str)> = None;
+    let mut fw_id_at: Option<(u64, &'static str)> = None;
 
     // Allocate every object first-fit in its region, then link with everyone's exports visible.
     let mut allocs: BTreeMap<String, Alloc> = BTreeMap::new();
@@ -911,6 +1532,8 @@ pub fn apply_with(
         dko: &'a Dko,
         externs: &'a BTreeMap<String, String>,
         optional: &'a [String],
+        /// the anchors and hooks the module's port lacks and the module can do without (`disabled_anchors`)
+        off: Vec<String>,
         place: String,
         base: u64,
         cpu: &'static str,
@@ -939,6 +1562,7 @@ pub fn apply_with(
                     dko,
                     externs: &no_externs,
                     optional: &no_optional,
+                    off: vec![],
                     place: (*region).into(),
                     base,
                     cpu: if dko.arch == "sharc" { SHARC } else { CF },
@@ -974,6 +1598,7 @@ pub fn apply_with(
                 dko,
                 externs: &o.externs,
                 optional: &o.optional,
+                off: disabled_anchors(m, port),
                 place: o.place.clone(),
                 base,
                 cpu,
@@ -1000,6 +1625,19 @@ pub fn apply_with(
                     take_region(&mut allocs, port, &r.def.region, stg.reg_size[ri], 4, &who)?;
             }
         }
+        for (si, (sm, defs)) in slot_defs.iter().enumerate() {
+            if sm.id() == id {
+                let who = format!("{id}: slots");
+                slot_at[si] = take_region(
+                    &mut allocs,
+                    port,
+                    &slot_place(defs[0]),
+                    4 * defs.len(),
+                    4,
+                    &who,
+                )?;
+            }
+        }
         for (hi, h) in stg.hooks.iter().enumerate() {
             if h.module.id() == id && h.run {
                 let who = format!("{id}: hook {} tail", h.anchor.name);
@@ -1013,6 +1651,21 @@ pub fn apply_with(
                 )?);
             }
         }
+    }
+    if n_info > 0 {
+        let region = slot_defs
+            .first()
+            .map(|(_, d)| slot_place(d[0]))
+            .unwrap_or_else(|| "cf.expansion".into());
+        info_at = Some(take_region(
+            &mut allocs,
+            port,
+            &region,
+            prim::info_table_len(n_info),
+            4,
+            "the info table",
+        )?);
+        fw_id_at = Some(take_region(&mut allocs, port, &region, 8, 4, "fw_id")?);
     }
     let mut globals: BTreeMap<String, u64> = BTreeMap::new();
     for p in &placed {
@@ -1049,6 +1702,10 @@ pub fn apply_with(
             add(r.owner, format!("{n}.entries"), r.live as u64)?;
             add(r.owner, format!("{n}.rows"), reg_at[ri].0)?;
             add(r.owner, format!("{n}.row_size"), r.row_size as u64)?;
+            if let Some(w) = r.def.window {
+                add(r.owner, format!("window{w}.count"), r.entries.len() as u64)?;
+                add(r.owner, format!("window{w}.rows"), reg_at[ri].0)?;
+            }
             for (k, e) in r.entries.iter().enumerate().filter(|(_, e)| !e.gap) {
                 add(
                     e.owner,
@@ -1056,6 +1713,21 @@ pub fn apply_with(
                     (stg.reg_first[ri] + k as i64) as u64,
                 )?;
             }
+        }
+        for (si, (sm, defs)) in slot_defs.iter().enumerate() {
+            let base = slot_at[si].0;
+            for (i, d) in defs.iter().enumerate() {
+                add(sm, format!("slot.{}", d.name), base + 4 * i as u64)?;
+            }
+        }
+        if let Some((addr, _)) = info_at {
+            // the runtime links it as an optional import: 0 when no adapter declares an entry
+            let owner = slot_defs
+                .first()
+                .map(|(m, _)| *m)
+                .or_else(|| dsp_slots.first().map(|(m, _, _)| *m))
+                .unwrap_or_else(|| info_defs[0].0);
+            add(owner, "dkrt_info_table".to_string(), addr)?;
         }
         for (hi, h) in stg.hooks.iter().enumerate() {
             let ret = if h.cpu == SHARC {
@@ -1083,6 +1755,7 @@ pub fn apply_with(
 
     let mut writes: Vec<PlanWrite> = vec![];
     let mut all_symbols: BTreeMap<String, u64> = BTreeMap::new();
+    let mut addr_entries: Vec<dkaddrmap::Entry> = crate::addrmap::anchor_entries(port);
     for (owner, name, v) in &prim_owner {
         all_symbols.insert(format!("{owner}:{name}"), *v);
     }
@@ -1104,11 +1777,17 @@ pub fn apply_with(
             } else if !ext.contains_key(&sy.name) && p.optional.contains(&sy.name) {
                 // an optional link to a module that is not selected
                 ext.insert(sy.name.clone(), 0);
+            } else if switched_off(&aname, &p.off) {
+                // an optional anchor the port lacks: the link is 0 and the module's code checks for it
+                ext.insert(sy.name.clone(), 0);
             }
         }
         let l = link::link(p.dko, p.base, &ext)?;
         for (k, v) in &l.symbols {
             all_symbols.insert(format!("{}:{k}", p.owner), *v);
+        }
+        if p.cpu == CF {
+            addr_entries.extend(crate::addrmap::text_entries(p.dko, &l, None));
         }
         chunks.push(Chunk {
             owner: p.owner.clone(),
@@ -1125,6 +1804,7 @@ pub fn apply_with(
     // Bytes of the primitives' memory: registry tables, copied sections with appended rows, hook tails.
     let mut plan_regs: Vec<prim::PlanRegistry> = vec![];
     let mut plan_secs: Vec<prim::PlanSection> = vec![];
+    let mut info_plan: Vec<PlanInfo> = vec![];
     {
         let anchor_fn = |n: &str| port.anchor(n).map(|a| anchor_value(a) as i64);
         let image_fn = |n: &str, off: i64, w: u8| image_read(&mem, port, n, off, w);
@@ -1238,6 +1918,116 @@ pub fn apply_with(
                 what: format!("section {}", s.def.name),
             });
         }
+        for (si, (sm, defs)) in slot_defs.iter().enumerate() {
+            let (addr, cpu) = slot_at[si];
+            chunks.push(Chunk {
+                owner: sm.tag(),
+                cpu,
+                region: slot_place(defs[0]),
+                addr,
+                image: pad(vec![0u8; 4 * defs.len()], cpu),
+                code: vec![],
+                bss: 0,
+                what: format!("slot words of {}", sm.id()),
+            });
+        }
+        if let Some((addr, cpu)) = info_at {
+            let mut entries: Vec<(u32, u32, u32)> = vec![];
+            let mut names: Vec<String> = vec![];
+            for (si, (_, defs)) in slot_defs.iter().enumerate() {
+                for (i, d) in defs.iter().enumerate() {
+                    entries.push((
+                        dkneeds::keys::name_hash(&d.name),
+                        (slot_at[si].0 + 4 * i as u64) as u32,
+                        prim::INFO_KIND_SLOT,
+                    ));
+                    names.push(d.name.clone());
+                }
+            }
+            if let Some((fw_addr, fw_cpu)) = fw_id_at {
+                // the id of the stock image this image is made from: two words after the info table's own chunk, entered last
+                let sha = unhex(&fw.syx_sha256)?;
+                chunks.push(Chunk {
+                    owner: slot_defs
+                        .first()
+                        .map(|(m, _)| m.tag())
+                        .or_else(|| dsp_slots.first().map(|(m, _, _)| m.tag()))
+                        .unwrap_or_else(|| info_defs[0].0.tag()),
+                    cpu: fw_cpu,
+                    region: slot_defs
+                        .first()
+                        .map(|(_, d)| slot_place(d[0]))
+                        .unwrap_or_else(|| "cf.expansion".into()),
+                    addr: fw_addr,
+                    image: sha[..8].to_vec(),
+                    code: vec![],
+                    bss: 0,
+                    what: "the firmware id (fw_id of the info table)".into(),
+                });
+            }
+            for (_, s, at) in &dsp_slots {
+                entries.push((
+                    dkneeds::keys::name_hash(&s.name),
+                    *at,
+                    prim::INFO_KIND_DSP_SLOT,
+                ));
+                names.push(s.name.clone());
+            }
+            for (m, inf) in &info_defs {
+                let text = inf.symbol.as_deref().unwrap_or(&inf.name);
+                let v = crate::expr::eval_str(text, &scope)
+                    .map_err(|e| err!("{}: info {}: symbol: {e}", m.id(), inf.name))?;
+                let v = u32::try_from(v).map_err(|_| {
+                    err!(
+                        "{}: info {}: address {v:#x} is not 32 bits",
+                        m.id(),
+                        inf.name
+                    )
+                })?;
+                entries.push((dkneeds::keys::name_hash(&inf.name), v, prim::INFO_KIND_DATA));
+                names.push(inf.name.clone());
+            }
+            if let Some((fw_addr, _)) = fw_id_at {
+                entries.push((
+                    dkneeds::keys::name_hash(FW_ID_ENTRY),
+                    fw_addr as u32,
+                    prim::INFO_KIND_DATA,
+                ));
+                names.push(FW_ID_ENTRY.to_string());
+            }
+            for ((hash, addr, kind), name) in entries.iter().zip(&names) {
+                let words = if *kind == prim::INFO_KIND_DATA {
+                    placed_words(&chunks, *addr as u64)
+                } else {
+                    vec![]
+                };
+                info_plan.push(PlanInfo {
+                    name: name.clone(),
+                    hash: *hash,
+                    addr: *addr as u64,
+                    kind: *kind,
+                    words,
+                });
+            }
+            let owner = slot_defs
+                .first()
+                .map(|(m, _)| m.tag())
+                .or_else(|| dsp_slots.first().map(|(m, _, _)| m.tag()))
+                .unwrap_or_else(|| info_defs[0].0.tag());
+            chunks.push(Chunk {
+                owner,
+                cpu,
+                region: slot_defs
+                    .first()
+                    .map(|(_, d)| slot_place(d[0]))
+                    .unwrap_or_else(|| "cf.expansion".into()),
+                addr,
+                image: pad(prim::build_info_table(&entries), cpu),
+                code: vec![],
+                bss: 0,
+                what: "the image's info table (dkrt_info_table)".into(),
+            });
+        }
         for (hi, h) in stg.hooks.iter().enumerate() {
             let Some((addr, cpu)) = tail_at[hi] else {
                 continue;
@@ -1250,6 +2040,52 @@ pub fn apply_with(
             );
             let ret = prim_syms[&format!("{}.return", h.base_name)];
             let bytes = match &h.cf {
+                Some(site) if h.stub.is_some() => {
+                    let st = h.stub.as_ref().unwrap();
+                    let slot_addr =
+                        *prim_syms.get(&format!("slot.{}", st.slot)).ok_or_else(|| {
+                            err!("{who}: slot {} is not declared on this device", st.slot)
+                        })?;
+                    if let Some(taken_only) = st.when {
+                        let b = prim::cf_guarded_stub(
+                            site,
+                            addr,
+                            ret,
+                            st.scratch,
+                            slot_addr as u32,
+                            taken_only,
+                        )
+                        .map_err(|e| err!("{who}: {e}"))?;
+                        debug_assert_eq!(b.len(), h.tail_len);
+                        chunks.push(Chunk {
+                            owner: h.module.tag(),
+                            cpu,
+                            region: h.place.clone(),
+                            addr,
+                            code: vec![(addr, addr + b.len() as u64)],
+                            image: pad(b, cpu),
+                            bss: 0,
+                            what: format!("hook tail {}", h.base_name),
+                        });
+                        continue;
+                    }
+                    let mut b = prim::stub_prefix(st.scratch, slot_addr as u32);
+                    match &st.tail {
+                        Some(t) => {
+                            let to = crate::expr::eval_str(t, &scope)
+                                .map_err(|e| err!("{who}: tail: {e}"))?;
+                            let to = u32::try_from(to)
+                                .map_err(|_| err!("{who}: tail {to} is not a 32-bit address"))?;
+                            b.extend_from_slice(&prim::CF_JMP_L.to_be_bytes());
+                            b.extend_from_slice(&to.to_be_bytes());
+                        }
+                        None => b.extend(
+                            prim::cf_tail(site, addr + prim::STUB_PREFIX_LEN as u64, ret)
+                                .map_err(|e| err!("{who}: {e}"))?,
+                        ),
+                    }
+                    b
+                }
                 Some(site) => prim::cf_tail(site, addr, ret).map_err(|e| err!("{who}: {e}"))?,
                 None => {
                     let mut b = h.old.clone();
@@ -1287,7 +2123,7 @@ pub fn apply_with(
         for id in &order {
             let m = lib.get(id).unwrap();
             for (oi, op) in device_ops(m, port)?.iter().enumerate() {
-                if op.op == "hook" {
+                if matches!(op.op.as_str(), "hook" | "stub") {
                     let hi = stg
                         .hooks
                         .iter()
@@ -1295,11 +2131,16 @@ pub fn apply_with(
                         .unwrap();
                     let h = &stg.hooks[hi];
                     let who = format!(
-                        "{id}: hook {}",
+                        "{id}: {} {}",
+                        op.op,
                         op.hook.as_deref().unwrap_or(&h.anchor.name)
                     );
-                    let to = crate::expr::eval_str(op.to.as_deref().unwrap(), &scope)
-                        .map_err(|e| err!("{who}: to: {e}"))?;
+                    let to = match &h.stub {
+                        // the site enters the stub, which is the start of the tail chunk
+                        Some(_) => prim_syms[&format!("{}.tail", h.base_name)] as i64,
+                        None => crate::expr::eval_str(op.to.as_deref().unwrap(), &scope)
+                            .map_err(|e| err!("{who}: to: {e}"))?,
+                    };
                     let to =
                         u64::try_from(to).map_err(|_| err!("{who}: target {to} is negative"))?;
                     let new = match &h.cf {
@@ -1313,7 +2154,7 @@ pub fn apply_with(
                         cpu: h.cpu,
                         addr: h.site,
                         old_sha256: sha256_hex(&h.old),
-                        what: format!("hook {}{:+}", h.anchor.name, op.offset),
+                        what: format!("{} {}{:+}", op.op, h.anchor.name, op.offset),
                         bytes: new,
                     });
                     plan_hooks.push(prim::PlanHook {
@@ -1328,12 +2169,8 @@ pub fn apply_with(
                         to,
                         tail: prim_syms.get(&format!("{}.tail", h.base_name)).copied(),
                         ret: prim_syms[&format!("{}.return", h.base_name)],
-                        displaced_insns: h
-                            .cf
-                            .iter()
-                            .flat_map(|s| s.insns.iter())
-                            .map(|d| format!("{:#010x}  {}  {}", d.addr, hex(&d.raw), d.insn))
-                            .collect(),
+                        displaced_insns: h.cf.iter().flat_map(prim::fmt_displaced).collect(),
+                        slot: h.stub.as_ref().map(|st| st.slot.clone()),
                     });
                     continue;
                 }
@@ -1404,11 +2241,23 @@ pub fn apply_with(
     }
 
     // The patch record: first in the segment chain when the expansion region is in use, else a DSP block.
+    let repacks = repack_claims(&fw, lib, &order, &dev)?;
     let rec = Record {
         base_sha256: fw.syx_sha256.clone(),
         modules: order.iter().map(|i| lib.get(i).unwrap().tag()).collect(),
+        repacks: repacks
+            .iter()
+            .map(|c| crate::record::Repack {
+                role: c.def.role.clone(),
+                module: c.module.tag(),
+                dest: c.def.dest as u32,
+                stage_end: c.def.stage_end as u32,
+                len: c.def.len as u32,
+                sha256: c.def.sha256.clone(),
+            })
+            .collect(),
     };
-    let rec_bytes = rec.encode();
+    let rec_bytes = rec.encode()?;
     let (rec_region, rec_addr) = if !opts.record {
         ("", 0)
     } else if in_expansion {
@@ -1422,7 +2271,7 @@ pub fn apply_with(
             .get_mut("dsp.l2")
             .ok_or_else(|| {
                 err!(
-                    "port {} has no dsp.l2 region for the patch record",
+                    "port {} has no dsp.l2 region for the patch record (no module uses cf.expansion)",
                     port.id()
                 )
             })?
@@ -1488,7 +2337,10 @@ pub fn apply_with(
     for c in &chunks {
         match (c.cpu, c.region.as_str()) {
             (SHARC, _) => {
-                mem.stream.append_block(c.addr as u32, &c.image)?;
+                mem.stream
+                    .as_mut()
+                    .ok_or_else(|| err!("{}: the device has no DSP", c.addr))?
+                    .append_block(c.addr as u32, &c.image)?;
                 mem.stream_dirty = true;
             }
             (_, "cf.flash_cave") => {
@@ -1524,7 +2376,10 @@ pub fn apply_with(
     }
     if opts.record {
         if rec_region == "dsp.l2" {
-            mem.stream.append_block(rec_addr as u32, &rec_bytes)?;
+            mem.stream
+                .as_mut()
+                .ok_or_else(|| err!("the device has no DSP"))?
+                .append_block(rec_addr as u32, &rec_bytes)?;
             mem.stream_dirty = true;
         }
         writes.push(PlanWrite {
@@ -1578,7 +2433,11 @@ pub fn apply_with(
             if crate::imageid::locate(&mem.main)? != Some(at) {
                 return Err(err!("the image id marker is not unique in MAIN OS"));
             }
-            let id = crate::imageid::compute(&unhex(&fw.syx_sha256)?, &mem.main, &mem.stream.blob);
+            let id = crate::imageid::compute(
+                &unhex(&fw.syx_sha256)?,
+                &mem.main,
+                mem.stream.as_ref().map_or(&[][..], |s| &s.blob),
+            );
             mem.main[at..at + 8].copy_from_slice(&id);
             image_id = Some(id);
         }
@@ -1587,15 +2446,18 @@ pub fn apply_with(
     // Limits, repack, build.
     let lim = &port.limits;
     if mem.stream_dirty {
-        if mem.stream.blob.len() as u64 > lim.dsp_depacked_max {
+        let (Some(stream), Some(dsp_id)) = (&mem.stream, fw.device.dsp_section()) else {
+            return Err(err!("a DSP patch on a device without a DSP"));
+        };
+        if stream.blob.len() as u64 > lim.dsp_depacked_max {
             return Err(err!(
                 "DSP stream is {} bytes, over the {} the ColdFire boot routine sends",
-                mem.stream.blob.len(),
+                stream.blob.len(),
                 lim.dsp_depacked_max
             ));
         }
-        fw.replace(7, mem.stream.blob.clone())?;
-        let stored = fw.section(7).unwrap().stored.len() as u64;
+        fw.replace(dsp_id, stream.blob.clone())?;
+        let stored = fw.section(dsp_id).unwrap().stored.len() as u64;
         if stored > lim.dsp_stored_max {
             return Err(err!(
                 "packed DSP section is {stored} bytes, over the {} limit",
@@ -1603,6 +2465,7 @@ pub fn apply_with(
             ));
         }
     }
+    let mut main_tail: Option<(usize, usize)> = None;
     if mem.main_dirty {
         if mem.main.len() as u64 > lim.main_staged_max {
             return Err(err!(
@@ -1611,9 +2474,32 @@ pub fn apply_with(
                 lim.main_staged_max
             ));
         }
-        fw.replace(3, mem.main.clone())?;
+        // the bootstrap unpacks MAIN in place over its staged stream with no bounds check: keep the margin its stage needs (finding 152)
+        let (dest, stage, floor) = fw.device.main_unpack();
+        let packed = crate::aplib::pack_section_in_place(&mem.main, dest, stage, floor as i64)
+            .map_err(|e| err!("MAIN OS: {e}"))?;
+        main_tail = Some((
+            packed.literal_tail,
+            packed.stream.len() - packed.plain_len.min(packed.stream.len()),
+        ));
+        fw.replace_main_stored(mem.main.clone(), packed.stream)?;
     }
-    let syx = fw.build(Some(lim.container_max as usize))?;
+    store_repacked(&mut fw, &repacks)?;
+    // the cap of the OS-upgrade stage; when MAIN carries a literal tail for the bootstrap's margin, say what it cost
+    if opts.flash_cap {
+        let n = fw.container()?.len();
+        let max = lim.container_max as usize;
+        if n > max {
+            return Err(match main_tail {
+                Some((tail, extra)) if tail > 0 => err!(
+                    "container is {n} bytes, over the {max}-byte limit: MAIN OS needs a tail of {tail} bytes stored as literals so that the bootstrap's in-place unpack keeps its margin, which costs {extra} bytes more than the plain stream; the image needs {} bytes more than the container allows: trim the runtime or move it out of MAIN",
+                    n - max
+                ),
+                _ => err!("container is {n} bytes, over the {max}-byte limit"),
+            });
+        }
+    }
+    let syx = fw.build(None)?;
     let regions = allocs
         .iter()
         .map(|(k, v)| (k.clone(), (v.used, v.cap)))
@@ -1628,9 +2514,20 @@ pub fn apply_with(
         writes,
         regions,
         symbols: all_symbols,
+        addr_entries,
         registries: plan_regs,
         sections: plan_secs,
+        info: info_plan,
         hooks: plan_hooks,
+        disabled: order
+            .iter()
+            .flat_map(|i| {
+                let m = lib.get(i).unwrap();
+                disabled_anchors(m, port)
+                    .into_iter()
+                    .map(|n| format!("{}:{n}", m.tag()))
+            })
+            .collect(),
         record: rec,
         output: None,
     };
@@ -1639,11 +2536,17 @@ pub fn apply_with(
         plan,
         image_id,
     };
-    let report = crate::verify::verify(&applied.syx, Some(reg), Some(fw_bytes))?;
+    // an image made without a record (oracles, tests) names no module whose claim could be checked
+    let report = if opts.record {
+        crate::verify::verify_with_library(&applied.syx, Some(reg), Some(fw_bytes), lib)?
+    } else {
+        crate::verify::verify_unrecorded(&applied.syx, Some(reg), Some(fw_bytes))?
+    };
     applied.plan.output = Some(PlanOutput {
         syx_sha256: sha256_hex(&applied.syx),
         syx_bytes: applied.syx.len() as u64,
         container_bytes: report.container_bytes,
+        budget: report.budget,
         changed_sections: fw
             .sections
             .iter()

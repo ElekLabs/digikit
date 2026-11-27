@@ -1,0 +1,26 @@
+[package]
+name = "dkrt-svc-project-dks"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The project service as a service file (.dks): the crate dkrt-svc-project behind the glue of dkrt-svc-rt, with the four hooks of the stock project paths and the table of the runtime's settings overlay"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+dkrt-abi = { path = "../../../runtime/core/abi" }
+dkrt-sdk = { path = "../../../runtime/core/sdk" }
+dkrt-svc-rt = { path = "../../../runtime/core/svc-rt" }
+dkrt-svc-project = { path = ".." }
+dkfw = { path = "../../../ports/bindings/rs" }
+
+# This crate sits inside the repository's cargo workspace tree but is built on its own (`patchkit build`).
+[workspace]
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+lto = false
+codegen-units = 1
+debug = false

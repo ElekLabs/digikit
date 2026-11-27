@@ -1,0 +1,171 @@
+//! What the loader needs from outside, as two traits (docs/plans/runtime-and-services.md section 13.2, R12-3a). The real types call the store, the arena, the
+//! module entry and the registry; the fakes of the host tests log the calls. Each trait has one real implementation, so there is no `dyn`.
+
+use dkrt_abi::module::Ctx;
+use dkrt_abi::dev_addr::DevAddr;
+use crate::package::provider_rows::RowSource;
+use dkrt_abi::service::ModuleCommitCtx;
+
+/// A staged file: `size` bytes at `ptr`, valid until the next `stage`.
+#[derive(Clone, Copy)]
+pub struct Staged {
+    pub ptr: *const u8,
+    pub size: u32,
+}
+
+/// An arena block: the host pointer to write through, and the device address the module sees (the same value on the device).
+#[derive(Clone, Copy)]
+pub struct Block {
+    pub ptr: *mut u8,
+    pub addr: DevAddr,
+}
+
+/// Where a module's bytes come from and where they go: the file store, the runtime's import table, the arena and the calls into module code.
+pub trait Images {
+    /// Read the file at the NUL-terminated store `path` into the staging buffer. Errors are the loader's result codes (`E_NOT_FOUND`, `E_SHA`, ...).
+    unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32>;
+    /// A block of at least `n` bytes; `None` when none fits.
+    unsafe fn alloc(&mut self, n: u32) -> Option<Block>;
+    unsafe fn free(&mut self, addr: DevAddr);
+    /// The address of the import `name` (NUL-terminated), 0 when the runtime has none (`import_addr`).
+    unsafe fn import_addr(&mut self, name: *const u8) -> u32;
+    /// The address of the service-only import `name` (`SVC_IMPORTS`: the `dkc_*` of interface C, `dk_provider_declare_row`, `dkc_panic`), 0 when there is none. The loader
+    /// asks only for a file of role 1, after `import_addr`.
+    unsafe fn svc_import_addr(&mut self, _name: *const u8) -> u32 {
+        0
+    }
+    /// The module whose absence leaves the import `name` without an address (`import_needs`).
+    unsafe fn import_needs(&mut self, name: *const u8) -> Option<&'static str>;
+    /// The files of the store whose path starts with `prefix` (NUL-terminated), in path order, at most `max` into `out`: the count, or a negative code (`E_BUSY`).
+    unsafe fn list(&mut self, prefix: *const u8, out: *mut dkrt_sdk::DkrtStoreEntry, max: u32) -> i32;
+    /// Call `init` of module record `rec` (the address `init` in module memory) with its context; its result.
+    /// The address range of the package image loaded at `base` (`size` bytes): the extent a provider row and its part tables must lie in. The device's is the image itself; a host
+    /// test's rows are statics of the test binary, so its fakes answer the whole address space.
+    fn image_extent(&mut self, base: u32, size: u32) -> core::ops::Range<usize> {
+        base as usize..(base as usize).saturating_add(size as usize)
+    }
+    unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32;
+    unsafe fn enter_fini(&mut self, rec: usize, fini: u32, ctx: *const Ctx);
+}
+
+/// The registry of what a loaded file publishes (R12-4): the rows of a service file, and the rows of a module's records.
+pub trait Registry {
+    /// Does the runtime accept a service file with this ABI fingerprint (header word 0x3c)? 0: the file uses neither interface B nor C.
+    fn abi_ok(&self, fingerprint: u32) -> bool;
+    /// Publish the service row that `init` of record `rec` declared (`None`: it declared none, as every module today): a `ProviderRow` that is resolved
+    /// against the part versions this core knows (`E_SVC_ABI` for a newer one).
+    unsafe fn add(&mut self, rec: usize, row: Option<RowSource<'_>>, order: Option<u32>) -> i32;
+    /// Take everything record `rec` published down (idempotent).
+    unsafe fn remove(&mut self, rec: usize);
+    /// The `init` of record `rec` is about to run: every service forgets what an earlier module collected (`Records::begin`).
+    unsafe fn module_begin(&mut self, rec: usize);
+    /// The services' commit of record `rec` (`Records::commit`): the first refusal is the result.
+    unsafe fn module_commit(&mut self, rec: usize, c: &ModuleCommitCtx) -> i32;
+}
+
+/// The store, the arena and the module entry of the device.
+pub struct RealImages;
+
+/// The images of the loader static: the device's, and in host tests the cleanup tests' wrapper that checks the order of the take-down.
+#[cfg(not(test))]
+pub(crate) type DeviceImages = RealImages;
+#[cfg(not(test))]
+pub(crate) const DEVICE_IMAGES: DeviceImages = RealImages;
+#[cfg(test)]
+pub(crate) type DeviceImages = crate::package::fake_checked_images::CheckedImages;
+#[cfg(test)]
+pub(crate) const DEVICE_IMAGES: DeviceImages = crate::package::fake_checked_images::CheckedImages;
+
+impl Images for RealImages {
+    unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
+        let found = crate::package::resident::store::find(path)?;
+        let r = crate::package::resident::store::load_to_stage(&found);
+        if r != dkrt_sdk::OK {
+            return Err(r);
+        }
+        Ok(Staged { ptr: crate::package::resident::store::stage() as *const u8, size: found.size })
+    }
+    unsafe fn list(&mut self, prefix: *const u8, out: *mut dkrt_sdk::DkrtStoreEntry, max: u32) -> i32 {
+        crate::package::resident::store::list(prefix, out, max)
+    }
+    unsafe fn alloc(&mut self, n: u32) -> Option<Block> {
+        let a = crate::package::resident::arena::alloc(n);
+        if a.is_null() {
+            None
+        } else {
+            Some(Block { ptr: a.ptr(), addr: a })
+        }
+    }
+    unsafe fn free(&mut self, addr: DevAddr) {
+        crate::package::resident::arena::free(addr);
+    }
+    // host tests link no device imports (as `platform.rs`): the real loader of the cleanup tests resolves none
+    unsafe fn import_addr(&mut self, name: *const u8) -> u32 {
+        #[cfg(test)]
+        {
+            let _ = name;
+            0
+        }
+        #[cfg(not(test))]
+        crate::package::imports::import_addr(name)
+    }
+    unsafe fn svc_import_addr(&mut self, name: *const u8) -> u32 {
+        crate::package::svc_imports::svc_import_addr(name)
+    }
+    unsafe fn import_needs(&mut self, name: *const u8) -> Option<&'static str> {
+        #[cfg(test)]
+        {
+            let _ = name;
+            None
+        }
+        #[cfg(not(test))]
+        crate::package::imports::import_needs(name)
+    }
+    unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {
+        let call: unsafe extern "C" fn(*const Ctx) -> i32 = core::mem::transmute(init as usize);
+        crate::package::resident::dlog::call_init(rec, call, ctx)
+    }
+    unsafe fn enter_fini(&mut self, rec: usize, fini: u32, ctx: *const Ctx) {
+        #[cfg(test)]
+        {
+            let _ = ctx;
+            crate::package::cleanup_tests::fini(rec, fini);
+        }
+        #[cfg(not(test))]
+        {
+            let call: unsafe extern "C" fn(*const Ctx) = core::mem::transmute(fini as usize);
+            crate::package::resident::dlog::call_fini(rec, call, ctx);
+        }
+    }
+}
+
+/// The runtime's own registry: the machine, parameter and page rows of a module's records, and the service row of a service file (`provider_rows.rs`).
+pub struct RealRegistry;
+
+impl Registry for RealRegistry {
+    fn abi_ok(&self, fingerprint: u32) -> bool {
+        fingerprint == 0 || fingerprint == dkrt_abi::service::SVC_ABI
+    }
+    unsafe fn add(&mut self, rec: usize, row: Option<RowSource<'_>>, order: Option<u32>) -> i32 {
+        match row {
+            None => dkrt_sdk::OK,
+            Some(row) => crate::package::provider_rows::add(rec, row, order),
+        }
+    }
+    unsafe fn remove(&mut self, rec: usize) {
+        // the registry rows of a module record first (the service's own `remove` runs over the table with its row in), then the service row
+        if rec < dkrt_abi::MAX_MODULES {
+            #[cfg(test)]
+            crate::package::cleanup_tests::registry_remove(rec as u8 + 1);
+            #[cfg(not(test))]
+            crate::package::registry::remove(rec as u8 + 1);
+        }
+        crate::package::provider_rows::remove(rec);
+    }
+    unsafe fn module_begin(&mut self, rec: usize) {
+        crate::package::handlers::services().module_begin(rec)
+    }
+    unsafe fn module_commit(&mut self, rec: usize, c: &ModuleCommitCtx) -> i32 {
+        crate::package::handlers::services().module_commit(rec, c)
+    }
+}

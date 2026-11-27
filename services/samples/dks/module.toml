@@ -1,0 +1,33 @@
+[module]
+id = "core/services/samples"
+version = "0.8.2"
+name = "samples service"
+category = "core"
+role = "service"
+service = "samples"
+callback_order = 100
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "The samples service of the runtime as a service file: the per-track sample pools and the peak windows; it exports the nine dk_sample_pool_* functions, takes the pool event slots of the sample-pool adapter and the DSP section parts of the track table"
+requires = ["core/sample-pool"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The pointer slots of the sample-pool adapter (`[[slot]]` of its module.toml): the adapter calls a slot only when it is set; the file writes the address of its routine.
+[[fill]]
+slot = "pool_done"
+entry = "pool_done_fill"
+
+[[fill]]
+slot = "pool_lost"
+entry = "pool_lost_fill"
+
+# Rust, built with rustc_codegen_gcc for -mcpu=54418 (`patchkit build`). Packed as a .dks (`patchkit pack core/services/samples`): the file is `samples.dks`.
+[[object]]
+path = "build/samples.dko.json"
+sources = ["Cargo.toml"]
+place = "cf.expansion"

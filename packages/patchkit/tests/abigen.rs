@@ -1,4 +1,4 @@
-//! The runtime's C ABI: the files `patchkit gen` writes from `modules/core/runtime/abi.toml` are current (a stale one fails here as it fails
+//! The runtime's C ABI: the files `patchkit gen` writes from `runtime/core/abi.toml` are current (a stale one fails here as it fails
 //! `patchkit gen --check`), and a spec with padding or an unknown type is refused.
 
 use patchkit::{abigen, sdkgen};

@@ -17,7 +17,7 @@ fn compiled() -> Linked {
         .expect("storage-fault proof requires the ColdFire assembler");
     let object = cf::cf_object(
         &env,
-        &[root.join("modules/core/adapters/storage-fault-proof/src/cf/storage-fault.s")],
+        &[root.join("tests/fixtures/modules/storage-fault-proof/src/cf/storage-fault.s")],
         &[],
         false,
     )

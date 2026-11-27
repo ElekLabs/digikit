@@ -1,0 +1,23 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/fx",
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "tests/patched-dsp-startup.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "dsp": "sharc",
+        "sources": [
+          "runtime/platform/dsp-link/{module.toml,src/**/*,build/**/*}",
+          "runtime/platform/expansion/{module.toml,src/**/*,build/**/*}",
+          "runtime/platform/fx/{module.toml,src/**/*,build/**/*}"
+        ],
+        "compiles": true
+      }
+    ]
+  }
+}

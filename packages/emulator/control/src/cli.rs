@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use digi_coupled::{AudioMode, AudioOptions};
 
-pub const USAGE: &str = "usage: digiemu [SYX] [--card-image FILE [--card-folder DIR [--no-card-sync]]] [--mirror-dir DIR] [--device-folders] [--control|--no-control] [--runtime|--no-runtime] [--paused] [--run-dir DIR] [--coupled|--auto-coupled --dsp-image FILE --dsp-state FILE --cf-snapshot FILE [--dsp-patch FILE] [--audio-buffer SECONDS] [--audio-mode rebuffer|stretch|gap] [--also-coupled DSP_IMAGE DSP_STATE CF_SNAPSHOT SYX]... [--scenario NAME_OR_FILE] [--report PATH] [--no-audio]] [--dsp zero --cf-snapshot FILE]";
+pub const USAGE: &str = "usage: digiemu [SYX] [--card-image FILE [--card-folder DIR [--no-card-sync]]] [--mirror-dir DIR] [--device-folders] [--control|--no-control] [--runtime|--no-runtime] [--dsp-on|--no-dsp] [--paused] [--run-dir DIR] [--coupled|--auto-coupled --dsp-image FILE --dsp-state FILE --cf-snapshot FILE [--dsp-patch FILE] [--audio-buffer SECONDS] [--audio-mode rebuffer|stretch|gap] [--also-coupled DSP_IMAGE DSP_STATE CF_SNAPSHOT SYX]... [--scenario NAME_OR_FILE] [--report PATH] [--no-audio]] [--dsp zero --cf-snapshot FILE]";
 
 #[derive(Clone, Debug, Default)]
 pub struct StartupArgs {
@@ -34,6 +34,9 @@ pub struct StartupArgs {
     /// `--runtime` / `--no-runtime`: load the startup .syx with the digikit runtime patched in (`firmware.load {runtime}`);
     /// None leaves the host's default.
     pub runtime: Option<bool>,
+    /// `--no-dsp` / `--dsp-on`: start without the DSP (ColdFire only; a peer CPU is replaced by the mailbox responder) or with it;
+    /// None leaves the host's default (on). `firmware.load {dsp}` changes it later.
+    pub dsp: Option<bool>,
 }
 
 pub fn parse_values(
@@ -61,6 +64,7 @@ pub fn parse_values(
     let mut mirror_dir = None;
     let mut device_folders = false;
     let mut runtime = None;
+    let mut dsp_on = None;
     let mut also: Vec<[PathBuf; 4]> = Vec::new();
     while let Some(value) = values.next() {
         let mut path = |label: &str| -> Result<PathBuf, String> {
@@ -87,6 +91,10 @@ pub fn parse_values(
             runtime = Some(true);
         } else if value == "--no-runtime" {
             runtime = Some(false);
+        } else if value == "--no-dsp" {
+            dsp_on = Some(false);
+        } else if value == "--dsp-on" {
+            dsp_on = Some(true);
         } else if value == "--paused" {
             paused = true;
         } else if value == "--run-dir" {
@@ -158,7 +166,7 @@ pub fn parse_values(
         return Err("--card-folder needs --card-image".into());
     }
     if !coupled_build && (scenario.is_some() || report.is_some()) {
-        return Err("--scenario needs a coupled-audio build".into());
+        return Err("--scenario needs a sharc build".into());
     }
     if syx.is_none() && audio_profile_syx.is_some() && !automatic {
         return Err("--audio-profile-syx requires --auto-coupled".into());
@@ -249,6 +257,7 @@ pub fn parse_values(
         paused,
         run_dir,
         runtime,
+        dsp: dsp_on,
     })
 }
 
@@ -258,6 +267,13 @@ mod tests {
 
     fn parse(args: &[&str]) -> Result<StartupArgs, String> {
         parse_values(args.iter().map(std::ffi::OsString::from), true)
+    }
+
+    #[test]
+    fn dsp_choice_is_none_until_the_launcher_gives_one() {
+        assert_eq!(parse(&["x.syx"]).unwrap().dsp, None);
+        assert_eq!(parse(&["x.syx", "--no-dsp"]).unwrap().dsp, Some(false));
+        assert_eq!(parse(&["--dsp-on", "x.syx"]).unwrap().dsp, Some(true));
     }
 
     #[test]

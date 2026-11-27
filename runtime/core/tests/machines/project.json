@@ -1,0 +1,64 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-machines-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": ["core/services/machines", "core/rows", "core/dsp-voice", "sdk", "core/runtime-package", "dkrt-svc-machines", "dkrt-svc-rows"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "machine-rows-dn2.device.test.ts"
+        ],
+        "devices": [
+          "dn2"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "test/dyn-dn2",
+          "core/services/machines"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "machine-rows-dt2.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "test/sine",
+          "core/services/machines"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "roundtrip.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "test/dyn-dn2",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "equiv.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "test/dyn-dn2",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "plusdrive": true
+      }
+    ]
+  }
+}

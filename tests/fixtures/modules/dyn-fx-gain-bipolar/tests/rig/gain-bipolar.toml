@@ -1,0 +1,193 @@
+# test/dyn-fx-gain-bipolar on the SHARC-only rig: the gain law out = in * (1 + bias / 64) that core/fx' fx-bipolar device test used to
+# prove with PCM captures on the emulator. The bias cases observe the effect output. The MIX cases observe the master behind the adapter hook:
+# dry + mix * (wet - dry). The adapter ramps a mix change over the first block, so those checks start at block 1. The bias is the float word of
+# the row; the device test proves that the knob value reaches the row. 0.6796875 is -20.5 (1 - 20.5 / 64); +40 and +42 are what the knob raw
+# 0x6800 gives on DN2 and DT2.
+# Bounds: the error is within 2**-20 of the reference peak, the rule of tools/patchkit/hook_ab.py.
+
+[[case]]
+name = "bias -64 mutes: gain 0.0"
+observe = "scratch"
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [-64.0]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+gain = 0.0
+
+[[case]]
+name = "bias -32 halves: gain 0.5"
+observe = "scratch"
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [-32.0]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+gain = 0.5
+
+[[case]]
+name = "bias -20.5: gain 0.6796875"
+observe = "scratch"
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [-20.5]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+gain = 0.6796875
+
+[[case]]
+name = "bias 0 is unity: gain 1.0"
+observe = "scratch"
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [0.0]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+gain = 1.0
+
+[[case]]
+name = "bias +40 (0x6800 on DN2): gain 1.625"
+observe = "scratch"
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [40.0]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+gain = 1.625
+
+[[case]]
+name = "bias +42 (0x6800 on DT2): gain 1.65625"
+observe = "scratch"
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [42.0]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+gain = 1.65625
+
+[[case]]
+name = "bias +63 tops the range: gain 1.984375"
+observe = "scratch"
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [63.0]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+gain = 1.984375
+
+[[case]]
+name = "MIX 0 bypasses after a bias: gain 1.0"
+observe = "master"
+mix = 0
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [42.0]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+gain = 1.0
+
+[[case]]
+name = "MIX 1.0 is the wet block: gain 1.65625"
+observe = "master"
+mix = 1065353216
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [42.0]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+blocks = [1, 8]
+gain = 1.65625
+
+[[case]]
+name = "MIX 0.5 blends: gain 1.328125"
+observe = "master"
+mix = 1056964608
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [42.0]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+blocks = [1, 8]
+gain = 1.328125
+
+[[case]]
+name = "MIX driven from top to 0 during the run bypasses: gain 1.0"
+observe = "master"
+mix = 1065353216
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [42.0]
+blocks = 4
+
+[[case.step]]
+mix = 0
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+blocks = [5, 12]
+gain = 1.0

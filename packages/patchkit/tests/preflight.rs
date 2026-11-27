@@ -22,7 +22,7 @@ struct Rig {
 
 fn rig() -> Option<Rig> {
     let stock = std::fs::read(root().join("firmware/Digitakt_II_OS1.17.syx")).ok()?;
-    let reg = Registry::from_dir(&root().join("devices/ports")).unwrap();
+    let reg = Registry::from_dir(&root().join("ports")).unwrap();
     // only `core/*` modules: their objects are committed, no content module is built
     let mut lib = Library::scan_repo_for(&root(), false, Some(&[])).unwrap();
     lib.lower(&Models::from_dir(&root().join("devices")).unwrap())

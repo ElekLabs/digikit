@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Screenshots of the desktop UI pages in the preview (`mise run ui:preview`), headless Chromium over CDP, no dependencies.
+// Screenshots of the desktop UI pages in the preview (`mise run wb:preview`), headless Chromium over CDP, no dependencies.
 // Each scene sets a state of the fake device through the address, optionally clicks, waits, and writes a PNG.
 //
 //   node tools/devtools/ui_shots.mjs [--out DIR (default out/runs/ui-shots/STAMP)] [--prefix before] [--url http://127.0.0.1:5199/] [--scale 1] [scene ...]
@@ -44,11 +44,64 @@ const fold = (p) =>
   p.eval(
     "(() => { const f = document.querySelector('.side-fold'); if (f && f.getAttribute('aria-expanded') === 'true') f.click(); })()",
   );
+async function checkInspectorFold(p) {
+  const inspector = '.side-col:not([hidden])';
+  await p.until(`document.querySelector('${inspector} .side-fold')`, 'Inspector did not appear');
+  await p.eval(`document.querySelector('${inspector} .side-fold[aria-expanded="false"]')?.click()`);
+  for (const tab of ['Memory', 'Metrics', 'Profile', 'Calibration']) {
+    const waitForState = (expanded) =>
+      p.until(
+        `(() => {
+          const column = document.querySelector('${inspector}');
+          const selected = column?.querySelector('${expanded ? '.side-tab[aria-selected="true"]' : '.side-rail-tab.on'}');
+          return column?.querySelector('.side-fold')?.getAttribute('aria-expanded') === '${expanded}'
+            && selected?.textContent.trim() === ${JSON.stringify(tab)}
+            && !column.getAnimations().some(animation => animation.playState === 'running');
+        })()`,
+        `${tab}: inspector did not settle ${expanded ? 'open' : 'collapsed'} with the tab selected`,
+      );
+    await p.click(tab, `${inspector} .side-tab`);
+    for (const expanded of [true, false]) {
+      await waitForState(expanded);
+      const point = await p.eval(`(() => {
+        const head = document.querySelector('${inspector} .side-head');
+        const button = head.querySelector('.side-fold');
+        const header = head.getBoundingClientRect();
+        const box = button.getBoundingClientRect();
+        const x = box.left + box.width / 2;
+        const y = box.top + box.height / 2;
+        return box.left >= header.left && box.right <= header.right
+          && box.top >= header.top && box.bottom <= header.bottom
+          && button.contains(document.elementFromPoint(x, y)) ? [x, y] : null;
+      })()`);
+      if (!point) throw new Error(`${tab}: ${expanded ? 'fold' : 'reopen'} button is clipped or cannot be clicked`);
+      await p.mouse('mousePressed', ...point);
+      await p.mouse('mouseReleased', ...point);
+    }
+    await waitForState(true);
+  }
+}
 /** Three files uploaded in a row (the fallback scenes switch the link at the second). */
 const upload3 = async (p) => {
   for (const n of ['kick', 'snare', 'hat']) await p.tick(`^Upload ${n}`);
   await p.click(/^Upload/);
   await p.wait(2300);
+};
+/** A slow sample check keeps the same progress element and reveals the hint in both the row and footer. */
+const checkingSample = async (p) => {
+  await p.tick('^Upload kick_punchy');
+  await p.click(/^Upload/);
+  await p.wait(600);
+  const state = await p.eval(`new Promise((resolve) => {
+    const bar = document.querySelectorAll('section.col')[1].querySelector('.up progress');
+    setTimeout(() => resolve({
+      sameBar: !!bar && bar.isConnected && bar.value === bar.max,
+      hints: [...document.querySelectorAll('.phase')].filter((el) => el.textContent === 'Checking…').length,
+      message: document.querySelector('.bar .msg')?.textContent,
+    }), 2600);
+  })`);
+  if (!state.sameBar || state.hints !== 2 || !state.message?.startsWith('Transferring 1 of 1'))
+    throw new Error(`sample check lost its progress bar or hints: ${JSON.stringify(state)}`);
 };
 /** Wait (up to 10 s) until the Transfer page has read the device: no "reading…" or "Connecting…" text and a module row. */
 const modulesReady = async (p) => {
@@ -61,36 +114,730 @@ const modulesReady = async (p) => {
   }
 };
 /** Page helpers: `p.eval(js)`, `p.click(text)`, `p.tick(labelRegexSource)`, `p.hover(selector)`, `p.wait(ms)`. */
+const pickTarget = async (p, label) => {
+  for (let n = 0; n < 40; n++) {
+    const found = await p.eval(`(() => {
+      const select = document.querySelector('select[aria-label="Target"]');
+      const option = select && [...select.options].find(o => o.text.includes(${JSON.stringify(label)}));
+      if (!option || select.disabled) return false;
+      select.value = option.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    if (found) return;
+    await p.wait(100);
+  }
+  throw new Error(`Target unavailable: ${label}`);
+};
+
+async function waitForAnalyzer(p, condition, description) {
+  try {
+    await p.until(condition, description);
+  } catch (error) {
+    throw new Error(description + ' · ' + (await p.eval("document.querySelector('.analyzer-panel')?.innerText")), {
+      cause: error,
+    });
+  }
+}
+
+const remoteModel = 'Digitone II';
+const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
+  name: 'analyzer-' + mode.toLowerCase(),
+  q: 'page=run',
+  size: mode === 'Scope' ? WIDE : MIN,
+  steps: async (p) => {
+    await pickTarget(p, 'Emulator');
+    await p.click(/^Analyzer$/);
+    await waitForAnalyzer(
+      p,
+      "document.querySelector('.analyzer-plot canvas')?.width > 0 && Math.abs(parseFloat(document.querySelector('.analyzer-meters tbody td:last-child')?.textContent) - 440) < 2",
+      'Missing emulator trace or pitch',
+    );
+    const stable = await p.eval(`(() => {
+      const plot = document.querySelector('.analyzer-plot');
+      const cells = [...document.querySelectorAll('.analyzer-meters tbody td:last-child')];
+      const original = cells.map(c => c.textContent);
+      const width = plot.getBoundingClientRect().width;
+      try {
+        return ['—', '439.7 Hz', '12.35 kHz'].every(pitch => {
+          cells.forEach(c => c.textContent = pitch);
+          return plot.getBoundingClientRect().width === width;
+        });
+      } finally {
+        cells.forEach((c,i) => c.textContent = original[i]);
+      }
+    })()`);
+    if (!stable) throw new Error('Live pitch changed the plot width');
+    const height = await p.eval("document.querySelector('.workbench-drawer').offsetHeight");
+    await p.click(/^Freeze$/);
+    if (mode === 'Spectrum') {
+      await pickTarget(p, remoteModel);
+      await waitForAnalyzer(
+        p,
+        "Math.abs(parseFloat(document.querySelector('.analyzer-meters tbody td:last-child')?.textContent) - 880) < 2 && document.querySelector('.analyzer-status')?.textContent === 'Live USB audio'",
+        'Frozen emulator measurement survived target switch',
+      );
+      await p.click(/^Spectrum$/);
+      await p.click(/^Peak hold$/);
+    } else {
+      await p.eval("document.querySelector('footer button[title*=Log i]').click()");
+      if ((await p.eval("document.querySelector('.workbench-drawer').offsetHeight")) !== height)
+        throw new Error('Switching drawers changed the saved height');
+      await p.click(/^Analyzer$/);
+      await waitForAnalyzer(
+        p,
+        "!!document.querySelector('.analyzer-plot canvas') && !document.querySelector('.analyzer-cursor input')?.disabled",
+        'Analyzer failed to reopen',
+      );
+    }
+    await p.eval("document.querySelector('.analyzer-cursor input').focus()");
+    await p.key('ArrowRight', { code: 'ArrowRight', vk: 39 });
+    if (!(await p.eval("document.querySelector('.analyzer-cursor output')?.innerText.includes('L ')")))
+      throw new Error('Keyboard cursor has no channel measurements');
+  },
+}));
+
 const SCENES = [
+  ...analyzerScenes,
+  {
+    name: 'performance-emulator',
+    q: '',
+    size: WIDE,
+    steps: async (p) => {
+      await p.click(/^Transfer$/);
+      await p.until(
+        "document.querySelector('button[title^=RESTART]')?.disabled === false",
+        'Emulator card unavailable',
+      );
+      await p.click(/^Emulator$/, '.side');
+      await p.click(/^Performance$/);
+      const cf = "document.querySelector('.performance-cf dd')?.textContent";
+      const dsp = "document.querySelector('.performance-dsp dd')?.textContent";
+      await p.until(`${cf}?.endsWith('%') && ${dsp}?.endsWith('%')`, 'Missing emulator load');
+      const first = await p.eval(cf);
+      await p.until(`${cf}?.endsWith('%') && ${cf} !== ${JSON.stringify(first)}`, 'Load did not advance');
+      await p.eval("document.querySelector('button[aria-label=Pause]').click()");
+      await p.until(`${cf} === '—' && ${dsp} === '—'`, 'Paused emulator still reporting load');
+      await p.eval("document.querySelector('button[aria-label=Resume]').click()");
+      await p.until(`${cf}?.endsWith('%') && ${dsp}?.endsWith('%')`, 'Load did not resume');
+      await p.click(/^DSP blocks$/);
+      await p.until("document.querySelector('.span-actions input')?.disabled === false", 'DSP recording unavailable');
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.until(
+        "document.querySelector('.performance-panel')?.textContent.includes('To measure DSP costs, stop recording')",
+        'Missing instructions for recording DSP costs',
+      );
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.until("document.querySelector('.span-actions input')?.disabled === false", 'DSP option stayed locked');
+      await p.eval("document.querySelector('.span-actions input').click()");
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.until("document.querySelector('.dsp-blocks canvas')", 'Missing live emulator DSP blocks');
+      await p.click(/^Spans$/);
+      await p.until(
+        "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'",
+        'Missing recorded spans',
+      );
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.click(/^Timeline$/);
+      await p.until(
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('test/saw')",
+        'Missing frozen timeline',
+      );
+      await p.click(/^DSP blocks$/);
+      await p.until("document.querySelector('.dsp-blocks canvas')", 'Missing frozen DSP blocks');
+    },
+  },
+  {
+    name: 'performance-dsp-blocks',
+    q: 'page=run&runtimeOnly&history&prof=stopped',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^DSP blocks$/);
+      await waitForAnalyzer(p, "!!document.querySelector('.span-actions input')", 'DSP recording option missing');
+      if (await p.eval("document.querySelector('.span-actions input').checked"))
+        throw new Error('DSP block recording should default to off');
+      await p.eval("document.querySelector('.span-actions input').click()");
+      await p.click(/^Timeline$/);
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.click(/^DSP blocks$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-actions input')?.disabled",
+        'DSP option changed during recording',
+      );
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.dsp-blocks canvas') && document.querySelector('.span-actions button')?.textContent.includes('Stop recording')",
+        'Missing live DSP chart while recording',
+      );
+      await p.click(/^Spans$/);
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.click(/^DSP blocks$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('cycles')",
+        'Frozen DSP block chart missing',
+      );
+    },
+  },
+  {
+    name: 'performance-timeline-legacy',
+    q: 'page=run&runtimeOnly&history&prof=stopped&legacyProfile',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^Timeline$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel')?.textContent.includes('digikit runtime 0.11.3') && !document.querySelector('.performance-panel canvas')",
+        'Missing trace capability explanation',
+      );
+    },
+  },
+  {
+    name: 'performance-timeline',
+    q: 'page=run&runtimeOnly&history&prof=stopped',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^Timeline$/);
+      await p.click(/^Start recording$/, '.span-actions button');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel')?.textContent.includes('Stop recording to view')",
+        'Missing live DSP chart while recording',
+      );
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('test/saw')",
+        'Missing frozen trace',
+      );
+      await pickTarget(p, 'Emulator');
+      await waitForAnalyzer(
+        p,
+        "!document.querySelector('.performance-panel canvas')",
+        'Trace survived a target switch',
+      );
+      await pickTarget(p, remoteModel);
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await waitForAnalyzer(
+        p,
+        "!!document.querySelector('.performance-panel canvas')",
+        'Missing trace after returning to target',
+      );
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.trace-timeline-counts')?.textContent.includes('12 dropped')",
+        'Missing trace loss count',
+      );
+      const windowLabel = "document.querySelector('.trace-timeline-window')?.textContent.trim()";
+      const fullWindow = await p.eval(windowLabel);
+      await p.eval(`(() => {
+        const plot = document.querySelector('.trace-timeline-plot');
+        const r = plot.getBoundingClientRect();
+        const position = { bubbles: true, clientX: r.left + r.width * 0.018, clientY: r.top + 8 };
+        plot.dispatchEvent(new WheelEvent('wheel', { ...position, deltaY: -80, cancelable: true }));
+      })()`);
+      await waitForAnalyzer(
+        p,
+        `${windowLabel} !== ${JSON.stringify(fullWindow)} && document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration') && !document.querySelector('[aria-label="Zoom out"]').disabled`,
+        'Scroll zoom or call inspection failed',
+      );
+      const scrollWindow = await p.eval(windowLabel);
+      const location = (fraction) =>
+        p.eval(`(() => {
+        const r = document.querySelector('.trace-timeline-plot').getBoundingClientRect();
+        return [r.left + r.width * ${fraction}, r.top + 8];
+      })()`);
+      const [x, y] = await location(0.018);
+      await p.mouse('mousePressed', x, y, { clicks: 2 });
+      await p.mouse('mouseReleased', x, y, { clicks: 2 });
+      await p.until(
+        `${windowLabel} !== ${JSON.stringify(scrollWindow)} && document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration')`,
+        'Double-click did not focus the call',
+      );
+      const ruler = "document.querySelector('.trace-timeline-ruler-scale').innerHTML";
+      const beforePan = await p.eval(ruler);
+      const [from, top] = await location(0.6);
+      const [to] = await location(0.2);
+      await p.mouse('mousePressed', from, top);
+      await p.mouse('mouseMoved', to, top);
+      await p.mouse('mouseReleased', to, top);
+      await p.until(
+        `${ruler} !== ${JSON.stringify(beforePan)} && !document.querySelector('.trace-timeline-dragging')`,
+        'Drag did not pan the timeline',
+      );
+    },
+  },
+  {
+    name: 'performance-saved-spans',
+    q: 'page=remote&unidentified',
+    size: WIDE,
+    steps: async (p) => {
+      await p.click(/^Performance$/);
+      await p.click(/^Spans$/);
+      await p.eval(`(() => {
+        const send = {
+          schema: 'dk.profile/1',
+          run: { id: 'send', case_id: 'send', label: 'Saved send' },
+          span_clock_hz: 1000000, span_elapsed_ticks: 1000,
+          spans: [{ owner: 256, name: 'early', calls: 5, sum_ticks: 250, max_ticks: 99 }],
+          trace: { hz: 1000000, dropped: 2, events: [{ owner: 256, startTicks: '50', durationTicks: 25 }] },
+        };
+        const rig = {
+          schema: 'dk.profile/1',
+          run: { id: 'rig', case_id: 'rig', label: 'Saved rig' },
+          raw: [{ cpu: 'sharc', series: 'pc', addr: 291, count: 100 }],
+        };
+        const input = document.querySelector('.capture-source input[type=file]');
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify({ schema: 'dk.calcaptures/1', captures: [send, rig] })], 'capture.json'));
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await waitForAnalyzer(
+        p,
+        `(() => {
+        const drawer = document.querySelector('.performance-panel');
+        const summary = drawer.querySelector('.saved-span-summary');
+        return summary?.textContent.includes('25.0%') && summary.querySelector('tbody td:nth-child(4)')?.textContent === '250'
+          && !drawer.querySelector('.performance-plot');
+      })()`,
+        'Saved Spans did not show the totals instead of the live chart',
+      );
+      await showTab(p, 'Profile');
+      const savedSpanValues = (selector) =>
+        `[...document.querySelectorAll('${selector} .saved-span-summary tbody td')].map(td => td.textContent).join(' ') === '25.0% 5 250 99'`;
+      await waitForAnalyzer(
+        p,
+        `${savedSpanValues('.profile-panel:not([hidden])')} && ${savedSpanValues('.performance-panel')}`,
+        'Profile and the drawer do not agree on the saved span totals',
+      );
+      await p.click(/^Timeline$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.trace-timeline-counts')?.textContent.includes('2 dropped')",
+        'Saved Timeline did not show the trace loss',
+      );
+      const selectRun = (index) =>
+        p.eval(`(() => {
+        const select = document.querySelector('.capture-source select');
+        select.value = '${index}';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await selectRun(1);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.profile-panel:not([hidden])')?.textContent.includes('0x123') && !document.querySelector('.performance-panel .trace-timeline')",
+        'The rig hotspots and send trace did not stay in their respective runs',
+      );
+      await p.click(/^Spans$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel .saved-span-summary')?.textContent.includes('no recorded spans')",
+        'The rig run inherited spans from the send run',
+      );
+      await selectRun(0);
+    },
+  },
+  {
+    name: 'performance-spans',
+    q: 'page=run&runtimeOnly&history&prof=stopped',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^Spans$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-actions button')?.textContent === 'Start recording'",
+        'Recorder unavailable',
+      );
+      await p.click(/^Start recording$/, '.span-actions button');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'",
+        'Interval has no ranked owners',
+      );
+      await showTab(p, 'Profile');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.profile-panel:not([hidden]) .state-line')?.textContent.includes('Recording')",
+        'Profile did not see the shared recording',
+      );
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.profile-panel:not([hidden]) .state-line')?.textContent.includes('Stopped')",
+        'Profile did not see Stop from Spans',
+      );
+      await pickTarget(p, 'Emulator');
+      await waitForAnalyzer(p, "!document.querySelector('.span-breakdown-table')", 'Intervals leaked across targets');
+      await pickTarget(p, remoteModel);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-actions button')?.textContent === 'Start recording'",
+        'New target did not bind its recorder',
+      );
+      await p.click(/^Start recording$/, '.span-actions button');
+      await waitForAnalyzer(
+        p,
+        "document.querySelectorAll('.span-details option').length >= 4",
+        'Expected consecutive recorded intervals',
+      );
+      await p.eval(`(() => {
+        const plot = document.querySelector('.performance-plot');
+        const rect = plot.getBoundingClientRect();
+        plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.right - (rect.width / 60) * 2 }));
+      })()`);
+      if (
+        !(await p.eval(
+          "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw' && document.querySelector('.performance-tooltip')?.innerText.includes('Recorded interval')",
+        ))
+      )
+        throw new Error('Hover did not select an observed interval');
+    },
+  },
+  {
+    name: 'performance-history',
+    q: 'page=run&runtimeOnly&history',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      const measured =
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-cf dd')?.textContent.endsWith('%') && document.querySelector('.performance-dsp dd')?.textContent.endsWith('%')";
+      await waitForAnalyzer(p, measured, 'Missing hardware utilization');
+      await pickTarget(p, 'Emulator');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-source')?.textContent === 'Estimated utilization' && document.querySelector('.performance-cf dd')?.textContent === '—'",
+        'Hardware reading survived target switch',
+      );
+      await p.click(/^Analyzer$/);
+      if (await p.eval("!!document.querySelector('.performance-panel')"))
+        throw new Error('Performance drawer stayed open');
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await waitForAnalyzer(p, measured, 'Performance drawer failed to reopen');
+      for (let i = 0; i < 2; i++) {
+        const previous = await p.eval("document.querySelector('.performance-cf dd').textContent");
+        await waitForAnalyzer(
+          p,
+          `document.querySelector('.performance-cf dd')?.textContent !== ${JSON.stringify(previous)} && (${measured})`,
+          'Utilization history did not advance',
+        );
+      }
+      const move = (fraction) =>
+        p.eval(`(() => {
+        const plot = document.querySelector('.performance-plot');
+        const bounds = plot.getBoundingClientRect();
+        plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: bounds.left + bounds.width * ${fraction} }));
+      })()`);
+      await move(0.01);
+      if (!(await p.eval("document.querySelector('.performance-tooltip')?.textContent.includes('No sample')")))
+        throw new Error('Inspecting empty history showed a reading');
+      await move(0.91);
+      if (
+        !(await p.eval(
+          "document.querySelectorAll('.performance-marker').length === 2 && /CF .*%DSP .*%/.test(document.querySelector('.performance-tooltip')?.textContent)",
+        ))
+      )
+        throw new Error('Hover did not show both processor readings');
+      const guideX = () => p.eval("document.querySelector('.performance-guide').getBoundingClientRect().x");
+      const before = await guideX();
+      await move(0.915);
+      if (
+        (await guideX()) <= before ||
+        !(await p.eval("document.querySelector('.performance-tooltip').textContent.includes('Interpolated')"))
+      )
+        throw new Error('Crosshair did not sweep between samples');
+      await p.eval("document.querySelector('.performance-plot').dispatchEvent(new PointerEvent('pointerleave'))");
+      if (await p.eval("!!document.querySelector('.performance-guide')"))
+        throw new Error('Guide remained after leaving plot');
+      await move(0.91);
+    },
+  },
+  {
+    name: 'firmware-symbols',
+    q: 'page=run&symbols',
+    size: MIN,
+    steps: async (p) => {
+      await pickTarget(p, 'Emulator');
+      await p.eval("document.querySelector('nav button[aria-label=Settings]').focus()");
+      await p.key(' ', { code: 'Space', vk: 32 });
+      const view = async () => p.eval("document.querySelector('.firmware-symbols:not([hidden])')?.innerText ?? ''");
+      if (!(await view()).includes('No symbol sources added.')) throw new Error('Settings did not show the empty list');
+      await p.click(/^Add ColdFire database/);
+      await p.click(/^Add SHARC database/);
+      await p.click(/^Add Symbol map/);
+      await p.click(/^Add Symbol map/); // Cancel the chooser.
+      await p.click(/^Refresh sources$/);
+      const rows = () => p.eval(`[...document.querySelectorAll('.symbols-files > li')].map((row) => row.innerText)`);
+      const [cf, sharc, map, extra] = await rows();
+      if (!cf?.includes('coldfire.sqlite') || !cf.includes('OS 1.17') || !cf.includes('Matches target'))
+        throw new Error('ColdFire source is missing its provenance or target match');
+      if (!sharc?.includes('sharc.sqlite') || !sharc.includes('missing the SHARC symbols table'))
+        throw new Error('Invalid SHARC source is missing its file error');
+      if (
+        !map?.includes('firmware.json') ||
+        !map.includes(`${remoteModel} · OS 1.12`) ||
+        map.includes('Matches target') ||
+        extra
+      )
+        throw new Error('Map did not remain a single, independently listed source');
+      await p.eval('document.querySelector(\'button[aria-label$="coldfire.sqlite"]\').focus()');
+      await p.key(' ', { code: 'Space', vk: 32 });
+      if (!(await view()).includes('No matching symbols') || (await rows()).length !== 2)
+        throw new Error('Removing the matching source changed the wrong entries or left a match');
+      await p.click(/^Emulator$/);
+      await p.click(/^Settings$/);
+      if ((await rows()).some((row) => row.includes('coldfire.sqlite')) || (await rows()).length !== 2)
+        throw new Error('The registered sources changed after reopening Settings');
+      await p.click(/^Add ColdFire database/);
+    },
+  },
+  {
+    name: 'run-target-switch',
+    q: 'page=run&runtimeOnly',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Files$/);
+      await p.eval('document.querySelector("footer button[title*=Metrics]").click()');
+      const check = () =>
+        p.eval(`(() => {
+        const footer = document.querySelector('footer').innerText;
+        return document.querySelector('.remote-page .stage')?.getAttribute('aria-label')?.includes(${JSON.stringify(remoteModel)})
+          && document.querySelector('nav [aria-current="page"]')?.textContent.trim() === 'Remote'
+          && ![...document.querySelectorAll('nav button')].some(b => b.textContent.trim() === 'Emulator')
+          && document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === 'Metrics'
+          && footer.includes('Preview headphones') && /Emulator · Loading Digitakt/.test(footer) && /CF 21%/.test(footer) && /DSP 35%/.test(footer)
+          && !/underruns|× RT|DSP est/.test(footer);
+      })()`);
+      for (let n = 0; !(await check()); n++) {
+        if (n === 40)
+          throw new Error(
+            'Remote Run, Metrics or footer did not follow the selected device: ' +
+              (await p.eval('document.body.innerText')),
+          );
+        await p.wait(100);
+      }
+      await pickTarget(p, 'Emulator');
+      if (
+        !(await p.eval(`document.querySelector('nav [aria-current="page"]')?.textContent.trim() === 'Emulator'
+          && !document.querySelector('select[aria-label="Remote audio input"]') && document.querySelector('footer').innerText.includes('Booting')`))
+      )
+        throw new Error('Emulator boot was lost');
+      await pickTarget(p, remoteModel);
+    },
+  },
+  {
+    name: 'run-unidentified-remote',
+    q: 'page=remote&unidentified',
+    size: WIDE,
+    steps: async (p) => {
+      for (let i = 0; i < 40; i++) {
+        if (
+          await p.eval(`(() => {
+          const remote = document.querySelector('.remote-page');
+          return remote?.textContent.includes('No supported device identified')
+            && !!remote.querySelector('[inert] svg.panel') && !remote.querySelector('canvas, .hints, .err');
+        })()`)
+        )
+          return;
+        await p.wait(100);
+      }
+      throw new Error('The unidentified MIDI target did not show an inactive faceplate');
+    },
+  },
+  {
+    name: 'run-stock-remote',
+    q: 'page=run&stock',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      for (let i = 0; i < 40; i++) {
+        if (
+          await p.eval(`(() => {
+          const canvas = document.querySelector('.remote-page canvas');
+          return document.querySelector('footer')?.innerText.includes('No runtime') &&
+            canvas && canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((v,i) => i%4 === 0 && v > 128);
+        })()`)
+        )
+          return;
+        await p.wait(100);
+      }
+      throw new Error('The stock device did not display its screenshot');
+    },
+  },
+  {
+    name: 'workbench-card-roundtrip',
+    q: 'boot=empty',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until(
+        "document.querySelector('button[aria-label=\"Open firmware file\"]')?.innerText.includes('Open firmware')",
+        'Expected an empty emulator on Run',
+      );
+      await pickTarget(p, remoteModel);
+      await p.until("document.body.innerText.includes('Click keys')", 'Remote did not open for the selected device');
+      await p.click('Transfer');
+      const ready = 'document.querySelector(\'button[title^="RESTART"]\')?.disabled === false';
+      const installed = 'document.querySelector(\'input[aria-label="Delete analog"]\')';
+      await p.until(ready, 'Transfer could not read the target');
+      await p.tick('^Install analog$');
+      await p.click(/^Install/);
+      await p.until(installed, 'The new module is missing from the device listing');
+      await p.click('Files');
+      const folder = ".files-page li[data-key='modules/machine']";
+      await p.until(`document.querySelector(${JSON.stringify(folder)})`, 'Files could not read the module directory');
+      await p.eval(`document.querySelector(${JSON.stringify(folder + ' button')}).click()`);
+      await p.until(
+        "document.querySelector('.files-page .tree').innerText.includes('fadedlimes-analog.dkm')",
+        'Files missed the module installed in Transfer',
+      );
+      await p.click('Transfer');
+      await p.until(ready, 'Transfer did not reconnect');
+      await p.tick('^Delete analog$');
+      await p.click(/^Delete/);
+      await p.click(/^Confirm delete/);
+      await p.until(`!(${installed}) && (${ready})`, 'The deleted module is still on the card');
+    },
+  },
+  ...['device', 'emulator'].map((target) => ({
+    name: `modules-${target}-deps`,
+    q: target === 'emulator' ? 'page=emulator' : 'page=transfer',
+    size: WIDE,
+    steps: async (p) => {
+      if (target === 'emulator') await p.click('Transfer');
+      const badge = 'li:has(input[aria-label="Delete shot"]) .dep-badge';
+      await p.until(
+        `document.querySelector(${JSON.stringify(badge)})?.innerText === '2 deps'`,
+        'Missing shot dependencies',
+      );
+      await p.hover(badge);
+      await p.until(
+        `['machines', 'samples'].every(name => document.querySelector('.transfer-dependency-tooltip')?.innerText.includes(name + ' service · on device'))`,
+        'The installed shot services are missing from the destination tooltip',
+      );
+    },
+  })),
   { name: 'modules', q: 'mode=modules', size: WIDE, steps: modulesReady },
   {
     name: 'modules-select-partial',
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
-      await p.tick('^Install (Sine|Pluck)$');
-      await p.tick('^Delete (Sine)$');
+      await p.tick('^Install (shot|pluck)$');
+      await p.tick('^Delete shot$');
     },
   },
   {
-    // fit: Sine is loaded on the fake device (200 KiB of the DSP area), so Wavetable does not fit next to it (the tag says so, the tooltip why) and FM 4-op is more than
-    // the device has; the line above the list is the ticked modules together against the empty device: Pluck and Wavetable (679 KiB) are too much for the 512 KiB area
     name: 'modules-fit-ticked',
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
       await modulesReady(p);
-      await p.tick('^Install (Pluck|Wavetable)');
+      await p.tick('^Install (pluck|analog)');
     },
   },
-  // Sine and Pluck fit together (200 + 259 KiB of the 512 KiB DSP area), so the line above the list ends with the load after the next boot
+  // the live actions of the On device pane (Reload, Unload, Load), the service popover and the warnings; `card=` and `live=` set the fake card
+  {
+    name: 'transfer-live',
+    q: 'mode=modules',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.until("document.querySelector('.transfer-page .live-act')", 'No live action on the device rows');
+    },
+  },
+  {
+    name: 'transfer-live-ticked',
+    q: 'mode=modules',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.tick('^Install (pluck|analog)');
+      await p.until("document.querySelector('.transfer-page .storage-bar')", 'No storage bar');
+    },
+  },
+  {
+    name: 'transfer-live-samples',
+    q: 'mode=samples',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until("document.querySelector('.transfer-page .storage-bar')", 'No storage bar');
+    },
+  },
+  {
+    name: 'transfer-live-samples-ticked',
+    q: 'mode=samples',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until("document.querySelector('.transfer-page .storage-bar')", 'No storage bar');
+      await p.tick('^Upload (pad_warm_swell|loop_dub_chords_90)');
+    },
+  },
+  {
+    name: 'transfer-live-popover',
+    q: 'mode=modules',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      const badge = 'li:has(input[aria-label="Delete shot"]) .dep-badge';
+      await p.until(`document.querySelector(${JSON.stringify(badge)})`, 'Missing shot dependencies');
+      await p.eval(`document.querySelector(${JSON.stringify(badge)}).click()`);
+      await p.until("document.querySelector('.transfer-dependency-tooltip .dep-act')", 'The popover has no Reload');
+    },
+  },
+  {
+    name: 'transfer-live-incomplete',
+    q: 'mode=modules&card=incomplete',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.until(
+        "document.querySelector('.transfer-page .unused-services, .transfer-page .rtag.warn')",
+        'No warning',
+      );
+    },
+  },
+  {
+    name: 'transfer-live-orphan',
+    q: 'mode=modules&card=orphan',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.until("document.querySelector('.transfer-page .unused-services')", 'No unused-services warning');
+    },
+  },
+  {
+    name: 'transfer-live-refused',
+    q: 'mode=modules&live=refuse',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.until("document.querySelector('.transfer-page .live-act')", 'No live action');
+      await p.eval(
+        "[...document.querySelectorAll('.transfer-page .live-act')].find((b) => b.textContent === 'Reload').click()",
+      );
+      await p.until("document.querySelector('.transfer-page .live-result.refused')", 'No refused result on the row');
+    },
+  },
   {
     name: 'modules-fit-load',
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
       await modulesReady(p);
-      await p.tick('^Install (Sine|Pluck)$');
+      await p.tick('^Install (shot|pluck)$');
       await p.wait(300);
     },
   },
@@ -99,7 +846,7 @@ const SCENES = [
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
-      await p.tick('^Install Pluck$');
+      await p.tick('^Install pluck$');
     },
   },
   {
@@ -107,7 +854,7 @@ const SCENES = [
     q: 'mode=modules&speed=0.4',
     size: WIDE,
     steps: async (p) => {
-      await p.tick('^Install (Wavetable|FM|Pluck)');
+      await p.tick('^Install (analog|bd|pluck)');
       await p.click(/^Install/);
       await p.wait(2500);
     },
@@ -133,7 +880,7 @@ const SCENES = [
     q: 'mode=modules&speed=0.4',
     size: MIN,
     steps: async (p) => {
-      await p.tick('^Install (Wavetable|FM|Pluck)');
+      await p.tick('^Install (analog|bd|pluck)');
       await p.click(/^Install/);
       await p.wait(2500);
     },
@@ -200,6 +947,8 @@ const SCENES = [
       await p.wait(4000);
     },
   },
+  { name: 'samples-checking', q: 'mode=samples&speed=0.8&verify=4000', size: WIDE, steps: checkingSample },
+  { name: 'samples-narrow-checking', q: 'mode=samples&speed=0.8&verify=4000', size: MIN, steps: checkingSample },
   { name: 'samples-narrow', q: 'mode=samples', size: MIN },
   {
     name: 'samples-narrow-uploading',
@@ -214,6 +963,7 @@ const SCENES = [
   // the link pill after the free space (FAST USB / SYSEX / SYSEX: FALLBACK) and the "via" end of the progress line
   { name: 'samples-link-bulk', q: 'mode=samples&link=bulk', size: WIDE },
   { name: 'samples-link-sysex', q: 'mode=samples&link=sysex', size: WIDE },
+  { name: 'samples-link-wrongmode', q: 'mode=samples&link=wrongmode', size: WIDE },
   { name: 'samples-link-bulk-narrow', q: 'mode=samples&link=bulk', size: MIN },
   { name: 'samples-link-fallback-narrow', q: 'mode=samples&link=fallback&speed=3', size: MIN, steps: upload3 },
   {
@@ -374,9 +1124,11 @@ const SCENES = [
       p.say(`Up row: ${await crumb()} (expect Samples)`);
       await p.clickRow('loops', { clicks: 2 });
       await p.wait(400);
-      await p.click('Samples');
+      await p.click('Samples', 'nav.crumbs[aria-label="Folder on your computer"] button');
       await p.wait(400);
-      p.say(`breadcrumb: ${await crumb()}`);
+      const root = await crumb();
+      if (root !== 'Samples') throw new Error(`The computer breadcrumb did not return to Samples: ${root}`);
+      p.say(`breadcrumb: ${root}`);
       await p.clickRow('loops', { clicks: 2 });
       await p.wait(400);
       await p.clickRow('breaks', { clicks: 2 });
@@ -515,6 +1267,21 @@ const SCENES = [
     steps: async (p) => {
       await p.dnd(null, 'pane', { drop: false, files: ['from_finder_a.wav', 'from_finder_b.wav'] });
       await p.wait(300);
+      const first = await p.eval("document.querySelector('.span-details option:nth-child(2)').value");
+      await p.click(/^Transfer$/);
+      await p.until(
+        `[...document.querySelectorAll('.span-details option')].some(o => o.value === ${JSON.stringify(first)}) && document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'`,
+        'Transfer refresh cleared the current recording',
+      );
+      await p.click(/^Remote$/);
+      await p.eval(`(() => {
+        const plot = document.querySelector('.performance-plot');
+        const rect = plot.getBoundingClientRect();
+        plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.left + 1 }));
+        plot.dispatchEvent(new PointerEvent('pointerleave'));
+      })()`);
+      if (!(await p.eval("document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'")))
+        throw new Error('Leaving a timeline gap failed to restore the latest interval');
       await p.eval(
         "document.querySelectorAll('section.col')[1].dispatchEvent(new Event('dragleave', { bubbles: true }))",
       );
@@ -543,12 +1310,12 @@ const SCENES = [
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
-      await p.clickRow('Sine');
-      await p.clickRow('FM 4-op', { mods: 8 });
-      await p.clickRow('Tuner', { mods: 4 });
+      await p.clickRow('shot');
+      await p.clickRow('bd', { mods: 8 });
+      await p.clickRow('track-manager', { mods: 4 });
       p.say(`modules, shift then cmd: ${JSON.stringify(await p.selected(0))}`);
-      await p.clickRow('Sine', { pane: 1 });
-      await p.clickRow('Pluck', { pane: 1, mods: 4 });
+      await p.clickRow('shot', { pane: 1 });
+      await p.clickRow('pluck', { pane: 1, mods: 4 });
       p.say(`device pane: ${JSON.stringify(await p.selected(1))}`);
     },
   },
@@ -568,6 +1335,8 @@ const SCENES = [
     size: WIDE,
     steps: async (p) => {
       await p.wait(2600);
+      const rows = await p.eval(`document.querySelectorAll('input[aria-label^="Install "]').length`);
+      if (!rows) throw new Error('The local module library is empty while the device waits.');
     },
   },
   {
@@ -576,8 +1345,74 @@ const SCENES = [
     size: WIDE,
     steps: async (p) => {
       await p.wait(2600);
+      const [local, target] = await p.eval(
+        `['On your computer', 'On device'].map((pane) => document.querySelectorAll('section[aria-label="' + pane + '"] li[data-key]').length)`,
+      );
+      if (!local || target) throw new Error('Samples should show only local rows while the target waits.');
     },
   },
+  {
+    name: 'samples-timeout-first-read-after-remount',
+    q: 'mode=samples&dev=noreply',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until(
+        `window.__sim.counts.deviceRead === 1 && document.querySelector('.transfer-page .head .meta')`,
+        'Samples did not start its first device read.',
+      );
+      await p.click(/^Settings$/);
+      await p.click(/^Transfer$/);
+      if (!(await p.eval(`document.querySelector('.transfer-page .head .meta')`)))
+        throw new Error('The first Samples read finished before returning to Transfer.');
+      await p.until(
+        `!document.querySelector('.transfer-page .head .meta') && document.querySelector('.transfer-page .err .msg')?.textContent.includes('No reply')`,
+        'Samples did not go idle with a No reply error.',
+      );
+      if ((await p.eval('window.__sim.counts.deviceRead')) !== 1)
+        throw new Error('Returning to Samples queued a second device read.');
+    },
+  },
+  ...[false, true].map((remount) => ({
+    name: remount ? 'samples-failed-target-remount' : 'samples-failed-target-first-read',
+    q: 'mode=samples&dev=slow',
+    size: WIDE,
+    steps: async (p) => {
+      const localRows = `document.querySelectorAll('section[aria-label="On your computer"] li[data-key]').length`;
+      const deviceRows = `document.querySelectorAll('section[aria-label="On device"] li[data-key]').length`;
+      await p.until(localRows, 'Samples did not show local rows during the first listing.');
+      if (await p.eval(deviceRows)) throw new Error('The first Samples listing already finished.');
+      if (remount) await p.click(/^Settings$/);
+      const original = await p.eval(`(() => {
+        const select = document.querySelector('select[aria-label="Target"]');
+        if (!select || select.disabled || window.__sim.counts.deviceRead !== 1) return null;
+        const { value, text } = select.selectedOptions[0];
+        // Keep the in-flight read slow and let the recovery use normal preview timing.
+        window.__sim.sim.dev = 'ok';
+        const missing = new Option('Unavailable MIDI port');
+        select.add(missing);
+        select.value = missing.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return { value, text };
+      })()`);
+      if (!original) throw new Error('Could not switch targets during the first Samples listing.');
+      await p.until(
+        `!document.querySelector('select[aria-label="Target"]').disabled`,
+        'The MIDI target switch did not settle.',
+      );
+      if (remount) await p.click(/^Transfer$/);
+      if (!(await p.eval(localRows))) throw new Error('The failed switch cleared local rows.');
+      await p.until(deviceRows, 'Samples did not recover the original device listing after the failed switch.');
+      const connection = await p.eval(`document.querySelector('.transfer-page .conn')?.textContent`);
+      if (!connection?.includes(original.text)) throw new Error(`Target changed: ${connection}`);
+      if ((await p.eval('window.__sim.counts.deviceRead')) !== 2)
+        throw new Error('The failed switch should cause exactly one recovery read.');
+      await p.eval(`(() => {
+        const select = document.querySelector('select[aria-label="Target"]');
+        select.querySelector('option:last-child').remove();
+        select.value = ${JSON.stringify(original.value)};
+      })()`);
+    },
+  })),
   {
     name: 'upload-not-waiting',
     q: 'mode=samples&speed=0.3',
@@ -623,6 +1458,8 @@ const SCENES = [
       await p.wait(4500);
       p.say(`file added on disk: shown after the poll = ${await has('new_file_xyz.wav')} (expect true)`);
       const c2 = JSON.parse(await counts());
+      if (c2.deviceRead !== c1.deviceRead || !(await has('new_file_xyz.wav')))
+        throw new Error('A local file change must refresh local files without reading the device.');
       await p.eval("window.dispatchEvent(new Event('focus'))");
       await p.wait(1500);
       const c3 = JSON.parse(await counts());
@@ -665,7 +1502,7 @@ const SCENES = [
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
-      await p.tick('^Delete (Pluck|Chorus)$');
+      await p.tick('^Delete (pluck|shot)$');
       await p.click(/^Delete/);
       await p.wait(300);
     },
@@ -674,16 +1511,30 @@ const SCENES = [
   { name: 'empty', q: 'mode=modules&dev=empty', size: WIDE },
   { name: 'empty-samples', q: 'mode=samples&dev=empty', size: WIDE },
   { name: 'error', q: 'mode=modules&dev=error', size: WIDE },
-  // ---- the Remote page against the Emulator page's faceplate: the same test pattern on the 128 x 64 screen ----
+  // ---- the Remote page against the Emulator page's faceplate: the same captured menu on the 128 x 64 screen ----
   { name: 'remote-wide', q: 'page=remote', size: WIDE, steps: async (p) => p.wait(800) },
   { name: 'remote-narrow', q: 'page=remote', size: MIN, steps: async (p) => p.wait(800) },
-  // ---- the Card panel of the Emulator page: the folder of the loaded device (preview/card-mock.ts) ----
-  { name: 'card-dn2', q: 'page=emulator&card=dn2', size: WIDE, steps: async (p) => p.wait(700) },
-  { name: 'card-dt2', q: 'page=emulator&card=dt2', size: WIDE, steps: async (p) => p.wait(700) },
+  // ---- the Files page: the simulated target store, and the emulator card-folder strip (preview/card-mock.ts) ----
+  {
+    // the failed module selected: header, load state and the info buttons
+    name: 'files-wide',
+    q: 'page=files',
+    size: WIDE,
+    steps: async (p) => {
+      const folder = ".files-page li[data-key='modules/machine'] button";
+      await p.until(`document.querySelector(${JSON.stringify(folder)})`, 'Module folder missing');
+      await p.eval(`document.querySelector(${JSON.stringify(folder)}).click()`);
+      await p.eval('document.querySelector(\'.files-page li[data-key$="/digikit-pluck.dkm"]\').click()');
+      await p.wait(500);
+    },
+  },
+  { name: 'files-narrow', q: 'page=files', size: MIN, steps: async (p) => p.wait(500) },
+  { name: 'card-dn2', q: 'page=files&card=dn2', size: WIDE, steps: async (p) => p.wait(700) },
+  { name: 'card-dt2', q: 'page=files&card=dt2', size: WIDE, steps: async (p) => p.wait(700) },
   {
     // the Digitone II takes the chosen folder at once: no reload notice
     name: 'card-dn2-chosen',
-    q: 'page=emulator&card=dn2',
+    q: 'page=files&card=dn2',
     size: WIDE,
     steps: async (p) => {
       await p.click('Choose folder…');
@@ -693,7 +1544,7 @@ const SCENES = [
   {
     // the Digitakt II builds its card from the folder: the notice and "Reload now"
     name: 'card-dt2-reload-notice',
-    q: 'page=emulator&card=dt2',
+    q: 'page=files&card=dt2',
     size: WIDE,
     steps: async (p) => {
       await p.click('Choose folder…');
@@ -702,7 +1553,7 @@ const SCENES = [
   },
   {
     name: 'card-dt2-reloaded',
-    q: 'page=emulator&card=dt2',
+    q: 'page=files&card=dt2',
     size: WIDE,
     steps: async (p) => {
       await p.click('Choose folder…');
@@ -711,16 +1562,16 @@ const SCENES = [
       await p.wait(700);
     },
   },
-  { name: 'card-dt2-saved-choice', q: 'page=emulator&card=dt2&chosen=1', size: WIDE, steps: async (p) => p.wait(700) },
+  { name: 'card-dt2-saved-choice', q: 'page=files&card=dt2&chosen=1', size: WIDE, steps: async (p) => p.wait(700) },
   {
     name: 'card-dt2-missing-choice',
-    q: 'page=emulator&card=dt2&chosen=1&missing=1',
+    q: 'page=files&card=dt2&chosen=1&missing=1',
     size: WIDE,
     steps: async (p) => p.wait(700),
   },
   {
     name: 'card-dt2-use-default',
-    q: 'page=emulator&card=dt2&chosen=1',
+    q: 'page=files&card=dt2&chosen=1',
     size: WIDE,
     steps: async (p) => {
       await p.click('Use default');
@@ -729,7 +1580,7 @@ const SCENES = [
   },
   {
     name: 'card-dt2-reload-notice-narrow',
-    q: 'page=emulator&card=dt2',
+    q: 'page=files&card=dt2',
     size: MIN,
     steps: async (p) => {
       await p.click('Choose folder…');
@@ -740,7 +1591,7 @@ const SCENES = [
   {
     // a Digitone II with Pluck and Remote control loaded and one module that is not in the library ("other")
     name: 'memory-dn2',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
       await openMemory(p);
@@ -755,7 +1606,7 @@ const SCENES = [
   },
   {
     name: 'memory-dn2-full',
-    q: 'page=emulator&card=dn2&mem=full',
+    q: 'page=files&card=dn2&mem=full',
     size: WIDE,
     steps: async (p) => {
       await openMemory(p);
@@ -764,7 +1615,7 @@ const SCENES = [
   },
   {
     name: 'memory-dn2-dsp-full',
-    q: 'page=emulator&card=dn2&mem=dsp',
+    q: 'page=files&card=dn2&mem=dsp',
     size: WIDE,
     steps: async (p) => {
       await openMemory(p);
@@ -774,7 +1625,7 @@ const SCENES = [
   // the Digitakt II has no page rows: no Pages bar
   {
     name: 'memory-dt2',
-    q: 'page=emulator&card=dt2&mem=pluck',
+    q: 'page=files&card=dt2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
       await openMemory(p);
@@ -783,17 +1634,17 @@ const SCENES = [
   },
   {
     name: 'memory-empty',
-    q: 'page=emulator&card=dn2&mem=empty',
+    q: 'page=files&card=dn2&mem=empty',
     size: WIDE,
     steps: async (p) => {
       await openMemory(p);
       await p.wait(700);
     },
   },
-  { name: 'memory-narrow', q: 'page=emulator&card=dn2&mem=pluck', size: MIN, steps: async (p) => p.wait(700) }, // closed by default at this width
+  { name: 'memory-narrow', q: 'page=files&card=dn2&mem=pluck', size: MIN, steps: async (p) => p.wait(700) }, // closed by default at this width
   {
     name: 'memory-narrow-open',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: MIN,
     steps: async (p) => {
       await p.wait(400);
@@ -823,11 +1674,143 @@ const SCENES = [
   },
   {
     name: 'memory-collapsed',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
       await p.wait(500);
       await fold(p);
+      await p.wait(300);
+    },
+  },
+  // ---- the Profile pane (preview/profile-backend.mock.ts): prof=rec|stopped|nodebug; the graph needs a minute of readings ----
+  {
+    // the emulator while recording: header, a full 60 s graph with the effect loaded at 19 s, the table, the DSP per block
+    name: 'profile-emulator',
+    q: 'page=files&card=dn2&prof=rec',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Profile');
+      await p.wait(62000);
+    },
+  },
+  {
+    // a device (the Remote page) after Stop: spans only, the whole-block DSP bar from HEALTH
+    name: 'profile-device',
+    q: 'page=remote&card=dt2&prof=rec',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Profile');
+      await p.wait(62000);
+      await p.click(/^Capture controls$/);
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.click(/^Performance$/);
+      await p.wait(1500);
+    },
+  },
+  {
+    name: 'profile-nodebug',
+    q: 'page=remote&card=dt2&prof=nodebug',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Profile');
+      await p.wait(800);
+    },
+  },
+  // ---- the Calibration tab (preview/calibration-backend.mock.ts): made-up captures; the files go in through the file inputs ----
+  {
+    // a run on the emulator in progress: the progress line and Stop (cal=slow stretches a capture to 3 s)
+    name: 'profile-calibration-run',
+    q: 'page=emulator&card=dn2&prof=stopped&cal=slow',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      await p.eval(
+        "(() => { const b = document.querySelector('.cal .cal-bar .act.primary'); b.click(); b.scrollIntoView(); })()",
+      );
+      await p.wait(4000);
+    },
+  },
+  {
+    // an emulator run loaded from a file, then a device run through Fit with…: the table with both columns, factor and error, the fit lines
+    name: 'profile-calibration-fit',
+    q: 'page=emulator&card=dn2&prof=stopped',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      const give = (index, side) =>
+        p.eval(`(() => {
+          const cap = (caseId, n, rows) => ({ schema: 'dk.profile/1', run: { id: '${side}-1-' + caseId + n, case_id: caseId, target: 'dn2' },
+            dsp: { unit: '${side === 'emu' ? 'insn' : 'cycles'}', blocks: 400, max_stock_block_delta: 0 },
+            dsp_rows: rows.map(([row, call, block]) => ({ row, kind: 'machine', calls: 400, sum_cycles: block * 300, max_call: call, max_block: block })) });
+          const k = ${side === 'emu' ? 1 : 1.31};
+          const set = { schema: 'dk.calcaptures/1', profile: 'modules', side: '${side}', captures: [
+            cap('stock', 1, []), cap('bd', 1, [[3, Math.round(16400 * k), Math.round(21400 * k)]]),
+            cap('pluck', 1, [[5, Math.round(30200 * k), Math.round(39800 * (k + (${side === 'dev'} ? 0.02 : 0)))]]),
+            cap('tb303', 1, [[7, Math.round(11800 * k), Math.round(15100 * k)]]) ] };
+          const dt = new DataTransfer();
+          dt.items.add(new File([JSON.stringify(set)], '${side}.captures.json', { type: 'application/json' }));
+          const input = document.querySelectorAll('.cal input[type=file]')[${index}];
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        })()`);
+      await give(0, 'emu');
+      await p.wait(400);
+      await give(1, 'dev');
+      await p.wait(800);
+      await p.eval("document.querySelector('.cal').scrollIntoView()");
+      await p.wait(300);
+    },
+  },
+  {
+    // an active calibration loaded on the Calibration tab
+    name: 'profile-calibration-active',
+    q: 'page=emulator&card=dn2&prof=stopped',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      await p.eval(`(() => {
+        const doc = { schema: 'dk.calibration/1', key: { device: 'dn2', device_unit: 'cycles', block_cycles: 666784 },
+          dsp: { factor: { fit: 1.31, budget: 1.34 }, error: { n: 9, mean: 0.002, worst_under: 0.013 } } };
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify(doc)], 'dk-calibration-dn2.json', { type: 'application/json' }));
+        const input = document.querySelector('.cal-active input[type=file]');
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await p.wait(600);
+    },
+  },
+  {
+    // the same calibration, then the Profile tab: the DSP rows with est. cyc/blk and % block
+    name: 'profile-calibration-estimate',
+    q: 'page=emulator&card=dn2&prof=rec',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      await p.eval(`(() => {
+        const doc = { schema: 'dk.calibration/1', key: { device: 'dn2', device_unit: 'cycles', block_cycles: 666784 },
+          dsp: { factor: { fit: 1.31, budget: 1.34 }, error: { n: 9, mean: 0.002, worst_under: 0.013 } } };
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify(doc)], 'dk-calibration-dn2.json', { type: 'application/json' }));
+        const input = document.querySelector('.cal-active input[type=file]');
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await p.wait(600);
+      await showTab(p, 'Profile');
+      await p.wait(2500);
+      await p.eval("document.querySelector('.dsp-mods')?.scrollIntoView()");
       await p.wait(300);
     },
   },
@@ -844,7 +1827,7 @@ const SCENES = [
   })),
   {
     name: 'side-memory',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
       await p.wait(400);
@@ -854,7 +1837,7 @@ const SCENES = [
   },
   {
     name: 'side-metrics',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
       await p.wait(400);
@@ -875,7 +1858,7 @@ const SCENES = [
   {
     // the column folded: a rail, and the faceplate has the width
     name: 'side-rail',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
       await p.wait(400);
@@ -885,7 +1868,7 @@ const SCENES = [
   },
   {
     name: 'side-narrow',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: MIN,
     steps: async (p) => {
       await p.wait(400);
@@ -893,6 +1876,8 @@ const SCENES = [
       await p.wait(400);
     },
   },
+  { name: 'inspector-fold', q: 'page=emulator', size: [1120, 800], steps: checkInspectorFold },
+  { name: 'inspector-fold-narrow', q: 'page=emulator', size: MIN, steps: checkInspectorFold },
   // ---- the Log drawer over fake runtime logs (apps/desktop/ui/preview/runtime-log-mock.ts); logspeed makes the script run faster than real time ----
   ...[
     ['log-both-wide', 'page=log&log=both&logspeed=3&logh=640', WIDE, 5500],
@@ -986,7 +1971,7 @@ const SCENES = [
       async (p) => {
         await p.click(/^Level/);
         await p.wait(400);
-        // the module row of freqshift: error; the default row: trace
+        // the module row of chorus: error; the default row: trace
         await p.eval(
           "(() => { const rows = [...document.querySelectorAll('.level-row')]; const pick = (row, name) => [...row.querySelectorAll('button')].find((b) => b.textContent === name)?.click(); pick(rows[0], 'trace'); pick(rows[2], 'error'); })()",
         );
@@ -1005,6 +1990,17 @@ const SCENES = [
     ],
     // the debug module is loaded on the device, and on the emulator in the other scene it is not
     ['log-debug-module-loaded', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
+    // the Card log button switched on (the fake device has a card log, the emulator's debug module has none)
+    [
+      'log-cardlog-on',
+      'page=log&log=both&logspeed=3&logh=640',
+      WIDE,
+      'device:all',
+      async (p) => {
+        await p.click('Card log');
+        await p.wait(3000);
+      },
+    ],
     ['log-debug-module-not-loaded', 'page=log&log=nodebug&logh=640', WIDE, 'device:all', async () => {}],
     ['log-debug-module-not-loaded-narrow', 'page=log&log=nodebug&logh=640', MIN, 'device:all', async () => {}],
     // Source is All and both origins are followed: the menu does not know which one is meant
@@ -1083,12 +2079,19 @@ function pageApi(cdp) {
     eval: evaluate,
     say: (m) => console.log(`  ${m}`),
     wait: sleep,
-    async click(text) {
+    async until(condition, message) {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (await evaluate(condition)) return;
+        await sleep(100);
+      }
+      throw new Error(message);
+    },
+    async click(text, selector = 'button') {
       const src = text instanceof RegExp ? text.source : `^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
       // a button is disabled while the page reads (a window focus starts a read): try for up to 3 s
       for (let i = 0; i < 30; i++) {
         const ok = await evaluate(
-          `(() => { const re = new RegExp(${JSON.stringify(src)}); const b = [...document.querySelectorAll('button')].find((x) => re.test(x.textContent.trim()) && !x.disabled); if (b) b.click(); return !!b; })()`,
+          `(() => { const re = new RegExp(${JSON.stringify(src)}); const b = [...document.querySelectorAll(${JSON.stringify(selector)})].find((x) => re.test(x.textContent.trim()) && !x.disabled); if (b) b.click(); return !!b; })()`,
         );
         if (ok) return;
         await sleep(100);

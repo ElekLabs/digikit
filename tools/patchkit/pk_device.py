@@ -2,7 +2,9 @@
 
     from tools.patchkit import pk_device
     s = pk_device.store_of("dt2")  # the module store's geometry of a device (absolute sectors): the area differs per device
-    pk_device.digikit_devices()    # short names of the devices that have a module store
+    pk_device.runtime_devices()  # short names of the runtime targets (`[digikit]`)
+    pk_device.store_devices()    # the ones of them that have a module store
+    pk_device.dsp_devices()      # the ones of them that have a module store and a DSP
 
 The store area is per device (docs/design/digikit-store.md): the runtime reads it from its device object (`devices/*.toml [card.store]`).
 """
@@ -36,13 +38,23 @@ def load(short: str) -> dict:
         raise KeyError(f"no device file for {short!r}: {sorted(load_all())}") from None
 
 
-def digikit_devices() -> list[str]:
-    """Devices with a `[card.store]` and a `[digikit]` section."""
+def runtime_devices() -> list[str]:
+    """Devices with a `[digikit]` section: the runtime runs there (it is one image: what its static arrays hold is the same on every one)."""
+    return [s for s, d in load_all().items() if "digikit" in d]
+
+
+def store_devices() -> list[str]:
+    """Devices with a `[card.store]` and a `[digikit]` section: the runtime runs there and keeps its module store on the card."""
     return [
         s
         for s, d in load_all().items()
         if "digikit" in d and "store" in d.get("card", {})
     ]
+
+
+def dsp_devices() -> list[str]:
+    """The `store_devices` that have a DSP (`[capabilities] dsp`): the targets of the run-time machine, effect and DSP tools and tests."""
+    return [s for s in store_devices() if load(s)["capabilities"]["dsp"] != "none"]
 
 
 @dataclass(frozen=True)
@@ -96,9 +108,9 @@ class Limits:
     arena_bytes: int  # the ColdFire module arena
     stage_bytes: int  # the staging buffer: the largest .dkm file
     fx_slots: int  # effects in the chain
-    send_slots: int  # of them effects on a send bus (the device file's limit; `effective_send_slots` is what an image reports)
-    param_rows: int  # parameter rows core/dynreg reserves
-    page_rows: int  # page rows core/dynreg reserves (0 on a device without)
+    send_slots: int  # of them effects on a send bus (the device file's limit)
+    param_rows: int  # parameter rows core/rows reserves
+    page_rows: int  # page rows core/rows reserves (0 on a device without)
     dsp_area_bytes: int  # the DSP run-time area
 
 
@@ -120,15 +132,6 @@ def effective_fx_slots(lim: Limits, plan: dict[str, Any]) -> int:
     )
 
 
-def effective_send_slots(short: str, plan: dict[str, Any]) -> int:
-    """The send slots an image of device SHORT reports in CAPACITY: the device's `send_slots` when the image has `core/fxpages` (the send page) and the device file has a send page
-    (`[fx] track_page`), else 0 (every Digitone II image until FX routing step 6)."""
-    has_page = any(str(m).startswith("core/fxpages@") for m in plan["modules"])
-    if not has_page or load(short).get("fx", {}).get("track_page", 0) == 0:
-        return 0
-    return limits(short).send_slots
-
-
 def limits(short: str) -> Limits:
     """The capacity limits of device SHORT, read from its device file (generated into the runtime by `patchkit gen`)."""
     d = load(short)
@@ -144,21 +147,24 @@ def limits(short: str) -> Limits:
 
 def shared_limits() -> Limits:
     """The limits every digikit device agrees on, except the per-device ones (`dsp_area_bytes`, `fx_slots`, `page_rows`), which are
-    taken from the first device. Raises when a shared limit differs: the runtime is one image for all devices."""
-    devs = digikit_devices()
-    first = limits(devs[0])
-    for d in devs[1:]:
-        o = limits(d)
-        for k in (
-            "modules",
-            "machine_rows",
-            "arena_bytes",
-            "stage_bytes",
-            "param_rows",
-        ):
-            if getattr(o, k) != getattr(first, k):
+    taken from the first DSP device. Raises when a shared limit differs: the runtime is one image for all devices. The module count and
+    the arena and staging sizes are the runtime's static arrays and are checked on every runtime target; the machine and parameter rows
+    exist only where there is a DSP, and are checked on those."""
+    dsp = dsp_devices()
+    first = limits(dsp[0])
+    for key, devs in (
+        ("modules", runtime_devices()),
+        ("arena_bytes", runtime_devices()),
+        ("stage_bytes", runtime_devices()),
+        ("machine_rows", dsp),
+        ("param_rows", dsp),
+    ):
+        want = getattr(first, key)
+        for d in devs:
+            have = load(d)["limits"][key]
+            if have != want:
                 raise RuntimeError(
-                    f"[limits] {k} differs between {devs[0]} and {d}; the runtime is one image for all devices"
+                    f"[limits] {key} differs between {dsp[0]} and {d}; the runtime is one image for all devices"
                 )
     return first
 
@@ -174,26 +180,19 @@ def keep_range(short: str) -> tuple[int, int]:
     return k["keep_base"], k["keep_bytes"]
 
 
-def working_project_sector() -> int:
-    """First sector of the working project record (`[[card.regions]]` role `working-project`), the same on every digikit device:
-    the card above it is the firmware's (project slots follow at the first project pool sector)."""
-    found = {}
-    for d in digikit_devices():
-        rs = [
-            r["sector"]
-            for r in load(d)["card"].get("regions", [])
-            if r["role"] == "working-project"
-        ]
-        if len(rs) != 1:
-            raise RuntimeError(
-                f"{d}: expected one working-project region, found {len(rs)}"
-            )
-        found[d] = rs[0]
-    if len(set(found.values())) != 1:
+def working_project_sector(short: str) -> int:
+    """First sector of the working project record of device SHORT (`[[card.regions]]` role `working-project`): the card above it is the firmware's
+    (project slots follow at the first project pool sector)."""
+    found = [
+        r["sector"]
+        for r in load(short)["card"].get("regions", [])
+        if r["role"] == "working-project"
+    ]
+    if len(found) != 1:
         raise RuntimeError(
-            f"the working-project region differs between devices: {found}"
+            f"{short}: expected one working-project region, found {len(found)}"
         )
-    return next(iter(found.values()))
+    return found[0]
 
 
 def port_images(short: str) -> tuple[str, ...]:
@@ -203,3 +202,31 @@ def port_images(short: str) -> tuple[str, ...]:
         for fw in load(short).get("firmware", [])
         if fw.get("port")
     )
+
+
+def acceptance_firmware() -> dict[str, str]:
+    """short name -> the firmware version the device's tests and tools run (`[acceptance] firmware`)."""
+    return {
+        s: d["acceptance"]["firmware"]
+        for s, d in load_all().items()
+        if "acceptance" in d
+    }
+
+
+def port_firmware() -> dict[tuple[str, str], str]:
+    """(short name, version) -> .syx file name of every firmware that has a port lockfile."""
+    return {
+        (s, fw["version"]): fw["filename"]
+        for s, d in load_all().items()
+        for fw in d.get("firmware", [])
+        if fw.get("port")
+    }
+
+
+def ready_dir(short: str, version: str) -> str:
+    """The ready-snapshot directory of a firmware: `[acceptance] ready_dir` for the acceptance firmware, else
+    `out/ready-<short>-<version without dots>`."""
+    acc = load(short).get("acceptance", {})
+    if acc.get("firmware") == version and "ready_dir" in acc:
+        return acc["ready_dir"]
+    return f"out/ready-{short}-{version.replace('.', '')}"

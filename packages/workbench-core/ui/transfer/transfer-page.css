@@ -1,0 +1,851 @@
+/* The Transfer page (TransferPage.tsx, ModulesMode.tsx, and in the desktop app SamplesMode.tsx): fills the content area next to the sidebar. Tokens from the site (packages/workbench-core/ui/styles/site.css). */
+.transfer-page {
+  /* surfaces of the page; the site maps them to its tokens (transfer-site.css) */
+  --tp-bg: var(--content-bg);
+  --tp-border: var(--content-border);
+  --tp-inset: var(--content-inset);
+  --tp-bar: var(--shell-bar);
+  --tp-wait: var(--content-pending);
+  --tp-bar-line: var(--shell-divider);
+  --tp-track: var(--content-track);
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 0;
+  overflow: hidden;
+  background: var(--tp-bg);
+  color: var(--ink);
+  font-size: 13px;
+}
+/* a pane is an explorer list: it takes the keys (Cmd+A, Esc, arrows), the marquee is drawn in it, and the rows that are dragged to it light it up */
+.transfer-page .col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  /* the frame of a drop target is the pane's own border: an outline would pass under the sticky header */
+  border: 2px dashed transparent;
+  border-radius: 8px;
+  margin: -2px;
+}
+.transfer-page .col > * {
+  flex: none;
+}
+/* the list fills the rest of the pane, so that there is always empty space to start a marquee in */
+.transfer-page .col > .listarea {
+  flex: 1 0 auto;
+  min-height: 120px;
+  padding-bottom: 32px;
+}
+.transfer-page .col.over {
+  border-color: var(--action);
+  background: color-mix(in srgb, var(--action) 5%, transparent);
+}
+.transfer-page .col.over .colhead {
+  background: color-mix(in srgb, var(--action) 5%, var(--tp-inset));
+}
+.transfer-page .marquee {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  border: 1px solid var(--action);
+  background: color-mix(in srgb, var(--action) 13%, transparent);
+}
+.transfer-page .head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.transfer-page h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.transfer-page h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.transfer-page h4 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.transfer-page .sp {
+  flex: 1;
+}
+.transfer-page .meta,
+.transfer-page .dim,
+.transfer-page .drop,
+.transfer-page .tests {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.transfer-page .colhead {
+  /* the header stays at the top of its pane while the rows scroll under it */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding-bottom: 8px;
+  margin-bottom: 0;
+  background: var(--tp-bg);
+}
+/* the heading with its select-all box stays together at the top left; the buttons wrap as a group, right-aligned */
+.transfer-page .colhead .hl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+}
+.transfer-page .hl .selcount {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.transfer-page .hl .selcount .lead {
+  color: var(--action);
+}
+.transfer-page .colhead .acts {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 12px;
+}
+.transfer-page input[type='checkbox']:not([role='switch']) {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--action);
+}
+.transfer-page .empty {
+  margin: 0;
+  color: var(--ink-3);
+}
+.transfer-page .rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-block: 1px solid var(--line);
+}
+.transfer-page .rows li {
+  /* always one line: tick, name with its tags (the name gives way), version, state, size */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 44px;
+  -webkit-user-select: none;
+  user-select: none;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+  container-type: inline-size;
+}
+.transfer-page .rows li:last-child {
+  border-bottom: 0;
+}
+/* a selected row (the tick is the selection); grey when the pane does not have the keyboard */
+.transfer-page .rows li.sel {
+  background: color-mix(in srgb, var(--action) 16%, transparent);
+}
+.transfer-page .col:not(:focus-within) .rows li.sel {
+  background: var(--selection-muted);
+}
+/* a folder that the dragged rows would land in */
+.transfer-page .rows li.dropon {
+  background: color-mix(in srgb, var(--action) 30%, transparent);
+  box-shadow: inset 0 0 0 2px var(--action);
+}
+.transfer-page .rows li[draggable='true'] {
+  -webkit-user-drag: element;
+}
+.transfer-page .rows.uprows {
+  border-bottom: 0;
+}
+.transfer-page .rows li.uprow {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.transfer-page .rows .upbtn {
+  color: inherit;
+  cursor: pointer;
+}
+.transfer-page .rows li.uprow:hover {
+  background: var(--hover-overlay);
+}
+/* the picture that follows the pointer while rows are dragged (an element of the page body, set by pane-select.ts) */
+.dragchip {
+  position: fixed;
+  top: -200px;
+  left: 0;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--action);
+  color: var(--action-ink);
+  font: 500 12px var(--font-mono, monospace);
+}
+.transfer-page .rows .tick {
+  width: 14px;
+  flex: none;
+}
+/* the Files page tree: a spacer per level, and the open/close button before a folder's name */
+.transfer-page .rows .indent {
+  flex: none;
+  margin-right: -10px;
+}
+.transfer-page .rows .twisty {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-3);
+}
+.transfer-page .rows button.twisty {
+  cursor: pointer;
+}
+.transfer-page .rows .name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.transfer-page .rows .nm {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transfer-page .rows .vers {
+  flex: none;
+  min-width: 6ch;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.transfer-page .rows .size {
+  flex: none;
+  min-width: 9ch;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+/* the small labels after a name */
+.transfer-page .rtag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--ink-3);
+  background: var(--panel-2);
+}
+/* the capacity hint: wraps in the row, never cut */
+.transfer-page .rtag.wrap {
+  flex: 0 1 auto;
+  white-space: normal;
+  line-height: 13px;
+  padding: 2px 6px;
+}
+.transfer-page .rtag.ok {
+  color: var(--status-ok-text);
+  background: var(--status-ok-fill);
+}
+.transfer-page .rtag.warn {
+  color: var(--status-caution);
+  background: var(--status-warning-fill);
+}
+.transfer-page .dep-badge {
+  border: 0;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: help;
+}
+.transfer-page .dep-badge:hover,
+.transfer-page .dep-badge:focus-visible {
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.transfer-dependency-tooltip {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 6px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--ink);
+  box-shadow: 0 6px 18px var(--tooltip-shadow);
+  font: 12px/1.4 var(--font-mono);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+/* a popover with a Reload per service takes the pointer, so its buttons can be clicked */
+.transfer-dependency-tooltip.interactive {
+  pointer-events: auto;
+}
+.transfer-dependency-tooltip .dep-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.transfer-dependency-tooltip .dep-act {
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.transfer-dependency-tooltip .dep-act:hover:not(:disabled) {
+  color: var(--action);
+}
+.transfer-dependency-tooltip .live-result {
+  font-size: 11px;
+}
+/* the live actions of a device row and what the last one did */
+.transfer-page .live {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: 2px;
+  min-width: 0;
+}
+.transfer-page .live-act:disabled {
+  color: var(--ink-3);
+  cursor: default;
+  text-decoration: none;
+}
+.live-result {
+  color: var(--status-ok-text);
+  white-space: normal;
+  max-width: 28ch;
+}
+/* on a row the result is a line of its own under the name, so a long reason never squeezes the name */
+.transfer-page .rows li:has(> .live-result.line) {
+  flex-wrap: wrap;
+}
+.live-result.line {
+  flex: 1 0 100%;
+  max-width: none;
+  padding: 2px 0 4px 26px;
+  white-space: normal;
+}
+.live-result.refused {
+  color: var(--status-caution);
+}
+.live-result.failed {
+  color: var(--status-error-text, var(--status-caution));
+}
+.transfer-dependency-tooltip .live-result {
+  max-width: 48ch;
+  white-space: normal;
+}
+/* the port file line above the device list is quiet when the file matches the firmware */
+.transfer-page .unused-services.port-line.ok {
+  color: var(--ink-3);
+}
+/* the warning above the device list: service files no module needs */
+.transfer-page .unused-services {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--status-caution);
+}
+.transfer-page .rtag.dim {
+  color: var(--ink-3);
+}
+.transfer-page .rows .nm {
+  min-width: 7ch;
+}
+/* the "does not fit" bar: pinned to the bottom of the list, over the rows, one line */
+.transfer-page .fitbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--status-caution);
+  background: var(--status-warning-fill);
+}
+.transfer-page .check {
+  flex: none;
+  font-size: 10.5px;
+  line-height: 16px;
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.transfer-page .check.ok {
+  color: var(--status-ok-text);
+  background: var(--status-ok-fill);
+}
+.transfer-page .check.bad {
+  color: var(--status-error-text);
+  background: var(--status-error-fill);
+}
+.transfer-page .err {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--alert-text);
+  background: var(--bad-bg);
+}
+/* the refusal box of an install (one line per refused module, Flash on the right) */
+.transfer-page .err.refusals {
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+.transfer-page .err.refusals .msg > div + div {
+  margin-top: 4px;
+}
+/* the notice lies over the top of the lists, so they do not move when it comes and goes */
+.transfer-page .notices {
+  position: relative;
+  height: 0;
+  z-index: 5;
+}
+/* "Waiting for <target>…" with Cancel (WaitNotice.tsx) */
+.transfer-page .wait {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  box-shadow: 0 6px 16px var(--floating-shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  background: var(--tp-wait);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.transfer-page .err .msg {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  white-space: pre-line;
+}
+.transfer-page .act,
+.transfer-page .mini {
+  border: 1px solid var(--tp-border);
+  background: var(--panel-2);
+  color: var(--ink);
+  border-radius: 7px;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.transfer-page .act {
+  height: 30px;
+  padding-inline: 12px;
+}
+.transfer-page .act.small {
+  height: 26px;
+  font-size: 12px;
+}
+.transfer-page .mini {
+  height: 24px;
+  padding-inline: 8px;
+  font-size: 12px;
+}
+.transfer-page .act.primary {
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--action-ink);
+}
+.transfer-page .act:hover:not(:disabled),
+.transfer-page .mini:hover:not(:disabled) {
+  background: var(--panel-3);
+}
+.transfer-page .act.primary:disabled {
+  background: var(--panel-2);
+  border-color: var(--tp-border);
+  color: var(--ink);
+}
+.transfer-page .act.primary:hover:not(:disabled) {
+  background: var(--action-hover);
+}
+.transfer-page button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* the progress bar along the bottom: a line (what is going on; percent, speed, time left) over a thick track */
+.transfer-page .bar {
+  position: sticky;
+  bottom: 0;
+  flex: none;
+  margin: auto -20px 0;
+  padding: 10px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--tp-bar);
+  border-top: 1px solid var(--tp-bar-line);
+}
+.transfer-page .barline {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.transfer-page .barline .msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.transfer-page .barline .stats {
+  flex: none;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.transfer-page .phase {
+  flex: none;
+  width: 9ch;
+  color: var(--ink-2);
+}
+.transfer-page progress {
+  appearance: none;
+  border: 0;
+  background: var(--tp-track);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.transfer-page progress::-webkit-progress-bar {
+  background: var(--tp-track);
+}
+.transfer-page progress::-webkit-progress-value {
+  background: var(--action);
+  transition: width 0.15s ease;
+}
+.transfer-page progress.global {
+  width: 100%;
+  height: 12px;
+}
+.transfer-page progress.global::-webkit-progress-value {
+  background: var(--transfer-complete);
+}
+.transfer-page progress.global.failed::-webkit-progress-value {
+  background: var(--status-error-indicator);
+}
+/* a file's upload bar, inline in its row (the speed shows when the row is wide, else in the tooltip) */
+.transfer-page .up {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.transfer-page .up progress {
+  width: 90px;
+  height: 8px;
+}
+.transfer-page .up .pct {
+  min-width: 4ch;
+  text-align: right;
+}
+.transfer-page .up .rate {
+  display: none;
+  min-width: 8ch;
+  color: var(--ink-3);
+}
+@container (min-width: 520px) {
+  .transfer-page .up .rate {
+    display: inline;
+  }
+}
+.transfer-page .check.idle {
+  color: var(--ink-2);
+  background: var(--tp-track);
+}
+.transfer-page .log {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 140px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: var(--tp-inset);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+}
+.transfer-page .act.danger {
+  background: var(--destructive-fill);
+  border-color: var(--status-error-indicator);
+  color: var(--status-error-text);
+}
+/* the device line under the On device heading, and the folder paths */
+.transfer-page .devhead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+}
+/* The reason a samples link is not Fast USB: a line of its own when it does not fit */
+.transfer-page .devhead .link-hint {
+  flex: 1 1 16rem;
+  min-width: 0;
+  white-space: normal;
+}
+/* Modules mode: the storage line takes a line of its own under the device line */
+.transfer-page .devhead .storage {
+  flex-basis: 100%;
+}
+.transfer-page .crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.transfer-page .crumbs .mini[aria-current] {
+  color: var(--action);
+}
+.transfer-page .newfolder {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.transfer-page .newfolder input {
+  flex: 1;
+  height: 26px;
+  padding-inline: 8px;
+  border: 1px solid var(--tp-border);
+  border-radius: 7px;
+  background: var(--tp-inset);
+  color: var(--ink);
+  font: inherit;
+}
+.transfer-page .rows .nm.dir {
+  color: var(--action);
+}
+.transfer-page .tests {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.transfer-page .note {
+  margin-top: 8px;
+  font-size: 12px;
+}
+/* a narrow pane (the window at its minimum): the version and the grey tags give way so that names stay readable; a bar shrinks */
+@container (max-width: 430px) {
+  .transfer-page .rows .vers,
+  .transfer-page .rows .rtag.dim {
+    display: none;
+  }
+  .transfer-page .up progress {
+    width: 44px;
+  }
+  .transfer-page .rows li:has(.up, .check) .size {
+    display: none;
+  }
+  .transfer-page .rows .rtag {
+    max-width: 11ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .transfer-page .rows .rtag.wrap {
+    max-width: 16ch;
+    overflow: visible;
+  }
+  .transfer-page .rows .nm {
+    min-width: 7ch;
+  }
+}
+
+/* a small link-like button in a row ("Source") */
+.transfer-page .rowlink {
+  flex: none;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.transfer-page .rowlink:hover {
+  color: var(--action);
+}
+/* the source panel (SourcePanel.tsx): over the right side of the page; the whole page when it is narrow */
+.transfer-page .source {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 100%);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--tp-bg);
+  border-left: 1px solid var(--tp-border);
+  box-shadow: -12px 0 24px var(--floating-shadow);
+}
+.transfer-page .sourcehead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.transfer-page .sourcehead h3 {
+  margin: 0;
+}
+.transfer-page .sourcefiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.transfer-page .sourcefiles button {
+  padding: 2px 8px;
+  border: 1px solid var(--tp-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.transfer-page .sourcefiles button.on {
+  color: var(--action-ink);
+  background: var(--action);
+  border-color: var(--action);
+}
+.transfer-page .sourcetext {
+  margin: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--tp-inset);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  tab-size: 4;
+  white-space: pre;
+}
+
+/* a narrow window: the connection badge takes its own line under the title, its parts wrap from the left (it would push the title up and the columns down at random) */
+@media (max-width: 760px) {
+  /* the lists keep the height of their rows instead of filling the window: the files area of a module follows them without a gap */
+  .transfer-page .split {
+    flex: 0 1 auto;
+  }
+  .transfer-page .head .sp {
+    display: none;
+  }
+  .transfer-page .head .conn {
+    order: 5;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
+/* the preview of a module file (components/ModuleFilePreview.tsx): the canvas, then the controls on one wrapping line */
+.transfer-page .module-preview {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  max-width: 100%;
+}
+.transfer-page .module-preview canvas {
+  max-width: 100%;
+  height: auto !important;
+  aspect-ratio: 2 / 1;
+  background: var(--screen-inset);
+}
+.transfer-page .module-preview .acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.transfer-page .module-preview .acts label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.transfer-page .module-preview .err {
+  margin: 0;
+}
+/* the storage bar above the two lists */
+.transfer-page .storage-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+.transfer-page .storage-bar .legend {
+  display: none;
+}
+.transfer-page .storage-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.transfer-page .storage-bar.over .storage-text {
+  color: var(--status-caution);
+}

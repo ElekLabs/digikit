@@ -1647,8 +1647,8 @@ adapter. A scoped diagnostic-only DN2 type 11 reservation
 `core/dsp-ddr-proof:ddr_proof` leaves all existing allocations and dynamic range
 16..23 unchanged. No default patch-set inclusion or public sample ABI is added.
 A declaration in a framework module is supported by existing typed lowering.
-The actual preflight closure is `core/dsp-voice`, `core/expansion`, `core/machines`,
-`core/params`, `core/dsp-ddr-proof`; `core/dsp-link` remains excluded.
+The actual preflight closure is `core/dsp-voice`, `core/expansion`, `core/rows`,
+`core/rows`, `core/dsp-ddr-proof`; `core/dsp-link` remains excluded.
 
 The six-word consumer admits READY at note-on, plays the fixed immutable 480,000-frame
 view forward or reverse, preserves the machine-adapter return/stack contract, and
@@ -2664,9 +2664,9 @@ channels and produces 48 kHz interleaved PCM16; the
 header, BE PCM and 16-byte trailer (header byte 1 stereo, +4 PCM bytes, +8 rate).
 The runtime [mono decoder](../../modules/core/runtime/sdk/src/sample.rs) and
 [job](../../modules/core/runtime/sdk/src/sample_job.rs) 8,192-frame bound are proof
-restrictions, not product caps. The allocation-free
-[stream parser](../../modules/core/runtime/sdk/src/sample_stream.rs) already checks
-mono/stereo extents, `pcm + 80` and a caller maximum, but is not wired to source/transport.
+restrictions, not product caps. An allocation-free
+stream parser (`sample_stream.rs`, deleted in R2a) checked
+mono/stereo extents, `pcm + 80` and a caller maximum, but was not wired to source/transport.
 [Source access](../../modules/core/runtime/src/rs/src/sample_source.rs) uses whole-file
 DT2 FS reads without a stable lease/same-length replacement check; DN2 store uses
 snapshot generation plus SHA. Stock DT2 pool planes differ from disk interleaving.

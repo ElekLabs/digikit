@@ -17,59 +17,10 @@
 #[rustfmt::skip]
 mod gen_limits;
 /// The loader's format limits, from `[limits.format]` of sdk/sdk.toml (`HEADER`, `DSP_HEADER`, `MAX_RECORDS`, `MAX_RELOCS`, `MAX_IMPORTS`,
-/// `MAX_CF_IMPORTS`, `SLOTS`, `MAX_VOICES`, `MAX_FX`, `MAX_STATE_VOICES`, `MAX_STATE_BYTES`, `GRANULE`, `DSP_SLACK`, `ARENA_HDR`).
+/// `MAX_CF_IMPORTS`, `MAX_VOICES`, `MAX_FX`, `MAX_STATE_VOICES`, `MAX_STATE_BYTES`, `GRANULE`, `DSP_SLACK`, `ARENA_HDR`).
 pub use gen_limits::*;
 
-/// Magic of a `.dkm`, "DKMF".
-pub const MAGIC: u32 = 0x444b_4d46;
-/// The only `.dkm` format.
-pub const FORMAT: u32 = 1;
-/// The header size of a module with a `dkm_menu` (a menu address follows the 0xa0 bytes).
-pub const HEADER_MENU: u32 = 0xa4;
-/// The header size of a module with the entry point `dk_module` (the menu and tick addresses follow the 0xa0 bytes).
-pub const HEADER_TICK: u32 = 0xa8;
-/// Header offsets read.
-pub const H_SIZE: u32 = 0x08;
-pub const H_HDRSIZE: u32 = 0x0c;
-pub const H_IMAGE_OFF: u32 = 0x60;
-pub const H_IMAGE_SIZE: u32 = 0x64;
-pub const H_BSS: u32 = 0x68;
-pub const H_ALIGN: u32 = 0x6c;
-pub const H_RELOC_OFF: u32 = 0x70;
-pub const H_RELOC_N: u32 = 0x74;
-pub const H_IMPORT_OFF: u32 = 0x78;
-pub const H_IMPORT_N: u32 = 0x7c;
-pub const H_SLOT_OFF: u32 = 0x88;
-pub const H_SLOT_N: u32 = 0x8c;
-pub const H_REG_OFF: u32 = 0x90;
-pub const H_REG_SIZE: u32 = 0x94;
-pub const H_DSP_OFF: u32 = 0x98;
-pub const H_DSP_SIZE: u32 = 0x9c;
-
-/// The `register` table: magic "DKRG", version, device, record count; then the records, `kind`, `len`, body.
-pub const REG_MAGIC: u32 = 0x444b_5247;
-pub const REG_HEADER: u32 = 16;
-pub const KIND_PARAM: u32 = 1;
-pub const KIND_MACHINE: u32 = 2;
-pub const KIND_PAGE: u32 = 3;
-pub const LEN_PARAM: u32 = 0x50;
-pub const LEN_MACHINE: u32 = 0x6c;
-pub const LEN_PAGE: u32 = 0x60;
-/// An effect's page: it takes no row of its own (it belongs to the effect's slot, counted by the DSP section's effect record).
-pub const KIND_EFFECT: u32 = 4;
-pub const LEN_EFFECT: u32 = 0x1a4;
-/// A parameter's click callback: it takes no row (the parameter's row is counted by its PARAM record).
-pub const KIND_ACTION: u32 = 5;
-pub const LEN_ACTION: u32 = 0x10;
-pub const KIND_NATIVE_PAGE: u32 = 6;
-pub const LEN_NATIVE_PAGE: u32 = 0x90;
-pub const KIND_NATIVE_PAGE_V2: u32 = 7;
-pub const LEN_NATIVE_PAGE_V2: u32 = 0x98;
-
-/// The DSP section: magic "DKDS", versions 1 to 5, header 0x40 bytes, voices of 16, 48 or 64 bytes (version 4: voices of 64 bytes and effect records).
-pub const DSP_MAGIC: u32 = 0x444b_4453;
-/// The size of an effect record of a version 4 section (the most the loader takes is `MAX_FX`).
-pub const FX_LEN: u32 = 64;
+// The layout of the `.dkm` header and of its DSP section (`MAGIC`, `FORMAT`, `H_*`, `DSP_*`, `VOICE_*`, `FX_*`) is `[format]` of sdk/sdk.toml, in `gen_limits`.
 
 /// A source of the file's bytes: a slice on a host, the store's sector reads on the device.
 pub trait Bytes {
@@ -132,7 +83,7 @@ impl Error {
 pub struct Needs {
     /// The file's size: it must fit the staging buffer.
     pub file_size: u32,
-    /// The arena block of image and bss (the payload rounded to 16, plus the block header).
+    /// The arena blocks the module keeps: image and bss (the payload rounded to 16, plus the block header), and the record block its `init` committed (the keys table's `record_bytes`).
     pub arena: u32,
     /// The arena block of the relocated DSP image, held while it is sent (0: no DSP section).
     pub arena_xfer: u32,
@@ -145,12 +96,17 @@ pub struct Needs {
     pub page_rows: u32,
     /// Effect slots: the effect records of the DSP section (version 4).
     pub fx_slots: u32,
+    /// DSP instructions per block of one voice of the module's machines (the header table's `DSP_COST_VOICE`; 0: none). The broker takes the largest of the selection.
+    pub dsp_cost_voice: u32,
+    /// DSP instructions per block of the module's effects (the header table's `DSP_COST_FX`; 0: none). The broker adds them up.
+    pub dsp_cost_fx: u32,
 }
 
 impl Needs {
     /// (name, value) of every field except `file_size`, the names of CAPACITY's kinds with their rows: `ARENA`, `ARENA_XFER`, `DSP_AREA`,
-    /// `DSP_ALIGN`, `MACHINE_ROWS`, `VOICE_ROWS`, `PARAM_ROWS`, `PAGE_ROWS`, `FX_SLOTS`. The hosts (the wasm export, the command line) say them so.
-    pub fn fields(&self) -> [(&'static str, u32); 9] {
+    /// `DSP_ALIGN`, `MACHINE_ROWS`, `VOICE_ROWS`, `PARAM_ROWS`, `PAGE_ROWS`, `FX_SLOTS`, `DSP_COST_VOICE`, `DSP_COST_FX` (the last two are the module's own
+    /// cost, [records.resources]). The hosts (the wasm export, the command line) say them so.
+    pub fn fields(&self) -> [(&'static str, u32); 11] {
         [
             ("ARENA", self.arena),
             ("ARENA_XFER", self.arena_xfer),
@@ -161,6 +117,8 @@ impl Needs {
             ("PARAM_ROWS", self.param_rows),
             ("PAGE_ROWS", self.page_rows),
             ("FX_SLOTS", self.fx_slots),
+            ("DSP_COST_VOICE", self.dsp_cost_voice),
+            ("DSP_COST_FX", self.dsp_cost_fx),
         ]
     }
 
@@ -196,14 +154,11 @@ fn inside(off: u32, len: u32, size: u32) -> bool {
 /// The needs of the file `src` reads: see the module's text. `Err` for a file the loader would refuse for its format, or one that cannot be read.
 pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
     let size = src.size();
-    if size < HEADER || word(src, 0)? != MAGIC || word(src, 4)? != FORMAT {
+    if size < HEADER || word(src, H_MAGIC)? != MAGIC || word(src, H_FORMAT)? != FORMAT {
         return Err(Error::Header);
     }
     let hdr = word(src, H_HDRSIZE)?;
-    if word(src, H_SIZE)? != size
-        || (hdr != HEADER && hdr != HEADER_MENU && hdr != HEADER_TICK)
-        || size < hdr
-    {
+    if word(src, H_SIZE)? != size || hdr != HEADER {
         return Err(Error::Header);
     }
     let image = word(src, H_IMAGE_SIZE)?;
@@ -215,7 +170,6 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
         word(src, H_RELOC_N)?,
     );
     let (import_off, import_n) = (word(src, H_IMPORT_OFF)?, word(src, H_IMPORT_N)?);
-    let (slot_off, slot_n) = (word(src, H_SLOT_OFF)?, word(src, H_SLOT_N)?);
     // the loader's own checks of what it copies (bss against the arena is the one it makes with the device's size: a fit says it)
     if align == 0
         || align > 16
@@ -225,11 +179,9 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
         || image_off & 15 != 0
         || reloc_n > MAX_RELOCS
         || import_n > MAX_CF_IMPORTS
-        || slot_n > SLOTS
         || !inside(image_off, image, size)
-        || !inside(reloc_off, reloc_n * 8, size)
-        || !inside(import_off, import_n * 32, size)
-        || !inside(slot_off, slot_n * 8, size)
+        || !inside(reloc_off, reloc_n * CF_RELOC_LEN, size)
+        || !inside(import_off, import_n * CF_IMPORT_LEN, size)
     {
         return Err(Error::Sizes);
     }
@@ -243,9 +195,8 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
     if !inside(reg_off, reg_size, size) {
         return Err(Error::Sizes);
     }
-    if reg_size != 0 {
-        registry(src, reg_off, reg_size, &mut n)?;
-    }
+    // every file has a header table (a file of the 0.7 format has none, or another one: the loader refuses it)
+    keys_table(src, reg_off, reg_size, &mut n)?;
     let (dsp_off, dsp_size) = (word(src, H_DSP_OFF)?, word(src, H_DSP_SIZE)?);
     if !inside(dsp_off, dsp_size, size) {
         return Err(Error::Sizes);
@@ -256,48 +207,75 @@ pub fn needs_of<B: Bytes>(src: &mut B) -> Result<Needs, Error> {
     Ok(n)
 }
 
-/// The records of the `register` table at `off` (`size` bytes): the rows each kind takes. The walk is the loader's (`registry::check`): every
-/// record has the length of its kind and the table ends where the last one does.
-fn registry<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), Error> {
-    if size < REG_HEADER || word(src, off)? != REG_MAGIC || word(src, off + 4)? != 1 {
+/// The header table of the file (`keys.rs`): the resources the packer wrote in its `USES` entry. The table is read entry by entry (the head, then
+/// each entry head; only `USES` is read in full), so the menu never holds the whole table.
+fn keys_table<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), Error> {
+    let mut head = [0u8; keys::HEAD];
+    if (size as usize) < head.len() || !size.is_multiple_of(4) || !src.read(off, &mut head) {
         return Err(Error::Register);
     }
-    let count = word(src, off + 12)?;
-    if count > MAX_RECORDS {
+    if u32::from_be_bytes([head[0], head[1], head[2], head[3]]) != keys::MAGIC
+        || !(1..=keys::VERSION).contains(&u16::from_be_bytes([head[4], head[5]]))
+    {
         return Err(Error::Register);
     }
-    let mut at = REG_HEADER;
+    let version = u16::from_be_bytes([head[4], head[5]]);
+    let entries = u16::from_be_bytes([head[6], head[7]]) as usize;
+    let mut at = keys::HEAD as u32;
+    let mut last = 0u16;
     let mut i = 0;
-    while i < count {
-        if at > size || size - at < 8 {
+    while i < entries {
+        let mut e = [0u8; keys::ENTRY_HEAD];
+        if size - at < e.len() as u32 || !src.read(off + at, &mut e) {
             return Err(Error::Register);
         }
-        let kind = word(src, off + at)?;
-        let len = word(src, off + at + 4)?;
-        let want = if kind == KIND_PARAM {
-            n.param_rows += 1;
-            LEN_PARAM
-        } else if kind == KIND_MACHINE {
-            n.machine_rows += 1;
-            LEN_MACHINE
-        } else if kind == KIND_PAGE {
-            n.page_rows += 1;
-            LEN_PAGE
-        } else if kind == KIND_EFFECT {
-            LEN_EFFECT
-        } else if kind == KIND_ACTION {
-            LEN_ACTION
-        } else if kind == KIND_NATIVE_PAGE_V2 {
-            LEN_NATIVE_PAGE_V2
-        } else if kind == KIND_NATIVE_PAGE {
-            LEN_NATIVE_PAGE
-        } else {
-            return Err(Error::Register);
-        };
-        if len != want || size - at < len {
+        let tg = u16::from_be_bytes([e[0], e[1]]);
+        let count = u16::from_be_bytes([e[2], e[3]]) as u32;
+        let len = u32::from_be_bytes([e[4], e[5], e[6], e[7]]);
+        if !keys::valid_tag(version, tg, count as usize)
+            || tg <= last
+            || len % 4 != 0
+            || len > size - at - e.len() as u32
+        {
             return Err(Error::Register);
         }
-        at += len;
+        last = tg;
+        if tg == keys::tag::USES {
+            // 8 bytes an item; at most the resources of `[records.resources]`, each read as it comes
+            if count.checked_mul(8) != Some(len) {
+                return Err(Error::Register);
+            }
+            let mut k = 0;
+            while k < count {
+                let mut u = [0u8; 8];
+                if !src.read(off + at + e.len() as u32 + 8 * k, &mut u) {
+                    return Err(Error::Register);
+                }
+                let (id, c) = (
+                    u32::from_be_bytes([u[0], u[1], u[2], u[3]]),
+                    u32::from_be_bytes([u[4], u[5], u[6], u[7]]),
+                );
+                if id == RES_MACHINE_ROWS {
+                    n.machine_rows = n.machine_rows.saturating_add(c);
+                } else if id == RES_PARAM_ROWS {
+                    n.param_rows = n.param_rows.saturating_add(c);
+                } else if id == RES_PAGE_ROWS {
+                    n.page_rows = n.page_rows.saturating_add(c);
+                } else if id == RES_DSP_COST_VOICE {
+                    n.dsp_cost_voice = n.dsp_cost_voice.saturating_add(c);
+                } else if id == RES_DSP_COST_FX {
+                    n.dsp_cost_fx = n.dsp_cost_fx.saturating_add(c);
+                } else if id == RES_RECORD_BYTES && c != 0 {
+                    // the record block the module keeps after `init` is one more arena block (the loader's `arena::alloc` of the records)
+                    n.arena = n
+                        .arena
+                        .checked_add(arena_block(c).ok_or(Error::Sizes)?)
+                        .ok_or(Error::Sizes)?;
+                }
+                k += 1;
+            }
+        }
+        at += e.len() as u32 + len;
         i += 1;
     }
     if at != size {
@@ -312,28 +290,34 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
     if size < DSP_HEADER || word(src, off)? != DSP_MAGIC {
         return Err(Error::Dsp);
     }
-    let version = word(src, off + 4)?;
-    let stride = if version == 1 {
-        16
-    } else if version == 2 {
-        48
-    } else if (3..=5).contains(&version) {
-        64
+    let version = word(src, off + DSP_H_VERSION)?;
+    let stride = if version == DSP_V1 {
+        VOICE_V1
+    } else if version == DSP_V2 {
+        VOICE_V2
+    } else if (DSP_V3..=DSP_V5).contains(&version) {
+        VOICE_V3
     } else {
         return Err(Error::Dsp);
     };
-    let image = word(src, off + 0x0c)?;
-    let bss = word(src, off + 0x10)?;
-    let align = word(src, off + 0x14)?;
+    let image = word(src, off + DSP_H_IMAGE_SIZE)?;
+    let bss = word(src, off + DSP_H_BSS)?;
+    let align = word(src, off + DSP_H_ALIGN)?;
     let (image_off, reloc_off, nreloc) = (
-        word(src, off + 0x18)?,
-        word(src, off + 0x1c)?,
-        word(src, off + 0x20)?,
+        word(src, off + DSP_H_IMAGE_OFF)?,
+        word(src, off + DSP_H_RELOC_OFF)?,
+        word(src, off + DSP_H_RELOC_N)?,
     );
-    let (import_off, nimport) = (word(src, off + 0x24)?, word(src, off + 0x28)?);
-    let (voice_off, nvoice) = (word(src, off + 0x2c)?, word(src, off + 0x30)?);
+    let (import_off, nimport) = (
+        word(src, off + DSP_H_IMPORT_OFF)?,
+        word(src, off + DSP_H_IMPORT_N)?,
+    );
+    let (voice_off, nvoice) = (
+        word(src, off + DSP_H_VOICE_OFF)?,
+        word(src, off + DSP_H_VOICE_N)?,
+    );
     let (fx_off, nfx) = if version >= 4 {
-        (word(src, off + 0x34)?, word(src, off + 0x38)?)
+        (word(src, off + DSP_H_FX_OFF)?, word(src, off + DSP_H_FX_N)?)
     } else {
         (0, 0)
     };
@@ -347,99 +331,60 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
         || nvoice > MAX_VOICES
         || nfx > MAX_FX
         || !inside(image_off, image, size)
-        || !inside(reloc_off, nreloc * 8, size)
-        || !inside(import_off, nimport * 32, size)
+        || !inside(reloc_off, nreloc * RELOC_LEN, size)
+        || !inside(import_off, nimport * DSP_IMPORT_LEN, size)
         || !inside(voice_off, nvoice * stride, size)
         || !inside(fx_off, nfx * FX_LEN, size)
     {
         return Err(Error::Dsp);
     }
     if version == 5 {
-        let bank_off = word(src, off + 0x3c)?;
-        if bank_off < DSP_HEADER || bank_off & 3 != 0 || !inside(bank_off, 32, image_off) {
+        let record_off = word(src, off + DSP_H_BANK_OFF)?;
+        if record_off < DSP_HEADER || record_off & 3 != 0 || !inside(record_off, 32, image_off) {
             return Err(Error::Dsp);
         }
         for (table, len) in [
-            (reloc_off, nreloc * 8),
-            (import_off, nimport * 32),
+            (reloc_off, nreloc * RELOC_LEN),
+            (import_off, nimport * DSP_IMPORT_LEN),
             (voice_off, nvoice * stride),
             (fx_off, nfx * FX_LEN),
         ] {
-            if len != 0 && table < bank_off + 32 && bank_off < table + len {
+            if len != 0 && table < record_off + 32 && record_off < table + len {
                 return Err(Error::Dsp);
             }
         }
-        let at = off + bank_off;
-        // The sample-bank record alone has little-endian words.
-        let bank_version = word(src, at)?.swap_bytes();
-        // Kind 2: the per-track sample table (two zero blocks of the initialized image, no relocations in them).
-        if bank_version == 2 {
-            let records = word(src, at + 8)?.swap_bytes();
-            let control = word(src, at + 12)?.swap_bytes();
-            for i in 4..8 {
-                if word(src, at + i * 4)? != 0 {
-                    return Err(Error::Dsp);
-                }
-            }
-            let blocks = [(records, 512u32), (control, 256u32)];
-            for (b, len) in blocks {
-                if b & 3 != 0 || !inside(b, len, image) {
-                    return Err(Error::Dsp);
-                }
-                for i in 0..len / 4 {
-                    if word(src, off + image_off + b + i * 4)? != 0 {
-                        return Err(Error::Dsp);
-                    }
-                }
-                for i in 0..nreloc {
-                    let r = word(src, off + reloc_off + i * 8)?;
-                    if u64::from(r) < u64::from(b) + u64::from(len)
-                        && u64::from(r) + 6 > u64::from(b)
-                    {
-                        return Err(Error::Dsp);
-                    }
-                }
-            }
-            if records < control + 256 && control < records + 512 {
+        let at = off + record_off;
+        // The record has little-endian words. Kind 2 is the per-track sample table (two zero blocks of the initialized image, no
+        // relocations in them), the only kind.
+        if word(src, at)?.swap_bytes() != 2 {
+            return Err(Error::Dsp);
+        }
+        let records = word(src, at + 8)?.swap_bytes();
+        let control = word(src, at + 12)?.swap_bytes();
+        for i in 4..8 {
+            if word(src, at + i * 4)? != 0 {
                 return Err(Error::Dsp);
             }
-        } else {
-            let bank = word(src, at + 8)?.swap_bytes();
-            let frames = word(src, at + 12)?.swap_bytes();
-            let descriptor = word(src, at + 16)?.swap_bytes();
-            let end = image.checked_add(bss).ok_or(Error::Dsp)?;
-            let bank_end = frames
-                .checked_mul(4)
-                .and_then(|n| bank.checked_add(n))
-                .ok_or(Error::Dsp)?;
-            if bank_version != 1
-                || !(1..=8192).contains(&frames)
-                || bank & 3 != 0
-                || bank < image
-                || bank_end > end
-                || descriptor & 3 != 0
-                || !inside(descriptor, 16, image)
-            {
+        }
+        let blocks = [(records, 512u32), (control, 256u32)];
+        for (b, len) in blocks {
+            if b & 3 != 0 || !inside(b, len, image) {
                 return Err(Error::Dsp);
             }
-            for i in 5..8 {
-                if word(src, at + i * 4)? != 0 {
-                    return Err(Error::Dsp);
-                }
-            }
-            for i in 0..4 {
-                if word(src, off + image_off + descriptor + i * 4)? != 0 {
+            for i in 0..len / 4 {
+                if word(src, off + image_off + b + i * 4)? != 0 {
                     return Err(Error::Dsp);
                 }
             }
             for i in 0..nreloc {
-                let r = word(src, off + reloc_off + i * 8)?;
-                if u64::from(r) < u64::from(descriptor) + 16
-                    && u64::from(r) + 6 > u64::from(descriptor)
-                {
+                let r = word(src, off + reloc_off + i * RELOC_LEN + RELOC_OFFSET)?;
+                if u64::from(r) < u64::from(b) + u64::from(len) && u64::from(r) + 6 > u64::from(b) {
                     return Err(Error::Dsp);
                 }
             }
+        }
+        if records < control + 256 && control < records + 512 {
+            return Err(Error::Dsp);
         }
     }
     // the range: image and bss to 8, then (version 3) every voice record's states, each rounded to 8
@@ -452,7 +397,10 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
         let mut i = 0;
         while i < nvoice {
             let at = off + voice_off + stride * i;
-            let (state, count) = (word(src, at + 12)?, word(src, at + 52)?);
+            let (state, count) = (
+                word(src, at + VOICE_STATE_BYTES)?,
+                word(src, at + VOICE_VOICES)?,
+            );
             if state > MAX_STATE_BYTES || count > MAX_STATE_VOICES {
                 return Err(Error::Dsp);
             }
@@ -466,7 +414,7 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
     // version 4: the state of every effect (state_bytes at +8 of its record), rounded to 8
     let mut i = 0;
     while i < nfx {
-        let state = word(src, off + fx_off + FX_LEN * i + 8)?;
+        let state = word(src, off + fx_off + FX_LEN * i + FX_STATE)?;
         if state > MAX_STATE_BYTES {
             return Err(Error::Dsp);
         }
@@ -480,6 +428,8 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
     n.voice_rows = nvoice;
     Ok(())
 }
+
+pub mod keys;
 
 #[cfg(test)]
 mod tests;

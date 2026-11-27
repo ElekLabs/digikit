@@ -1,4 +1,4 @@
-/* The Transfer page on the site: its surfaces take the site's tokens (apps/web/src/styles/site.css, dark only). The desktop app keeps the defaults. */
+/* The Transfer page on the site: its surfaces take the site's tokens (packages/workbench-core/ui/styles/site.css, dark only). The desktop app keeps the defaults. */
 .transfer-page.transfer-page {
   --tp-bg: var(--ground);
   --tp-border: var(--line-2);

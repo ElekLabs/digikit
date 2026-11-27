@@ -7,9 +7,10 @@ import { button, encoder, repoRoot, resolveInputs } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { withSession } from '../support.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
+import { optInPatchkit } from './patchkit.ts';
 
 const binary = process.env.DIGI_STEREO_PROOF_EMUD;
-const patchkit = process.env.DIGI_PATCHKIT_BIN;
+const patchkit = optInPatchkit();
 const enabled = Boolean(binary && patchkit);
 const root = repoRoot();
 const exec = promisify(execFile);

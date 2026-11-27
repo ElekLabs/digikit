@@ -88,11 +88,13 @@ impl InsnTable {
     }
 }
 
-/// Parse BLOB once (the table lives as long as the process). A binary with two generated cores (two devices, the second-core
-/// build) calls this with one blob each: the tables are told apart by the blob's address, one slot each, so the second core
+/// Parse BLOB once (the table lives as long as the process). A process with two generated cores (two devices) calls this with one blob each: the tables are told apart by the blob's address, one slot each, so the second core
 /// never reads the first core's table.
 pub fn insn_table(blob: &'static [u8]) -> &'static InsnTable {
-    const SLOTS: usize = 4;
+    // A core loaded from a library is parsed twice: by the host (`Engine::new` warms `core.insn_blob`) and by
+    // the library's own copy of this crate, which has its own slots. Per process the host needs one slot
+    // per core (one per device), plus the cores of tests: eight is room for all.
+    const SLOTS: usize = 8;
     static TABLES: [std::sync::OnceLock<(usize, InsnTable)>; SLOTS] =
         [const { std::sync::OnceLock::new() }; SLOTS];
     let key = blob.as_ptr() as usize;
@@ -232,7 +234,7 @@ mod instruction_table_tests {
         Box::leak(out.into_boxed_slice())
     }
 
-    /// Two generated cores in one process each get their own table (the second-core build links two).
+    /// Two generated cores in one process each get their own table (a host loads one per device).
     #[test]
     fn each_blob_has_its_own_table() {
         let (a, b) = (one(0x100), one(0x200));

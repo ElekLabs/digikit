@@ -4,7 +4,7 @@
     uv run python -m tools.device.dkupload --emu info                       # the running emulator (out/native/run/current.json)
     uv run python -m tools.device.dkupload --emu ls [PREFIX]               # the store's entries (a folder with nothing in it: size 0)
     uv run python -m tools.device.dkupload --emu mkdir samples/drums
-    uv run python -m tools.device.dkupload --emu modules                   # the loaded modules: ranges, contracts, assigned types, guard faults
+    uv run python -m tools.device.dkupload --emu modules                   # the loaded modules: ranges, needed runtime, assigned types, guard faults
     uv run python -m tools.device.dkupload --emu put build/m.dkm modules/m.dkm
     uv run python -m tools.device.dkupload --emu rm modules/m.dkm
     uv run python -m tools.device.dkupload --emu clear
@@ -39,7 +39,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from tools.device import dkproto
+from tools.device import dkproto, modules_reply
 from tools.device.dkproto import (
     CAP,
     CMD_ABORT,
@@ -400,6 +400,8 @@ class Uploader:
         proto, runtime = struct.unpack_from(">HH", b, 0)
         end = b.index(0, 4)
         port = b[4:end].decode()
+        # the runtime writes the id in a 4-byte field: a name of fewer than 3 characters is followed by more NULs
+        end += max(0, 3 - len(port))
         free, max_chunk, flags = struct.unpack_from(">IIB", b, end + 1)
         # runtime 3 appends two words for the log range of the old runtime; the runtime now sends zeros (the LOG command of the debug module has the range)
         oldest, newest = (
@@ -453,54 +455,23 @@ class Uploader:
 
     def modules(self) -> dict[str, Any]:
         """MODULES (runtime 0.2.0, capability MODULES): the arena and DSP-area figures and the loaded modules, every page. Returns
-        `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is `{index, name, version, contracts
-        ((major, minor) of api, machine, fx, service), cf_base, cf_size, dsp_off, dsp_len, rows (voice-row mask), types (assigned machine
-        types), faults (the guard's count for those types), guard_off (the guard switched one of them off)}`."""
+        `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is what `modules_reply.decode_page` reads: the record's fixed part
+        (`index, name, version, needs, cf_base, cf_size, dsp_off, dsp_len`), `sections` (what each loaded service holds for it, by the hex of its name hash) and, read from
+        the `machines` and `fx` sections, `rows`, `types`, `faults`, `guard_off` and `effects` (runtime 0.13.0 and later)."""
+        info = self.info()
+        if not has_cap(info, "MODULE_SECTIONS"):
+            raise UploadError(0, modules_reply.OLD_MODULES)
         out: dict[str, Any] = {"modules": []}
         start = 0
         while True:
-            b = self._ok(CMD_MODULES, "modules", bytes((start,)))
-            af, al, df, dl = struct.unpack_from(">IIII", b, 0)
-            total, n = b[16], b[17]
-            out.update(
-                arena_free=af,
-                arena_largest=al,
-                dsp_free=df,
-                dsp_largest=dl,
-                total=total,
+            page = modules_reply.decode_page(
+                self._ok(CMD_MODULES, "modules", bytes((start,))), info["caps"]
             )
-            at = 18
-            for _ in range(n):
-                idx = b[at]
-                name = b[at + 1 : at + 33].split(b"\0")[0].decode()
-                version = struct.unpack_from(">I", b, at + 33)[0]
-                cts = [(b[at + 37 + 2 * k], b[at + 38 + 2 * k]) for k in range(4)]
-                cf_base, cf_size, dsp_off, dsp_len, rows = struct.unpack_from(
-                    ">IIIII", b, at + 45
-                )
-                nt = b[at + 65]
-                types = list(b[at + 66 : at + 66 + nt])
-                faults = struct.unpack_from(">I", b, at + 66 + nt)[0]
-                flags = b[at + 70 + nt]
-                out["modules"].append(
-                    {
-                        "index": idx,
-                        "name": name,
-                        "version": version,
-                        "contracts": cts,
-                        "cf_base": cf_base,
-                        "cf_size": cf_size,
-                        "dsp_off": dsp_off,
-                        "dsp_len": dsp_len,
-                        "rows": rows,
-                        "types": types,
-                        "faults": faults,
-                        "guard_off": bool(flags & 1),
-                    }
-                )
-                at += 71 + nt
-                start = idx + 1
-            if len(out["modules"]) >= total or n == 0:
+            out.update({k: v for k, v in page.items() if k != "modules"})
+            for m in page["modules"]:
+                out["modules"].append(m)
+                start = m["index"] + 1
+            if len(out["modules"]) >= page["total"] or not page["modules"]:
                 return out
 
     def capacity(self) -> dict[str, dict[str, int]]:
@@ -571,6 +542,66 @@ class Uploader:
     def restart(self) -> None:
         """RESTART (runtime 4): the reply comes first, then the device soft-resets (as APPLY & RESTART)."""
         self._ok(CMD_RESTART, "restart")
+
+    def reload(self, path: str) -> None:
+        """RELOAD: queue the reload of the loaded module that came from the store path `path` (the new file is already there). Raises `UploadError` with
+        E_NOT_FOUND when no loaded module has that path, E_BUSY while a reload runs, E_STATE while an upload is open. See `reload_state`."""
+        self._ok(dkproto.CMD["RELOAD"], "reload", path.encode() + b"\0")
+
+    def load(self, path: str) -> None:
+        """LOAD (runtime capability LIVE): queue the load of the module file at the store path `path`, which no loaded module came from (the file is already there). The same
+        replies as `reload`, but E_LOADED when a module of that path is loaded. See `load_and_wait`."""
+        self._ok(dkproto.CMD["LOAD"], "load", path.encode() + b"\0")
+
+    def unload(self, path: str) -> None:
+        """UNLOAD (runtime capability LIVE): queue the unload of the loaded module that came from the store path `path` (no replacement; the file stays on the card). The same
+        replies as `reload`. See `unload_and_wait`."""
+        self._ok(dkproto.CMD["UNLOAD"], "unload", path.encode() + b"\0")
+
+    def reload_state(self) -> dict[str, int]:
+        """RELOAD_STATE: the state of the live job, whichever it is (a load, an unload or a reload): `phase` (0 none yet, 1 queued or running, 2 finished), `result` (0 is ok;
+        else the refusal before anything changed, or the failure after the old module was torn down), `step`, `op` (1 load, 2 unload, 3 reload; 0 from a runtime that does not say) and `unloaded` (1: the module was torn down, so it is not loaded
+        unless the result is 0 and the job loaded; 0: it still runs, or a load never had one)."""
+        b = self._ok(dkproto.CMD["RELOAD_STATE"], "reload state")
+        return {
+            "phase": b[0],
+            "result": struct.unpack_from(">i", b, 1)[0],
+            "step": b[5],
+            "unloaded": b[6],
+            "op": b[7] if len(b) > 7 else 0,
+        }
+
+    def _wait_live(
+        self, what: str, step: Callable[[], None], limit: int
+    ) -> tuple[int, bool]:
+        for _ in range(limit):
+            s = self.reload_state()
+            if s["phase"] == 2:
+                return s["result"], bool(s["unloaded"])
+            step()
+        raise TimeoutError(f"the {what} did not end")
+
+    def reload_and_wait(
+        self, path: str, step: Callable[[], None], limit: int = 2000
+    ) -> tuple[int, bool]:
+        """`reload`, then ask `reload_state` until the job ends, calling `step()` between the asks (an emulator is stepped there): `(result, unloaded)` as in `reload_state`
+        (result 0 is ok). A job that does not end within `limit` asks raises `TimeoutError`."""
+        self.reload(path)
+        return self._wait_live(f"reload of {path}", step, limit)
+
+    def load_and_wait(
+        self, path: str, step: Callable[[], None], limit: int = 2000
+    ) -> tuple[int, bool]:
+        """`load`, then wait as `reload_and_wait` does: result 0 means the module is loaded."""
+        self.load(path)
+        return self._wait_live(f"load of {path}", step, limit)
+
+    def unload_and_wait(
+        self, path: str, step: Callable[[], None], limit: int = 2000
+    ) -> tuple[int, bool]:
+        """`unload`, then wait as `reload_and_wait` does: result 0 (with `unloaded`) means the module is not loaded any more."""
+        self.unload(path)
+        return self._wait_live(f"unload of {path}", step, limit)
 
     # -- digikit/remote (docs/plans/remote-control.md): the commands of a run-time service module, `dkproto.SERVICE_CMD`
     def remote_state(self) -> dict[str, int]:
@@ -816,10 +847,10 @@ def modules_lines(m: dict[str, Any]) -> list[str]:
         f"arena free {m['arena_free']} (largest {m['arena_largest']}), dsp area free {m['dsp_free']} (largest {m['dsp_largest']}), {m['total']} module(s)"
     ]
     for x in m["modules"]:
-        cts = " ".join(f"{a}.{b}" for a, b in x["contracts"])
+        n = x["needs"]
         v = x["version"]
         out.append(
-            f"{x['index']}  {x['name']}  v{v >> 16}.{v >> 8 & 255}.{v & 255}  contracts {cts}  "
+            f"{x['index']}  {x['name']}  v{v >> 16}.{v >> 8 & 255}.{v & 255}  needs {n >> 16}.{n >> 8 & 255}.{n & 255}  "
             f"cf {x['cf_base']:#x}+{x['cf_size']:#x}  dsp {x['dsp_off']:#x}+{x['dsp_len']:#x}  rows {x['rows']:#x}  "
             f"types {','.join(map(str, x['types'])) or '-'}  faults {x['faults']}{'  GUARD OFF' if x['guard_off'] else ''}"
         )

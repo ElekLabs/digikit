@@ -1,0 +1,65 @@
+{
+  "_doc": "Payloads of the stock MidiRpc Ping reply (after the reply type byte) and the model name each decodes to (null: none). Read by packages/dk-session/tests/identify.test.ts and packages/patchkit/src/flash_rpc.rs. Layouts: plain `u8 blobLen, blob, NUL-ended strings`; length-prefixed `u8 rest, u8 blobLen, blob, strings` where `rest` is the number of bytes after the blobLen byte (the Syntakt 1.42 reply, finding 144).",
+  "cases": [
+    {
+      "name": "Syntakt 1.42 reply (length-prefixed)",
+      "payload": "1e1601020304060709505251535455565758595a5b5c5d5e53796e74616b7400",
+      "model": "Syntakt"
+    },
+    {
+      "name": "plain, three request types",
+      "payload": "030102034469676974616b7420494900",
+      "model": "Digitakt II"
+    },
+    {
+      "name": "plain, empty blob",
+      "payload": "004e616d6500",
+      "model": "Name"
+    },
+    {
+      "name": "plain, text after the name is ignored",
+      "payload": "004e616d65004f7468657200",
+      "model": "Name"
+    },
+    {
+      "name": "empty payload",
+      "payload": "",
+      "model": null
+    },
+    {
+      "name": "blob cut short",
+      "payload": "050102",
+      "model": null
+    },
+    {
+      "name": "no name after the blob",
+      "payload": "020102",
+      "model": null
+    },
+    {
+      "name": "no NUL after the name",
+      "payload": "004e616d65",
+      "model": null
+    },
+    {
+      "name": "empty name",
+      "payload": "0000",
+      "model": null
+    },
+    {
+      "name": "length-prefixed with an empty name",
+      "payload": "0302010200",
+      "model": null
+    },
+    {
+      "name": "plain, a damaged name with control bytes",
+      "payload": "004e01ff6d6500",
+      "model": null
+    },
+    {
+      "name": "length-prefixed, a name with a high byte",
+      "payload": "0401015a8000",
+      "model": null
+    }
+  ]
+}

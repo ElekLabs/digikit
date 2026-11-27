@@ -35,16 +35,19 @@ root). The directory name is not always the package name; use the package name w
 | `packages/emulator/loader` | `dt2-firmware-loader` | Decoder for the `.syx` container (ELE3 sections, no I/O). |
 | `packages/emulator/device-profile` | `device-profile` | Hash-bound device and firmware identities, embedded from `devices/*.toml`. |
 | `packages/emulator/plusdrive` | `plusdrive-format` | +Drive image format encoders; the `plusdrive` CLI. |
-| `packages/emulator/boot` | `elektron-native-boot` | Bounded cold boot, the ColdFire runtime, the DSP peer (`sharc_peer`), DSP patches, and the examples (`card_boot`, `dsp_cold`, `sharc_live`, `turn_probe`; the headless tools `boot_gate`, `panel_drive` and `sysex_bridge`, see their headers). Also the wasm ABI. |
-| `packages/emulator/sharc-rt` | `sharc-rt` | Runtime under the generated core: state, memory, decoder, instruction table. |
-| `packages/emulator/sharc-gen` | `sharc-gen` | The generated SHARC+ core (from `SHARC_GEN_DIR`), compiled apart from the engine. |
-| `packages/emulator/sharc-stats` | `sharc-stats` | The counters and profiles the engine reports (shared by both engine instances). |
-| `packages/emulator/sharc` | `sharc-native` | The DSP engine: interpreter, AOT block dispatch and the fast tier (`src/fast/`). |
+| `packages/emulator/boot` | `elektron-native-boot` | Bounded cold boot, the ColdFire runtime (no SHARC dependency: the DSP side is the `periph::dspi::Peer` trait), and the examples (`card_boot`, `turn_probe`; the headless tools `boot_gate`, `panel_drive` and `sysex_bridge`, see their headers). |
+| `packages/emulator/sharc-peer` | `sharc-peer` | The SHARC+ side of a coupled run: the DSPI2 peer and worker thread (`peer.rs`), engine glue, DSP patches and streams, DDR monitor; with feature `host` the core selection (`dsp_core`), the cold boot (`cold`) and the examples `dsp_cold`, `sharc_live`, `regions_probe`. |
+| `packages/emulator/wasm-core` | `digi-wasm-core` | The browser core: the raw wasm ABI (`abi.rs`) over `boot`, with features `sharc` and `fast-wasm` for the coupled core. Built by `tools/nx/wasm.mjs` into `emulator-core*.wasm`. |
+| `packages/emulator/sharc-rt` | `sharc-rt` | Runtime under the generated core: state, memory, decoder, instruction table, and `GenCore`, the table of one generated core. |
+| `packages/emulator/sharc-gen` | `sharc-gen` | The generated SHARC+ core (from `SHARC_GEN_DIR`), compiled apart from the engine; `sharc_gen::CORE` is its `GenCore`. Only the core library, `sharc-rig`, the browser core and the tests and examples of the engine link it; the hosts do not. |
+| `packages/emulator/sharc-stats` | `sharc-stats` | The counters and profiles the engine reports (shared by every engine). |
+| `packages/emulator/sharc` | `sharc-native` | The DSP engine: interpreter, AOT block dispatch and the fast tier (`src/fast/`). It runs the `GenCore` it is opened with (`Engine::new(mem, core)`). |
 | `packages/emulator/sharc-fast-cl` | `sharc-fast-cl` | Cranelift backend for the fast-tier kernel IR. |
-| `packages/emulator/sharc-gen-2`, `sharc-2`, `sharc-fast-cl-2` | `sharc-gen-2`, `sharc-native-2`, `sharc-fast-cl-2` | The second core: the same sources as `sharc-gen`, `sharc-native` and `sharc-fast-cl`, built on `SHARC_GEN_DIR_2` (see "Two cores in one binary"). Empty without that variable. |
+| `packages/emulator/sharc-core-lib` | `sharc-core-lib` | One generated core as a shared library (cdylib over `sharc-gen`, `SHARC_GEN_DIR` picks the device): `sharc_core_header` and `sharc_core`. Every host loads its cores from these. See "Core libraries". |
+| `packages/emulator/dynlib` | `dynlib` | `dlopen`/`LoadLibraryW` and symbol lookup, no dependencies (used by `live` and the core loader). |
 | `packages/emulator/sharc-fast-wasm` | `sharc-fast-wasm` | WebAssembly backend for the same IR, plus the V8 gate tools. |
 | `packages/emulator/live` | `live-audio` | Live audio output: SPSC ring, frame repeater, cpal callback. |
-| `packages/emulator/coupled` | `digi-coupled` | The coupled ColdFire + SHARC+ run loop shared by the app and `coupled-run`; the fixture gates. |
+| `packages/emulator/coupled` | `digi-coupled` | The coupled run loop shared by the app and `coupled-run`: `CoupledRuntime` over a `Companion` (the SHARC+ session `SharcCompanion`, the zero answerer or none) and one `AudioOut` (player, tap, capture, pacing); the fixture gates. Features `sharc` (the DSP engine; its core comes from a core library) and `play` (output device). |
 | `packages/emulator/control` | `digi-control` | Controller and control protocol (JSON-RPC over NDJSON); the `digi-emud` daemon. Design: `docs/design/emulator-control.md`. |
 | `apps/desktop/src-tauri` | `digiemu-desktop` | The desktop app (Tauri), a thin shell over `digi-control` and `digi-coupled`. |
 
@@ -67,19 +70,20 @@ the default thread stack). Use `release`.
 ## Target dirs
 
 `sharc-gen` (the generated SHARC+ core, 80 MB of Rust) takes minutes to compile
-and cargo recompiles it for each target dir and each `SHARC_GEN_DIR`. So tools
-build into `out/native/target/<gen-key>` (`tools/emulator/native_target.py`):
+and cargo recompiles it for each target dir and each `SHARC_GEN_DIR`. The hosts (the app, `digi-emud`,
+`coupled-run`) do not link it: they build into the `nogen` dir and load each core from a library (see "Core libraries").
+The core libraries, the engine's tests and the examples that link a core build into
+`out/native/target/<gen-key>` (`tools/emulator/native_target.py`):
 
 | key        | generated core                                         |
 |------------|--------------------------------------------------------|
-| `prod`     | `out/native/dn2-audio/gen` (desktop app, PGO)          |
-| `nogen`    | none (`SHARC_GEN_DIR` unset): CF-only builds, wasm CF  |
+| `prod`     | `out/native/dn2-audio/gen` (its library, tests, examples) |
+| `nogen`    | none (`SHARC_GEN_DIR` unset): the hosts, CF-only builds, wasm CF |
 | `generic`  | any other transpile-only gen (no `image.rs`)           |
 | `g-<hash>` | any other gen with an image: hash of its resolved path |
 
 Everything for one gen goes into its key dir, built with plain `--release`
-(the desktop app, `-p sharc-fast-cl --examples`, `packages/emulator/sharc` tests, the PGO
-control build), so `sharc-gen` compiles once. Builds with different RUSTFLAGS
+(`-p sharc-core-lib`, `-p sharc-fast-cl --examples`, `packages/emulator/sharc` tests), so `sharc-gen` compiles once. Builds with different RUSTFLAGS
 (PGO) get a subdir of the same key: `pgo-instrument/`, `pgo-use/`. Switching gen
 never touches another gen's build.
 
@@ -99,50 +103,90 @@ build the next time it builds; that old dir stays in `out/` until removed by han
 A plain `cargo build` without `--target-dir` uses `./target` (ignored by git).
 Wrap heavy builds in `uv run python -m tools.devtools.benchlock run --shared -- ...`.
 
-## Two cores in one binary
+## Core libraries
 
-The generated core is device-specific (symbol numbers and the AOT blocks differ), so a build that opens either
-device's firmware coupled holds two: `SHARC_GEN_DIR` and `SHARC_GEN_DIR_2` name them, in either order, and the cargo
-feature `second-core` (digi-coupled, digi-control, digiemu-desktop) links both. The `-2` packages compile the
-sources of the first ones again (`[lib] path`, `build = ...`) against the second directory, so there are two engine
-types and one glue per core: `elektron_native_boot::sharc_peer::{NativeDsp, open_engine_patched}` for the first core,
-`sharc_peer::second::...` for the second (one file, `boot/src/sharc_engine.rs`, included twice). The engine instance
-the DSP worker runs is chosen when the session starts: `coupled/src/dsp_core.rs` takes the core whose DSP image
-name (`dn2-1.11`, `dt2-1.16`) starts with the loaded firmware's device id, so there is no per-instruction cost.
-The second instance has no C ABI symbols (cfg `sharc_second`) and reads its own fast-tier lists
-(`SHARC_FAST_REGIONS_2`, `SHARC_BLOCKTRANS_2`). The other device's ready inputs go to `digi-emud` and the app as
-`--also-coupled DSP_IMAGE DSP_STATE CF_SNAPSHOT SYX` (repeatable): a firmware load for that device then boots coupled
-(audio, DSP, restart) instead of ColdFire only. Without `SHARC_GEN_DIR_2` the `-2` packages are empty and every build
-is as before. Proof: `uv run python -m tools.devtools.dual_core_check` (the header names the build command). The
-desktop launcher builds this by default with `mise run wb` when both devices' inputs are available
-(no PGO profile for it yet).
+A host holds no generated core. The DSP of each device comes from a core library, one per device, built from the
+device's generated directory (`packages/emulator/sharc-core-lib`, a cdylib over `sharc-gen`). `digi-emud`, `coupled-run`
+and the desktop app load it when a firmware starts coupled: `sharc-peer/src/dsp_core.rs` (`core_for_device(device,
+dsp_image)`) reads `DIGI_SHARC_CORE_LIB_DN2` or `DIGI_SHARC_CORE_LIB_DT2`. A missing variable, a refused library or a core
+made for another device is an error that names the variable and the command that provides the library:
 
-Use:
+```text
+uv run python -m tools.devtools.verify_build cores [--device dn2,dt2] [--env-out FILE]
+```
 
-- `mise run workbench` (alias `mise run wb`; `-- --build-only` builds without launching) builds with `second-core`
-  and passes the other device's ready inputs and generated core. It needs both devices' ready inputs (DN2 and DT2) and both
-  generated cores; without them the launcher says `second core: ... one core only` and builds one core. The two-core build has its
-  own target directory (`out/native/target/<first key>+<second key>`, `tools/emulator/native_target.py`) and no PGO profile
-  (`perf:pgo` trains single-core binaries). Choose File can then open either device with DSP audio. Set
-  `DIGI_EMU_SECOND_CORE=0` for a single-core desktop build. Daemon launches (`mise run emu:serve`) remain single-core
-  by default; set `DIGI_EMU_SECOND_CORE=1` to include the other core there.
-- The patched images (runtime, core/dynfx, core/fxpages, core/fx) differ from the image the generated blocks came from. Each
-  engine instance checks its own loaded code against its own generated core (`Engine::verify_code`, `code_diff.rs`) and bars only
-  the blocks with a changed instruction, so the AOT path works on the second core as on the first (`SHARC_CODE_LOG=1` prints the
-  check; the audio report's `dsp_tiers` has `code_mismatch`).
-- Process-wide state is shared by both cores through `sharc-rt`: the instruction table (`insn_table`) is parsed once per generated
-  blob (one slot each). It was one `OnceLock` for the process, so the core that asked second read the first core's table and the
-  code check compared a patched DT2 image against DN2's instructions (493 changed PCs instead of 10; 0.23x against 0.38x real time
-  with the runtime patched in). Any new process-wide cache in `sharc-rt` needs the same key.
-- The fast tier lists exist for DN2 only (`config/emulator.json`): `SHARC_FAST_REGIONS` and `SHARC_BLOCKTRANS` go to
-  the first core, `SHARC_FAST_REGIONS_2` and `SHARC_BLOCKTRANS_2` (from the `--also-coupled` firmware) to the second. A DT2 core
-  has no lists, so it runs AOT blocks and the interpreter only, as a single-core DT2 launch does.
-- `dual_core_check` modes (a daemon each, bounded; `DIGI_EMUD` names the two-core `digi-emud`): the default (open the other
-  device and back), `--module digikit/pluck --play` (`dk run` and a played note), `--menu digikit/pluck --menu digikit/freqshift`
-  (the on-device path SETTINGS > DIGIKIT > MODULES > tick > APPLY & RESTART, a note, the effect's FX page; screenshots to
-  `out/runs/lanes/dualcore-shots/` or `--shots DIR`) and `--bench dt2 --binary LABEL=PATH ... --pairs 3` (DSP CPU per audio second, AOT share and real-time factor of a device
-  with the runtime patched in, alternating the `digi-emud` builds given; a build with DT2 as `SHARC_GEN_DIR` against one with it
-  as `SHARC_GEN_DIR_2` measures what the second-core role costs).
+That command builds the library into the store, `<git common dir>/sharc-core-cache/<device>/<key>/` (shared by every
+worktree; tools/devtools/core_store.py), or restores it, and writes the two variables. The launchers call the same code:
+`tools/emulator/native_emu.py` (workbench and `emu:serve`), `tools/emulator/coupled.py` (`coupled-run`: `build`, `scenario`,
+`replay`, `tools/devtools/sharc_cells.py`, `coupled_ab.py`), `verify_build daemons` (writes them into `dist/daemons.json` and
+adds the library key to `dist/bytes/daemon-test.key`; Vitest reads them with `coreLibEnv`) and
+`Emu.spawn_coupled` of `tools/control/digi_client.py`. A variable already set in the environment wins and nothing is
+built for that device. Build one library by hand (the device's generated directory in `SHARC_GEN_DIR`):
+
+```text
+SHARC_GEN_DIR=out/native/dn2-audio/gen CARGO_BUILD_JOBS=4 nice -n 10 \
+  node tools/nx/rust-env.mjs --gen -- cargo build --release --locked -p sharc-core-lib
+```
+
+A library built without `SHARC_GEN_DIR` (or without `image.rs`) loads but holds no core: `core_for_device` refuses it with "built without a generated core" when the session opens.
+
+The load is refused, with the first differing field named, unless the library's header equals the host's: header version,
+SHA-256 of the `sharc-rt` sources (`sharc-rt/build.rs`), rustc version, target, the code generation flags and the size,
+alignment and selected field offsets of `St`, `Mem`, `Insn`, `V`, `Cfg` and `GenCore` (`sharc-rt/src/header.rs`). The
+flags hash leaves out `-Cprofile-use=`, `-Cprofile-generate=` and `-Cprofile-sample-use=`: PGO changes optimisation, not
+layout or ABI, so a PGO host accepts a plain library and the other way round (see "Profile-guided libraries"). The core must belong to the firmware's
+device (its image name, `dn2-1.12`, `dt2-1.17`, starts with the device id); a core made for another version of the same
+device is accepted, and the engine interprets what its blocks do not cover. Example message after an edit of `sharc-rt` that
+the host does not have: `DIGI_SHARC_CORE_LIB_DT2: /path/dt2.dylib: core library refused: sharc-rt source sha256: library
+..., host ...`. The loader is `sharc_native::core_lib::load`; the library is never unloaded.
+
+### Profile-guided libraries
+
+The DSP hot loop (the generated blocks and the interpreter) runs in the library, so PGO covers it only when the library
+is profile-guided. `uv run python -m tools.emulator.native_pgo train [--device dn2|dt2|both]` (`mise run perf:pgo`, or
+`perf:pgo:dn2`, `perf:pgo:dt2`, `perf:pgo:both`) builds the host and the library of each device it runs with
+`-Cprofile-generate`, runs the workload with `DIGI_SHARC_CORE_LIB_<DEV>` naming the instrumented libraries and merges the
+host's and the libraries' `.profraw` files into one profile per training target. `mise run perf:pgo` trains `dn2`, `dt2` and then `both`
+(the two-core profile of the desktop build; the libraries of the first two trainings are restored from the store, so
+`both` costs a host build and its runs). Without a current `both` profile the two-core desktop build runs without PGO
+and prints the fallback notice. A training whose profile for the current key exists is skipped (`train --force`, or
+`mise run perf:pgo:dn2 -- --force`, trains again; a workload edit that keeps the workload name needs `--force`). The
+instrumented libraries are built once per key (the `-Cprofile-generate` directory is fixed per target dir and not in the
+key) and kept in `<git common dir>/sharc-core-pgo-instrument`, shared by all worktrees (the last 4 keys per device stay;
+`DIGI_SHARC_PGO_INSTRUMENT_STORE` moves it, tests only); a training restores them. Each training prints `phase <name>: N s`
+lines (`key`, `host-build`, `library-*`, `runs`, `merge`) and records them as `phase_seconds` in its manifest. A launch
+with a fresh profile uses it for the host (`-Cprofile-use`) and for the library of every device the profile covers (`dn2`:
+the DN2 library, `dt2`: the DT2 one, `both`: both): the library is a store entry whose key holds the profile content, so
+it is built once per profile. The launchers (`native_emu.py`, `verify_build daemons`) pick it when the profile is fresh and
+fall back to the plain library otherwise; `verify_build cores --pgo` builds or restores them by hand; an explicit
+`DIGI_SHARC_CORE_LIB_<DEV>` wins. Because the header leaves the PGO flags out, any host works with any library.
+`verify_build daemons` also writes `DIGI_SHARC_CORE_LIB_<DEV>_PLAIN` (when the plain entry is stored) so that the eviction
+keeps both entries. Compare plain and PGO builds with `sharc_cells.py` / `coupled_ab.py` and `--env B:DIGI_SHARC_CORE_LIB_<DEV>=PATH`.
+
+One process can run both devices: the other device's ready inputs go to `digi-emud` and the app as
+`--also-coupled DSP_IMAGE DSP_STATE CF_SNAPSHOT SYX` (repeatable), and a firmware load for that device then boots coupled
+(audio, DSP, restart) instead of ColdFire only. The workbench launcher passes them when both devices' inputs and generated
+cores exist (`DIGI_EMU_SECOND_CORE=0` selects one device; daemon launches (`mise run emu:serve`) use one device unless
+`DIGI_EMU_SECOND_CORE=1`). Proof: `uv run python -m tools.devtools.dual_core_check` (`DIGI_EMUD` names a `digi-emud`).
+
+- The fast-tier lists are addresses in one device's DSP image, so a core reads the lists with the suffix of its device
+  (`GenCore::env_suffix`, set by the host at load): DN2 `SHARC_FAST_REGIONS`, `SHARC_BLOCKTRANS` and
+  `SHARC_FAST_FALLBACK_REGIONS`; DT2 the same names with `_2`. This holds for a host that runs one device and for one that
+  runs both. `digi_env.resolve_tiers` and `fast_env` (Python) and `coupledEnv(syx, env, device)` (Vitest) apply it. Builds
+  that link `sharc-gen` (`sharc-rig`, the browser core, the engine's tests and examples) read the unsuffixed names.
+- The patched images (runtime, core/dynfx, core/fx) differ from the image the generated blocks came from. Each
+  engine checks its own loaded code against its own generated core (`Engine::verify_code`, `code_diff.rs`) and bars only
+  the blocks with a changed instruction (`SHARC_CODE_LOG=1` prints the check; the audio report's `dsp_tiers` has
+  `code_mismatch`).
+- Process-wide state is keyed per core in `sharc-rt`: the instruction table (`insn_table`) is parsed once per generated
+  blob (one slot each). Any new process-wide cache in `sharc-rt` needs the same key.
+- `dual_core_check` modes (a daemon each, bounded): the default (open the other device and back), `--module digikit/pluck
+  --play` (`dk run` and a played note), `--menu digikit/pluck --menu digikit/freqshift` (the on-device path SETTINGS > DIGIKIT >
+  MODULES > tick > APPLY & RESTART, a note, the effect's FX page; screenshots to `out/runs/lanes/dualcore-shots/` or
+  `--shots DIR`) and `--bench dt2 --binary LABEL=PATH ... --pairs 3` (DSP CPU per audio second, AOT share and real-time factor
+  of a device with the runtime patched in, alternating the `digi-emud` builds given).
+- Compare two builds with `sharc_cells` ([testing](../../docs/TESTING.md)); `--env B:DIGI_SHARC_CORE_LIB_DN2=PATH` runs one
+  label on another library.
 
 ## Headless coupled runner (`coupled-run`) and the matrix
 
@@ -160,7 +204,7 @@ old names (`desktop_runtime::coupled::tests::...`), with the same asserted hashe
 ```
 export SHARC_GEN_DIR=$PWD/out/native/dn2-audio/gen
 T=$(uv run python -m tools.emulator.native_target dir)
-cargo build --release --locked --target-dir "$T" -p digi-coupled --features coupled-audio --bin coupled-run
+cargo build --release --locked --target-dir "$T" -p digi-coupled --features sharc,play --bin coupled-run
 SHARC_FAST_REGIONS=0x1c399a,0x1c3862,0x1c364f,0x1c5765,0xb823db,0x1c1884,0x1cdcef,0x1c3030,0xb85347,0x1c1da8,0xb80509 "$T"/release/coupled-run \
   --syx firmware/Digitone_II_OS1.11.syx \
   --dsp-image out/snapshots/dn2-audio-ready-cold-2026-10-07/digi-audio-dn2-image.bin \
@@ -259,7 +303,7 @@ under load, because benchlock only excludes work that also takes it.
 ### Browser core tiers
 
 The coupled browser core (wasm32) has a fast tier too (feature `fast-wasm`): its
-kernels are wasm modules the page compiles (`packages/emulator/sharc-fast-wasm`, `apps/web/src/core-host.ts`).
+kernels are wasm modules the page compiles (`packages/emulator/sharc-fast-wasm`, `packages/workbench-core/src/core-host.ts`).
 `SHARC_FAST_REGIONS` and `SHARC_BLOCKTRANS` are environment variables, which
 wasm32-unknown-unknown does not have, so the page passes the regions in
 (`digi_sharc_fast_regions`). With no `?fast=` query it uses the `desktop` regions
@@ -270,6 +314,4 @@ the native `expect_sha256`.
 
 The coupled core (`emulator-core-sharc.wasm`) contains firmware-derived DSP code.
 `tools/nx/wasm.mjs` writes it to `apps/web/.local/`, which is gitignored
-and served only by the dev server. It is never in `dist/`: a build guard fails
-the build if it appears in the output. The CF-only core stays in
-`apps/web/public/`.
+and served only by the dev server. The CF-only core stays in `apps/web/public/`.

@@ -1,0 +1,57 @@
+[module]
+id = "core/card-guard"
+version = "0.1.0"
+name = "Card write guard"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Refuses a request to the firmware's eMMC block write or erase that lies outside the rows of its writer class (device file [card.guard]): the stock code may not reach the module store, and the runtime may not leave it"
+requires = ["core/runtime"]
+conflicts = []
+# The firmwares it is built for (a device added after the device-literals baseline is listed here and not in [targets]).
+ports = ["st-1.42"]
+needs_device = ["card.guard"]
+# While the device file turns [card.guard] on, every patch set that holds core/runtime must hold this module (the store would be open to every stock writer without it),
+# and a set that holds it where the switch is off is refused (patchkit gen and apply).
+needed_when = [{ switch = "card.guard.enabled", with = "core/runtime" }]
+
+# The firmware's eMMC block write and erase are the only code of MAIN that issues a write or erase command to the user area, except the OS-upgrade finale's raw
+# controller writes of the COKi copies (finding 156). A `before` hook at the entry of each (offset 0, eight bytes) runs the check of src/cf/guard.h with the
+# first sector, the length and the caller's return address; a refused request returns the driver's "sector out of range" code (-10) to the caller without a card
+# command, a lock or any state change. The class of a caller is its return address: the runtime's raw block write (core/runtime tramp.s) is the one caller with
+# the label `dkrt_raw_write_ret`; the stock write's own recursive call for each 64 KiB piece (anchor split_ret) is a part of a request checked as a whole.
+# Refusals are counted (`dkcg_stats`: the runtime puts them in INFO and HEALTH and raises one log event); nothing is shown on the device screen.
+
+# The allow-list rows of [card.guard] of the device file (`patchkit gen`).
+[[gen]]
+kind = "gas-card-guard"
+path = "build/gen/card-guard-{dev}.inc"
+
+[[object]]
+path = "build/card-guard-st.dko.json"
+sources = ["src/cf/guard.c", "src/cf/hooks.s", "src/cf/st/device.s"]
+place = "cf.expansion"
+devices = ["st"]
+
+[object.externs]
+cg_write_next = "hook.cf.storage.site.block_write.entry.tail"
+cg_erase_next = "hook.cf.storage.site.block_erase.entry.tail"
+cg_write_split_ret = "cf.storage.site.block_write.split_ret"
+
+[[op]]
+op = "hook"
+hook = "cf.storage.hook.block_write.entry"
+to = "dkcg_write_hook"
+
+[[op]]
+op = "hook"
+hook = "cf.storage.hook.block_erase.entry"
+to = "dkcg_erase_hook"
+
+[[claim]]
+resource = "cf.storage.site.block_write.entry"
+
+[[claim]]
+resource = "cf.storage.site.block_erase.entry"

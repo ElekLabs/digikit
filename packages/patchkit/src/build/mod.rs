@@ -8,9 +8,10 @@
 //! Where an object is written: a `core/*` module (`category = "core"`) keeps its objects in the module (`build/x.dko.json`, committed: the
 //! workbench and the browser patch without a toolchain). Every other module (content modules, test fixtures, imported modules) is
 //! build output: its objects go to the cache `out/cache/dko/<module id>/<src12>/<object path>`, where `<src12>` is the first 12 digits of the
-//! object's `source_sha256` (so builds of other commits sit beside this one). [`object_file`] names the file.
+//! object's `source_sha256` (so builds of other commits sit beside this one). [`object_file_at`] names the file.
 //!
-//! An object whose `source_sha256` equals the hash of its sources now is not compiled ("unchanged"). `--check` rebuilds and
+//! An object whose `source_sha256` equals the hash of its sources now, and, for a SHARC+ object, whose `selache_rev` is the pinned one,
+//! is not compiled ("unchanged"). `--check` rebuilds and
 //! compares with the stored object, ignoring the `*_sha256` keys of the toolchain record (they name the local binaries).
 //!
 //! Library entry points for the command line and the desktop app: [`build_module`], [`module_status`], [`link_sources`], and
@@ -23,7 +24,9 @@ pub mod sharc;
 pub mod sharc_legal;
 pub mod sharc_obj;
 pub mod show;
+pub mod test_source;
 pub mod toolchain;
+mod workbench;
 
 use crate::dko::Dko;
 use crate::error::*;
@@ -95,12 +98,21 @@ pub struct ModuleToml {
     module: ModuleHead,
     #[serde(default)]
     object: Vec<ObjectToml>,
+    /// The system package (`[system_package]`): one more Rust object of the module, built and checked like the others but not linked into the image;
+    /// `patchkit syspkg build` packs it (docs/plans/resident-core-and-system-package.md).
+    #[serde(default)]
+    system_package: Option<ObjectToml>,
+    /// An object that `patchkit syspkg build --part` links into the system package (`[package_part]`: the DIGIKIT menu's C object). It is built and checked like the
+    /// others and is not linked into the image.
+    #[serde(default)]
+    package_part: Option<ObjectToml>,
 }
 
 #[derive(Deserialize)]
 struct ModuleHead {
     id: String,
     category: String,
+    name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -108,6 +120,31 @@ struct ObjectToml {
     path: String,
     #[serde(default)]
     sources: Vec<String>,
+    /// Rust only: the crate's cargo features (`--features`).
+    #[serde(default)]
+    features: Vec<String>,
+    /// Rust only: `false` builds with `--no-default-features`.
+    #[serde(default = "yes")]
+    default_features: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl ObjectToml {
+    /// The cargo flags that select the crate's features: part of the object's source hash.
+    fn cargo_flags(&self) -> Vec<String> {
+        let mut flags = vec![];
+        if !self.default_features {
+            flags.push("--no-default-features".to_string());
+        }
+        if !self.features.is_empty() {
+            flags.push("--features".to_string());
+            flags.push(self.features.join(","));
+        }
+        flags
+    }
 }
 
 impl ModuleToml {
@@ -115,8 +152,20 @@ impl ModuleToml {
         toml::from_str(text).map_err(|e| err!("module.toml: {e}"))
     }
 
+    fn workbench_header(&self, moddir: &Path) -> Result<Option<workbench::Header>> {
+        workbench::Header::read(moddir, self.id(), self.module.name.as_deref())
+    }
+
     pub fn id(&self) -> &str {
         &self.module.id
+    }
+
+    /// Every object the build makes: the `[[object]]` list, the `[system_package]` object and the `[package_part]` object.
+    fn built(&self) -> impl Iterator<Item = &ObjectToml> {
+        self.object
+            .iter()
+            .chain(self.system_package.iter())
+            .chain(self.package_part.iter())
     }
 
     /// A content module: its objects are build output (the cache), not committed.
@@ -128,8 +177,7 @@ impl ModuleToml {
     pub fn builds(&self, path: &str) -> bool {
         self.is_content()
             && self
-                .object
-                .iter()
+                .built()
                 .any(|o| o.path == path && !o.sources.is_empty())
     }
 }
@@ -146,6 +194,10 @@ pub fn cache_dir(root: &Path) -> PathBuf {
 
 /// Entries of one object kept in the cache (the newest by modification time; a use touches its entry).
 const KEEP_ENTRIES: usize = 3;
+
+/// An entry used within this time is never evicted: another process (a gate job, another lane that shares `out/`) may have just chosen
+/// it and be about to read it.
+const EVICT_MIN_AGE: std::time::Duration = std::time::Duration::from_secs(3600);
 
 /// The directory of a content module's objects in the cache. A build with defines has its own directory, so objects of different
 /// define sets never share a file.
@@ -169,13 +221,6 @@ fn object_file_at(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml, hash
     }
 }
 
-/// The stored file of the object for the sources now (see [`object_file_at`]); an error when the sources cannot be hashed (a missing
-/// source, or the SDK library does not compile).
-fn object_file(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> Result<PathBuf> {
-    let hash = source_hash(env, moddir, &o.sources, m.is_content())?;
-    Ok(object_file_at(env, moddir, m, o, &hash))
-}
-
 /// Mark a cache entry as used now.
 fn touch(file: &Path) {
     if let Ok(f) = std::fs::File::options().append(true).open(file) {
@@ -194,7 +239,14 @@ fn evict(dir: &Path, rel: &str) {
         .filter_map(|f| Some((f.metadata().ok()?.modified().ok()?, f)))
         .collect();
     entries.sort_by(|a, b| b.0.cmp(&a.0));
-    for (_, f) in entries.into_iter().skip(KEEP_ENTRIES) {
+    let now = std::time::SystemTime::now();
+    for (used, f) in entries.into_iter().skip(KEEP_ENTRIES) {
+        if now
+            .duration_since(used)
+            .is_ok_and(|age| age < EVICT_MIN_AGE)
+        {
+            continue;
+        }
         let _ = std::fs::remove_file(&f);
         // the key directory, when nothing else is in it
         let mut d = f.parent();
@@ -245,42 +297,85 @@ pub fn cf_include_dirs(root: &Path, moddir: &Path) -> Vec<PathBuf> {
     v
 }
 
+fn cf_module_include_dirs(
+    env: &Env,
+    moddir: &Path,
+    header: Option<&workbench::Header>,
+) -> Vec<PathBuf> {
+    let mut dirs = cf_include_dirs(&env.root, moddir);
+    if let Some(header) = header {
+        dirs.insert(0, header.dir().to_path_buf());
+    }
+    dirs
+}
+
 /// The `source_sha256` a build of the object would write, computed the same way as the builders do and without compiling.
-fn source_hash(env: &Env, moddir: &Path, sources: &[String], sdk: bool) -> Result<String> {
+fn source_hash(
+    env: &Env,
+    moddir: &Path,
+    o: &ObjectToml,
+    sdk: bool,
+    header: Option<&workbench::Header>,
+) -> Result<String> {
+    let sources = &o.sources;
     let paths: Vec<PathBuf> = sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(sources) {
         Kind::Sharc => {
             let text = sharc::source_text(&env.root, moddir, &paths, &env.defines)?;
             Ok(sharc::source_hash(&text))
         }
-        Kind::Rust => rust::source_sha256(&paths[0]),
-        Kind::Cf => cf::source_digest(env, &paths, &cf_include_dirs(&env.root, moddir), sdk),
+        Kind::Rust => rust::source_sha256(&paths[0], &o.cargo_flags()),
+        Kind::Cf => cf::source_digest_with_workbench(
+            env,
+            &paths,
+            &cf_module_include_dirs(env, moddir, header),
+            sdk,
+            header,
+        ),
     }
 }
 
-fn committed_hash(path: &Path) -> Option<String> {
-    let v: Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
-    v.get("source_sha256")?.as_str().map(String::from)
+/// Is the object file `path` current: its `source_sha256` is `want` and, when its toolchain record names a `selache_rev`, that is the
+/// pinned one. Objects without a `selache_rev` (ColdFire, Rust) are judged by the hash alone.
+fn stored_current(path: &Path, want: &str) -> bool {
+    let Some(v) = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+    else {
+        return false;
+    };
+    if v.get("source_sha256").and_then(Value::as_str) != Some(want) {
+        return false;
+    }
+    match v.get("toolchain").and_then(|t| t.get("selache_rev")) {
+        Some(r) => r.as_str() == Some(sharc_obj::SELACHE_REV),
+        None => true,
+    }
 }
 
-fn object_unchanged(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> Result<bool> {
-    let want = source_hash(env, moddir, &o.sources, m.is_content())?;
-    let out = object_file_at(env, moddir, m, o, &want);
-    let same = committed_hash(&out).is_some_and(|h| h == want);
-    if same && m.is_content() {
-        touch(&out);
+fn object_unchanged(out: &Path, hash: &str, content: bool) -> bool {
+    let same = stored_current(out, hash);
+    if same && content {
+        touch(out);
     }
-    Ok(same)
+    same
 }
 
 /// Is the stored object of every object with sources current with its sources? One entry per such object: (its path, unchanged).
 pub fn module_status(root: &Path, moddir: &Path) -> Result<Vec<(String, bool)>> {
     let env = Env::new(root);
     let m = manifest(moddir)?;
-    m.object
-        .iter()
+    let header = m.workbench_header(moddir)?;
+    m.built()
         .filter(|o| !o.sources.is_empty())
-        .map(|o| Ok((o.path.clone(), object_unchanged(&env, moddir, &m, o)?)))
+        .map(|o| {
+            let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
+            let file = object_file_at(&env, moddir, &m, o, &hash);
+            Ok((
+                o.path.clone(),
+                object_unchanged(&file, &hash, m.is_content()),
+            ))
+        })
         .collect()
 }
 
@@ -288,10 +383,13 @@ pub fn module_status(root: &Path, moddir: &Path) -> Result<Vec<(String, bool)>> 
 pub fn object_files(root: &Path, moddir: &Path) -> Result<Vec<(String, PathBuf)>> {
     let env = Env::new(root);
     let m = manifest(moddir)?;
-    m.object
-        .iter()
+    let header = m.workbench_header(moddir)?;
+    m.built()
         .filter(|o| !o.sources.is_empty())
-        .map(|o| Ok((o.path.clone(), object_file(&env, moddir, &m, o)?)))
+        .map(|o| {
+            let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
+            Ok((o.path.clone(), object_file_at(&env, moddir, &m, o, &hash)))
+        })
         .collect()
 }
 
@@ -323,13 +421,23 @@ fn build_object(
     moddir: &Path,
     o: &ObjectToml,
     defines: &[String],
-    sdk: bool,
+    m: &ModuleToml,
+    header: Option<&workbench::Header>,
 ) -> Result<Dko> {
+    let sdk = m.is_content();
     let paths: Vec<PathBuf> = o.sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(&o.sources) {
         Kind::Sharc => {
             let text = sharc::source_text(&env.root, moddir, &paths, defines)?;
-            sharc::sharc_object(&text)
+            let obj = sharc::sharc_object(&text)?;
+            // The register contract (sdk/dsp/REGISTERS.md): a warning for now, never a failed build. Only content modules are checked
+            // (`sdk` is `is_content()`): a `core/*` module implements the contract (the adapters, the stock-code hooks), so it is not held to it.
+            if sdk {
+                for p in sharc::rule_problems(&obj) {
+                    eprintln!("{}", sharc::rule_warning_line(m.id(), &p));
+                }
+            }
+            Ok(obj)
         }
         k => {
             if !defines.is_empty() {
@@ -342,17 +450,27 @@ fn build_object(
                         "a Rust object lists its Cargo.toml as the only source"
                     ));
                 }
-                let (proto, sha, toolchain) = rust::object_proto(env, &paths[0])?;
+                let (proto, sha, toolchain) = rust::object_proto(env, &paths[0], &o.cargo_flags())?;
                 cf::dko_from_proto(&proto, sha, toolchain)
             } else {
-                cf::cf_object(env, &paths, &cf_include_dirs(&env.root, moddir), sdk)
+                cf::cf_object_with_workbench(
+                    env,
+                    &paths,
+                    &cf_module_include_dirs(env, moddir, header),
+                    sdk,
+                    header,
+                )
             }
         }
     }
 }
 
-/// Write an object file in one step (a rename), so a reader that runs at the same time never sees half a file.
+/// Write an object file in one step (a rename), so a reader that runs at the same time never sees half a file. A file that already has
+/// this text is left alone, so a complete cache entry is never replaced.
 fn write_object(path: &Path, text: &str) -> Result<()> {
+    if std::fs::read_to_string(path).is_ok_and(|t| t == text) {
+        return Ok(());
+    }
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d).map_err(|e| err!("{}: {e}", d.display()))?;
     }
@@ -367,8 +485,7 @@ fn write_object(path: &Path, text: &str) -> Result<()> {
 /// uses cached declarations to bootstrap headers that the next build may need.
 pub fn read_cached_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Result<String> {
     let o = m
-        .object
-        .iter()
+        .built()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
     if !m.is_content() {
@@ -394,14 +511,14 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
     static BUILDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _one_at_a_time = BUILDING.lock().unwrap_or_else(|e| e.into_inner());
     let o = m
-        .object
-        .iter()
+        .built()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
-    let want = source_hash(env, moddir, &o.sources, m.is_content())
+    let header = m.workbench_header(moddir)?;
+    let want = source_hash(env, moddir, o, m.is_content(), header.as_ref())
         .map_err(|e| err!("{}: {rel}: cannot hash the sources: {e}", moddir.display()))?;
     let file = object_file_at(env, moddir, m, o, &want);
-    if committed_hash(&file).is_some_and(|h| h == want)
+    if stored_current(&file, &want)
         && let Ok(t) = std::fs::read_to_string(&file)
     {
         if m.is_content() {
@@ -415,7 +532,7 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
     } else {
         vec![]
     };
-    let obj = build_object(env, moddir, o, &defines, m.is_content())
+    let obj = build_object(env, moddir, o, &defines, m, header.as_ref())
         .map_err(|e| err!("{}: {rel}: build failed: {e}", moddir.display()))?;
     let text = to_text(&obj)?;
     write_object(&file, &text)?;
@@ -435,14 +552,15 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
     }
     let env = Env::new(&opts.root);
     let m = manifest(moddir)?;
+    let header = m.workbench_header(moddir)?;
     let mut report = BuildReport::default();
-    for o in m.object.iter().filter(|o| !o.sources.is_empty()) {
-        let hash = source_hash(&env, moddir, &o.sources, m.is_content())?;
+    for o in m.built().filter(|o| !o.sources.is_empty()) {
+        let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
         let stored = |h: &str| object_file_at(&env, moddir, &m, o, h);
         if !opts.check
             && opts.defines.is_empty()
             && !opts.force
-            && object_unchanged(&env, moddir, &m, o)?
+            && object_unchanged(&stored(&hash), &hash, m.is_content())
         {
             report.objects.push(ObjectReport {
                 path: stored(&hash),
@@ -451,7 +569,7 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
             });
             continue;
         }
-        let obj = build_object(&env, moddir, o, &opts.defines, m.is_content())?;
+        let obj = build_object(&env, moddir, o, &opts.defines, &m, header.as_ref())?;
         let out = match &opts.out {
             Some(d) => d.join(&o.path),
             None => stored(&hash),
@@ -468,7 +586,12 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
                 Some(v) => comparable(v) == comparable(serde_json::to_value(&obj)?),
                 None => false,
             };
-            if !current {
+            // A cache entry is output, keyed by the hash of its sources: a missing one (another process may have evicted it) is made,
+            // not reported stale. Only a stored object that differs from a fresh build is stale.
+            let missing = !out.exists();
+            if !current && missing && m.is_content() && opts.out.is_none() {
+                write_object(&out, &to_text(&obj)?)?;
+            } else if !current {
                 return Err(err!(
                     "{} is stale: mise run module:build -- {}",
                     out.display(),
@@ -516,9 +639,12 @@ pub fn module_dirs(root: &Path, ids: &[String]) -> Result<Vec<(String, PathBuf)>
         .collect()
 }
 
-/// The module roots of a repository (`modules/`, `tests/fixtures/modules/`) and the extra roots of PATCHKIT_MODULES.
+/// The committed module roots and the extra roots of PATCHKIT_MODULES.
 pub fn module_roots(root: &Path) -> Vec<PathBuf> {
-    let mut v = vec![root.join("modules"), root.join("tests/fixtures/modules")];
+    let mut v: Vec<PathBuf> = crate::module::REPO_MODULE_ROOTS
+        .iter()
+        .map(|r| root.join(r))
+        .collect();
     if let Some(p) = std::env::var_os("PATCHKIT_MODULES") {
         v.extend(std::env::split_paths(&p).filter(|p| !p.as_os_str().is_empty()));
     }
@@ -601,4 +727,104 @@ pub fn link_sources(
     let linked = cf::link(&proto, base, symmap)?;
     let hist = cf::check_isa(&linked)?;
     Ok((linked, hist))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    fn scratch(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("pk-build-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn a_sharc_object_from_another_selache_rev_is_stale() {
+        let dir = scratch("selache-rev");
+        let write = |name: &str, toolchain: &str| {
+            let p = dir.join(name);
+            std::fs::write(&p, format!("{{\"source_sha256\": \"abc\"{toolchain}}}")).unwrap();
+            p
+        };
+        let pinned = write(
+            "pinned.json",
+            &format!(
+                ", \"toolchain\": {{\"selache_rev\": \"{}\"}}",
+                sharc_obj::SELACHE_REV
+            ),
+        );
+        let old = write(
+            "old.json",
+            ", \"toolchain\": {\"selache_rev\": \"02d6d785\"}",
+        );
+        let none = write("none.json", "");
+        assert!(stored_current(&pinned, "abc"));
+        assert!(!stored_current(&old, "abc"));
+        assert!(stored_current(&none, "abc"));
+        assert!(!stored_current(&pinned, "other"));
+    }
+
+    #[test]
+    fn a_reader_never_sees_a_partial_object() {
+        let dir = scratch("atomic");
+        let text = "x".repeat(8 << 20);
+        let stop = Arc::new(AtomicBool::new(false));
+        let reader = {
+            let (dir, text, stop) = (dir.clone(), text.clone(), stop.clone());
+            std::thread::spawn(move || {
+                let mut seen = 0;
+                while !stop.load(Ordering::Relaxed) {
+                    for i in 0..20 {
+                        if let Ok(t) = std::fs::read_to_string(dir.join(format!("e{i}/o.json"))) {
+                            assert_eq!(t.len(), text.len(), "partial entry e{i}");
+                            seen += 1;
+                        }
+                    }
+                }
+                seen
+            })
+        };
+        for i in 0..20 {
+            write_object(&dir.join(format!("e{i}/o.json")), &text).unwrap();
+        }
+        stop.store(true, Ordering::Relaxed);
+        reader.join().unwrap();
+        // no temp file is left behind
+        for i in 0..20 {
+            assert_eq!(
+                std::fs::read_dir(dir.join(format!("e{i}")))
+                    .unwrap()
+                    .count(),
+                1
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn evict_keeps_entries_used_recently() {
+        let dir = scratch("evict");
+        for i in 0..6 {
+            write_object(&dir.join(format!("k{i}/o.json")), "{}").unwrap();
+        }
+        evict(&dir, "o.json");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 6);
+        // the entries beyond the newest three go once they are old
+        let old = std::time::SystemTime::now() - EVICT_MIN_AGE * 2;
+        for i in 0..6 {
+            let f = std::fs::File::options()
+                .append(true)
+                .open(dir.join(format!("k{i}/o.json")))
+                .unwrap();
+            f.set_modified(old + std::time::Duration::from_secs(i))
+                .unwrap();
+        }
+        evict(&dir, "o.json");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), KEEP_ENTRIES);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

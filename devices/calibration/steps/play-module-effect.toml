@@ -1,0 +1,20 @@
+schema = "dk.steps/1"
+name = "play-module-effect"
+description = "Verify the selected route of a loaded effect and hold a note."
+
+[args]
+track = 1
+key = 60
+velocity = 100
+route = "default"
+
+[[step]]
+action = "setup"
+effect = "{effect}"
+route = "{route}"
+
+[[step]]
+action = "midi.note"
+track = "{track}"
+key = "{key}"
+velocity = "{velocity}"

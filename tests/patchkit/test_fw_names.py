@@ -1,4 +1,4 @@
-"""Declaration names of devices/fw: <cpu>.<subsystem>.<kind>.<name> against the subsystem list."""
+"""Declaration names of ports/fw: <cpu>.<subsystem>.<kind>.<name> against the subsystem list."""
 
 import pytest
 

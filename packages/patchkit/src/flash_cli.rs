@@ -6,13 +6,17 @@ use dkupload::{Info, Session, Transport};
 use patchkit::error::{Error, Result};
 use patchkit::flash::{self, Prepared, Sender, Step};
 use patchkit::flash_rpc::{Action, RpcFlash};
-use patchkit::module::Library;
-use patchkit::port::Registry;
+use patchkit::module::LibrarySource;
+use patchkit::syspkg::{self, Artifact};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
+use std::path::Path;
 use std::time::{Duration, Instant};
+
+mod system_package;
+pub(crate) use system_package::recover as recover_system_package;
 
 /// The emulator's control socket is a Unix socket. On another platform `--emulator` stops at the connect with this error, and the
 /// `--port` route builds and runs as before.
@@ -59,7 +63,7 @@ pub const USAGE: &str = "usage: patchkit flash STOCK.syx (--port NAME | --emulat
   --restore   send the stock file itself (the way back from a patched image)
   --set       the device file's patch set to apply (default: device)
   --dry-run   patch and check; print the checks and stop
-  --save F    also write the image that is checked and sent to F (for `mise run patch:preflight`, the section 7 ISA scan)
+  --save F    save the checked image and its sibling .dksp when the image includes the runtime
   --yes       do not ask: rpc route \"Flash ... now? [y/N]\" (asked once, before anything is sent), menu route the word \"flash\"";
 
 fn flag(rest: &[String], name: &str) -> Option<String> {
@@ -71,7 +75,7 @@ fn has(rest: &[String], name: &str) -> bool {
     rest.iter().any(|a| a == name)
 }
 
-pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
+pub fn run(root: &Path, source: &LibrarySource, rest: &[String]) -> Result<()> {
     let path = rest
         .first()
         .filter(|a| !a.starts_with("--"))
@@ -102,20 +106,13 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
             .ok_or_else(|| Error(format!("--chunk wants a number of bytes, not {n:?}")))?,
     };
     let t0 = Instant::now();
-    let p = if restore {
-        flash::restore(&stock, reg)?
-    } else {
-        flash::prepare(
-            &stock,
-            reg,
-            lib,
-            &flag(rest, "--set").unwrap_or_else(|| "device".into()),
-        )?
-    };
-    if let Some(f) = flag(rest, "--save") {
-        std::fs::write(&f, &p.image).map_err(|e| Error(format!("{f}: {e}")))?;
-        println!("image written to {f}");
-    }
+    let (p, package_object) = flash::prepare_in_repo_with_source(
+        root,
+        &stock,
+        restore,
+        &flag(rest, "--set").unwrap_or_else(|| "device".into()),
+        source,
+    )?;
     print_checks(&p);
     println!("prepared in {:.1} s", t0.elapsed().as_secs_f64());
     if !p.ok() {
@@ -123,6 +120,26 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
             "{} check(s) failed: nothing is sent",
             p.failed().len()
         )));
+    }
+    let save = flag(rest, "--save");
+    let package = package_object
+        .filter(|_| !dry || save.is_some())
+        .map(|object| syspkg::build_from_runtime_object(root, &object))
+        .transpose()?;
+    if let Some(f) = save {
+        let output = Path::new(&f);
+        if package.is_some()
+            && syspkg::paths_alias(Path::new(path), &syspkg::companion_path(output)?)
+        {
+            return Err(Error(format!(
+                "the system package output conflicts with {path}"
+            )));
+        }
+        let companion = syspkg::save_firmware(output, &p.image, package.as_ref())?;
+        println!("image written to {f}");
+        if let Some(companion) = companion {
+            println!("system package written to {}", companion.display());
+        }
     }
     let secs = p.messages.len() as f64 * flash::PACE_MS as f64 / 1000.0;
     println!(
@@ -145,13 +162,13 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
     }
     if let Some(sock) = emu {
         if rpc {
-            ask_flash(&p, device_name(&p, ""), yes)?;
+            ask_flash(&p, &device_name(&p), yes)?;
         }
-        return emulator(&p, &sock, rpc.then_some(chunk));
+        return emulator(&p, &sock, rpc.then_some(chunk), package.as_ref());
     }
     let name = port.unwrap();
     if rpc {
-        return device_rpc(&p, &name, chunk, yes);
+        return device_rpc(&p, &name, chunk, yes, package.as_ref());
     }
     println!("{}", instructions(&p, secs));
     if !yes {
@@ -163,31 +180,24 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
             return Err(Error("stopped: nothing was sent".into()));
         }
     }
-    device(&p, &name)
+    device(&p, &name, package.as_ref())
 }
 
-/// The name of the device: from the MIDI port when it says so, else from the image.
-fn device_name(p: &Prepared, port: &str) -> &'static str {
-    let port = port.to_lowercase();
-    if port.contains("digitakt") {
-        "Digitakt II"
-    } else if port.contains("digitone") {
-        "Digitone II"
-    } else if p.device == "dt2" {
-        "Digitakt II"
-    } else {
-        "Digitone II"
-    }
+/// The product name of the device, from its device file (`[device] name`); the short name when no device file has it.
+fn device_name(p: &Prepared) -> String {
+    patchkit::devdata::by_short(&p.device).map_or_else(|| p.device.clone(), |d| d.name.clone())
 }
 
 /// The one question of the rpc route, asked before anything is sent: "Flash Digitakt II OS 1.17 (stock) now? [y/N]".
 fn flash_question(p: &Prepared, name: &str) -> String {
     let what = if p.restore {
         "(stock)".to_string()
+    } else if !p.leaves_runtime() {
+        "patched, without the digikit runtime".to_string()
     } else {
         format!(
             "with digikit runtime {}",
-            patchkit::dkm::fmt_runtime(patchkit::dkm::runtime_version())
+            p.runtime_text().unwrap_or_default()
         )
     };
     format!("Flash {name} OS {} {what} now? [y/N] ", p.os)
@@ -394,7 +404,7 @@ fn send_all(
     }
 }
 
-fn device(p: &Prepared, want: &str) -> Result<()> {
+fn device(p: &Prepared, want: &str, package: Option<&Artifact>) -> Result<()> {
     let name = find_port(&out_names()?, want)?;
     println!("port {name:?}");
     let mut link = open(&name)?;
@@ -406,15 +416,21 @@ fn device(p: &Prepared, want: &str) -> Result<()> {
         t0.elapsed().as_secs_f64()
     );
     drop(link);
-    after_device_flash(p, &name, t0)
+    after_device_flash(p, &name, t0, package)
 }
 
 /// The RPC route on a MIDI port: the question, Start, Writes, End.
-fn device_rpc(p: &Prepared, want: &str, chunk: usize, yes: bool) -> Result<()> {
+fn device_rpc(
+    p: &Prepared,
+    want: &str,
+    chunk: usize,
+    yes: bool,
+    package: Option<&Artifact>,
+) -> Result<()> {
     let name = find_port(&out_names()?, want)?;
     println!("port {name:?}");
     println!("{}", rpc_instructions(p));
-    ask_flash(p, device_name(p, &name), yes)?;
+    ask_flash(p, &device_name(p), yes)?;
     let mut link = open(&name)?;
     let t0 = Instant::now();
     run_rpc(p, chunk, &mut link)?;
@@ -423,7 +439,7 @@ fn device_rpc(p: &Prepared, want: &str, chunk: usize, yes: bool) -> Result<()> {
         t0.elapsed().as_secs_f64()
     );
     drop(link);
-    after_device_flash(p, &name, t0)
+    after_device_flash(p, &name, t0, package)
 }
 
 fn rpc_instructions(p: &Prepared) -> String {
@@ -494,7 +510,12 @@ fn run_rpc(p: &Prepared, chunk: usize, link: &mut impl Transport) -> Result<()> 
     }
 }
 
-fn after_device_flash(p: &Prepared, name: &str, t0: Instant) -> Result<()> {
+fn after_device_flash(
+    p: &Prepared,
+    name: &str,
+    t0: Instant,
+    package: Option<&Artifact>,
+) -> Result<()> {
     // the device restarts: its port goes away and comes back. A restart can go unseen (macOS keeps the port
     // listed, or the restart is faster than a poll), so a missing leave is not an error.
     let left = wait_port(name, false, LEAVE_WAIT).is_ok();
@@ -512,6 +533,18 @@ fn after_device_flash(p: &Prepared, name: &str, t0: Instant) -> Result<()> {
         println!("stock firmware restored (it has no digikit runtime to ask)");
         return Ok(());
     }
+    if !p.leaves_runtime() {
+        return ask_identity(
+            p,
+            left,
+            || {
+                open(name)
+                    .and_then(|mut l| ping_name(&mut l, Duration::from_secs(2)).map_err(Error))
+            },
+            Duration::from_secs(if left { 90 } else { 240 }),
+            Duration::from_secs(2),
+        );
+    }
     let mut last = String::from("no answer");
     let mut seen: Option<Info> = None;
     // without a seen leave the deadline covers the flash write and the restart
@@ -522,12 +555,19 @@ fn after_device_flash(p: &Prepared, name: &str, t0: Instant) -> Result<()> {
             let mut s = Session::new(l);
             s.timeout = Duration::from_secs(2);
             s.retries = 1;
-            s.info().map_err(|e| Error(e.to_string()))
+            let info = s.info().map_err(|e| Error(e.to_string()))?;
+            Ok((info, s.transport))
         });
         match r {
             // an answer of the old image is not the verdict while time remains
-            Ok(info) if is_patched(p, &info) => return check_info(p, &info),
-            Ok(info) => seen = Some(info),
+            Ok((info, link)) if is_patched(p, &info) => {
+                check_info(p, &info)?;
+                return match package {
+                    Some(package) => system_package::after_midi_flash(package, name, link, p),
+                    None => Ok(()),
+                };
+            }
+            Ok((info, _)) => seen = Some(info),
             Err(e) => last = e.0,
         }
     }
@@ -545,12 +585,99 @@ fn after_device_flash(p: &Prepared, name: &str, t0: Instant) -> Result<()> {
     }))
 }
 
+/// The stock MidiRpc Ping over `link`: the model name, or `None` when no reply with a name came in `timeout` (the stock firmware drops requests during its intro).
+fn ping_name(
+    link: &mut impl Transport,
+    timeout: Duration,
+) -> std::result::Result<Option<String>, String> {
+    use patchkit::flash_rpc::{RPC_PING, parse_reply, request};
+    let seq = 1u16;
+    link.send(&request(RPC_PING, seq, &[]))?;
+    let end = Instant::now() + timeout;
+    while let Some(left) = end.checked_duration_since(Instant::now()) {
+        let Some(raw) = link.recv(left)? else { break };
+        if let Some((s, ty, payload)) = parse_reply(&raw)
+            && s == seq
+            && ty == RPC_PING
+        {
+            return patchkit::flash_rpc::parse_ping(&payload)
+                .map(Some)
+                .ok_or_else(|| {
+                    format!(
+                        "the Ping reply has no model name: {}",
+                        patchkit::error::hex(&payload)
+                    )
+                });
+        }
+    }
+    Ok(None)
+}
+
+/// A flashed image without the runtime has nothing that answers INFO: the restart is confirmed by the stock identity (Ping names the model, finding 144)
+/// being the device's `[device] name`.
+fn check_identity(p: &Prepared, name: &str) -> Result<()> {
+    let want = patchkit::devdata::by_short(&p.device)
+        .map(|d| d.identity.name.clone())
+        .ok_or_else(|| Error(format!("no device file for {}", p.device)))?;
+    if name != want {
+        return Err(Error(format!(
+            "after the restart the device names itself {name:?}, not {want:?}"
+        )));
+    }
+    println!(
+        "OK: the device restarted and answers as {name} (this image has no digikit runtime to ask)"
+    );
+    Ok(())
+}
+
+/// After a flash of an image without the runtime: ask the stock identity (`ping` returns the model name, or `None` for silence) every `pause` until
+/// `wait` is up. When the restart was seen (`left`) the name confirms it. When it was not (macOS keeps the port listed, or the restart was faster
+/// than a poll) the old image would answer too, so the name is reported as unproven and the flash, which the device already accepted, stays done.
+fn ask_identity(
+    p: &Prepared,
+    left: bool,
+    mut ping: impl FnMut() -> Result<Option<String>>,
+    wait: Duration,
+    pause: Duration,
+) -> Result<()> {
+    let mut last = String::from("no answer");
+    let deadline = Instant::now() + wait;
+    loop {
+        std::thread::sleep(pause);
+        match ping() {
+            Ok(Some(n)) if left => return check_identity(p, &n),
+            Ok(Some(n)) => {
+                check_identity(p, &n)?;
+                println!(
+                    "NOTE: the restart was not seen (the port stayed listed), so this answer could come from the old image: look at the device screen to confirm the new one"
+                );
+                return Ok(());
+            }
+            Ok(None) => {}
+            Err(e) => last = e.0,
+        }
+        if Instant::now() >= deadline {
+            break;
+        }
+    }
+    Err(Error(format!(
+        "the device does not answer Ping ({last}){}: look at the device screen",
+        if left {
+            ""
+        } else {
+            " and the restart was not seen (the port stayed listed)"
+        }
+    )))
+}
+
 /// How long to wait for the port to go away before the device is asked anyway (the web flow's `leaveMs`).
 const LEAVE_WAIT: Duration = Duration::from_secs(10);
 
-/// True when the answer comes from the image the patch made (runtime version and image id).
+/// True when the device model, runtime version and image id match the prepared image.
 fn is_patched(p: &Prepared, info: &Info) -> bool {
-    info.runtime() == patchkit::dkm::runtime_version() && info.image_id == p.image_id
+    info.port == p.device
+        && info.runtime() == patchkit::dkm::runtime_version()
+        && info.image_id == p.image_id
 }
 
 fn wait_port(name: &str, present: bool, within: Duration) -> Result<()> {
@@ -568,7 +695,7 @@ fn wait_port(name: &str, present: bool, within: Duration) -> Result<()> {
     )))
 }
 
-/// INFO after the restart: the runtime version and the image id must be what the patch made.
+/// INFO after the restart must match the device model, runtime version and prepared image id.
 fn check_info(p: &Prepared, info: &Info) -> Result<()> {
     let want = patchkit::dkm::runtime_version();
     let got = info.runtime();
@@ -580,6 +707,12 @@ fn check_info(p: &Prepared, info: &Info) -> Result<()> {
         info.image_id
             .map_or("none".into(), |i| patchkit::error::hex(&i))
     );
+    if info.port != p.device {
+        return Err(Error(format!(
+            "the device reports {}, expected {}",
+            info.port, p.device
+        )));
+    }
     if got != want {
         return Err(Error(
             "the runtime version differs from the one patched in".into(),
@@ -759,7 +892,12 @@ impl Transport for EmuRpcLink<'_> {
 }
 
 /// `rpc`: the chunk size of the RPC route (0: the default); `None`: the menu route (the emulator shows OS UPGRADE).
-fn emulator(p: &Prepared, sock: &str, rpc: Option<usize>) -> Result<()> {
+fn emulator(
+    p: &Prepared,
+    sock: &str,
+    rpc: Option<usize>,
+    package: Option<&Artifact>,
+) -> Result<()> {
     let mut emu = Emu::connect(sock)?;
     let t0 = Instant::now();
     emu.call("midi.usb.out", json!({}))?; // starts the USB capture
@@ -774,7 +912,7 @@ fn emulator(p: &Prepared, sock: &str, rpc: Option<usize>) -> Result<()> {
             t0.elapsed().as_secs_f64(),
             emu.used / INSTR_PER_MS
         );
-        return emulator_after(p, &mut emu, t0);
+        return emulator_after(p, &mut emu, t0, package);
     }
     // The sender runs on the emulated clock: a step of the guest is a pause of the sender.
     let mut s = Sender::new(p.messages.len());
@@ -806,11 +944,16 @@ fn emulator(p: &Prepared, sock: &str, rpc: Option<usize>) -> Result<()> {
         t0.elapsed().as_secs_f64(),
         emu.used / INSTR_PER_MS
     );
-    emulator_after(p, &mut emu, t0)
+    emulator_after(p, &mut emu, t0, package)
 }
 
 /// After the last byte (menu) or End with commit 1 (rpc): the device erases and programs, then restarts.
-fn emulator_after(p: &Prepared, emu: &mut Emu, t0: Instant) -> Result<()> {
+fn emulator_after(
+    p: &Prepared,
+    emu: &mut Emu,
+    t0: Instant,
+    package: Option<&Artifact>,
+) -> Result<()> {
     // The device validates, then erases and programs the container area. Run until the programming stops, then compare.
     let want = flash::container_of(&p.image)?;
     let t1 = Instant::now();
@@ -892,8 +1035,23 @@ fn emulator_after(p: &Prepared, emu: &mut Emu, t0: Instant) -> Result<()> {
     if p.restore {
         return Ok(());
     }
-    // let the new image boot, then ask INFO over the emulated USB
+    // let the new image boot, then ask INFO over the emulated USB; an image without the runtime is asked for the stock identity (Ping)
     emu.call("midi.usb.out", json!({}))?;
+    if !p.leaves_runtime() {
+        let mut last_err = String::from("no answer");
+        for _ in 0..40 {
+            emu.step(200_000_000)?;
+            let mut link = EmuRpcLink { emu, buf: vec![] };
+            match ping_name(&mut link, Duration::from_secs(1)) {
+                Ok(Some(n)) => return check_identity(p, &n),
+                Ok(None) => {}
+                Err(e) => last_err = e,
+            }
+        }
+        return Err(Error(format!(
+            "Ping did not answer after the restart: {last_err}"
+        )));
+    }
     let mut last_err = String::new();
     for _ in 0..40 {
         emu.step(200_000_000)?;
@@ -901,7 +1059,13 @@ fn emulator_after(p: &Prepared, emu: &mut Emu, t0: Instant) -> Result<()> {
         s.timeout = Duration::from_secs(1);
         s.retries = 0;
         match s.info() {
-            Ok(info) => return check_info(p, &info),
+            Ok(info) => {
+                check_info(p, &info)?;
+                return match package {
+                    Some(package) => system_package::after_emu_flash(package, emu, p),
+                    None => Ok(()),
+                };
+            }
             Err(e) => last_err = e.to_string(),
         }
     }
@@ -925,21 +1089,162 @@ mod tests {
             sha_stock: String::new(),
             sha_image: String::new(),
             restore,
+            ship_map: None,
         }
     }
 
     #[test]
     fn the_question_names_the_device_the_os_and_what_is_flashed() {
-        let q = flash_question(
-            &prepared(true),
-            device_name(&prepared(true), "Elektron Digitakt II"),
+        // the name comes from the device file of the prepared image, whatever the device
+        for d in patchkit::devdata::all() {
+            let mut p = prepared(true);
+            p.device = d.short.clone();
+            assert_eq!(device_name(&p), d.name);
+            let q = flash_question(&p, &device_name(&p));
+            assert_eq!(q, format!("Flash {} OS 1.17 (stock) now? [y/N] ", d.name));
+        }
+        let mut unknown = prepared(true);
+        unknown.device = "xx".into();
+        assert_eq!(device_name(&unknown), "xx");
+        // with the runtime: the runtime version INFO reports after the flash, the same value as the summary and the check after the restart
+        let mut with_runtime = prepared(false);
+        with_runtime.image_id = Some([1; 8]);
+        let version = patchkit::dkm::fmt_runtime(patchkit::dkm::runtime_version());
+        assert_eq!(with_runtime.runtime_text(), Some(version.clone()));
+        assert_eq!(with_runtime.summary_json()["runtime"], version);
+        let q = flash_question(&with_runtime, "Name");
+        assert_eq!(
+            q,
+            format!("Flash Name OS 1.17 with digikit runtime {version} now? [y/N] ")
         );
-        assert_eq!(q, "Flash Digitakt II OS 1.17 (stock) now? [y/N] ");
-        let q = flash_question(&prepared(false), "Digitakt II");
+        let q = flash_question(&prepared(false), "Name");
+        assert_eq!(
+            q,
+            "Flash Name OS 1.17 patched, without the digikit runtime now? [y/N] "
+        );
+    }
+
+    /// A device that answers Ping with `reply` (the payload), for the sequence of the request.
+    struct Pinged(Option<Vec<u8>>, Vec<u8>);
+    impl Transport for Pinged {
+        fn send(&mut self, msg: &[u8]) -> std::result::Result<(), String> {
+            self.1 = msg.to_vec();
+            Ok(())
+        }
+        fn recv(&mut self, _t: Duration) -> std::result::Result<Option<Vec<u8>>, String> {
+            let Some(payload) = self.0.take() else {
+                return Ok(None);
+            };
+            // the request's seq is echoed at bytes 2 and 3 of the unpacked reply, the type has the reply bit
+            let mut body = vec![0, 2, 0, 1, patchkit::flash_rpc::RPC_PING | 0x80];
+            body.extend(payload);
+            let mut m = patchkit::flash_rpc::ENVELOPE.to_vec();
+            m.extend(patchkit::syx::encode_8in7(&body));
+            m.push(0xf7);
+            Ok(Some(m))
+        }
+    }
+
+    /// The exact reply a booted Syntakt gave the emulator's Ping (the name sits behind an extra length byte); a ping that got a reply with no name is an error,
+    /// not silence.
+    struct Raw(Option<Vec<u8>>);
+    impl Transport for Raw {
+        fn send(&mut self, _m: &[u8]) -> std::result::Result<(), String> {
+            Ok(())
+        }
+        fn recv(&mut self, _t: Duration) -> std::result::Result<Option<Vec<u8>>, String> {
+            Ok(self.0.take())
+        }
+    }
+
+    #[test]
+    fn a_real_syntakt_ping_reply_gives_the_name_and_a_nameless_one_is_an_error() {
+        let real = patchkit::error::unhex("f000203c10000400290001011e1600010203040607090050525153545556005758595a5b5c5d005e53796e74616b007400f7").unwrap();
+        let name = ping_name(&mut Raw(Some(real)), Duration::from_secs(1)).unwrap();
+        assert_eq!(name.as_deref(), Some("Syntakt"));
+        // a reply with seq 1 whose payload holds no name
+        let mut body = vec![0, 2, 0, 1, patchkit::flash_rpc::RPC_PING | 0x80];
+        body.extend([1, 7]);
+        let mut m = patchkit::flash_rpc::ENVELOPE.to_vec();
+        m.extend(patchkit::syx::encode_8in7(&body));
+        m.push(0xf7);
+        let e = ping_name(&mut Raw(Some(m)), Duration::from_secs(1)).unwrap_err();
+        assert!(e.contains("no model name"), "{e}");
+    }
+
+    #[test]
+    fn the_identity_is_asked_until_the_device_answers_also_when_the_restart_was_not_seen() {
+        let mut st = prepared(false);
+        st.device = "st".into();
+        let none = Duration::ZERO;
+        // silence, then the name: confirmed, with or without a seen restart
+        for left in [true, false] {
+            let mut answers = vec![Ok(None), Ok(None), Ok(Some("Syntakt".to_string()))].into_iter();
+            let r = ask_identity(
+                &st,
+                left,
+                || answers.next().unwrap(),
+                Duration::from_secs(5),
+                none,
+            );
+            assert!(r.is_ok(), "left={left}: {r:?}");
+        }
+        // another model is an error either way
+        let r = ask_identity(
+            &st,
+            false,
+            || Ok(Some("Digitakt II".into())),
+            Duration::from_secs(5),
+            none,
+        );
+        assert!(r.is_err());
+        // no answer at all: the error says whether the restart was seen
+        let e = ask_identity(&st, false, || Ok(None), none, none)
+            .unwrap_err()
+            .0;
         assert!(
-            q.starts_with("Flash Digitakt II OS 1.17 with digikit runtime "),
-            "{q}"
+            e.contains("does not answer Ping") && e.contains("restart was not seen"),
+            "{e}"
         );
-        assert!(q.ends_with(" now? [y/N] "), "{q}");
+        let e = ask_identity(&st, true, || Err(Error("link".into())), none, none)
+            .unwrap_err()
+            .0;
+        assert!(
+            e.contains("link") && !e.contains("restart was not seen"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn an_image_without_the_runtime_is_confirmed_by_the_stock_identity() {
+        let ping = |name: &str| {
+            let mut p = vec![1, 1];
+            p.extend(name.bytes());
+            p.push(0);
+            p
+        };
+        let mut st = prepared(false);
+        st.device = "st".into();
+        assert!(!st.leaves_runtime(), "no image id: no runtime");
+        let mut link = Pinged(Some(ping("Syntakt")), vec![]);
+        let name = ping_name(&mut link, Duration::from_secs(1))
+            .unwrap()
+            .unwrap();
+        assert_eq!(name, "Syntakt");
+        assert!(check_identity(&st, &name).is_ok());
+        assert!(check_identity(&st, "Digitakt II").is_err(), "another model");
+        // silence is not a name
+        let mut quiet = Pinged(None, vec![]);
+        assert_eq!(
+            ping_name(&mut quiet, Duration::from_millis(50)).unwrap(),
+            None
+        );
+        // a patch with the runtime keeps the INFO check; a restore never asks
+        let mut rt = prepared(false);
+        rt.image_id = Some([1; 8]);
+        assert!(rt.leaves_runtime());
+        let mut restore = prepared(true);
+        restore.image_id = None;
+        assert!(!restore.leaves_runtime());
     }
 }

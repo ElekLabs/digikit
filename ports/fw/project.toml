@@ -1,0 +1,209 @@
+# project: the project object, kits, tracks, serialisation
+# Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
+
+[[fn]]
+name = "cf.project.fn.active_kit"
+was = ["cf.project.fn.kit_of", "dkrt.fw.kit_of"]
+cpu = "cf"
+sig = "u32 (u32 project)"
+rule.dt2 = { kind = "cf_func", hash = "f29fb6421b637b6883ebb6d384a09179", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "f29fb6421b637b6883ebb6d384a09179", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "de47aaff47908a835e74157ca842c122", offset = 0x0, len = 4, mark = "O" }
+mark = "D"
+users = ["core/runtime"]
+doc = "`Kit *f(Project *)`: the active kit of a project. core/runtime uses it with the project singleton and track_type to watch each track's machine type."
+
+[[fn]]
+name = "cf.project.fn.settings"
+cpu = "cf"
+sig = "u32 (u32 project)"
+rule.dt2 = { kind = "cf_func", hash = "0b9b326582c946a5c61e402ed2d03bc4", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "0b9b326582c946a5c61e402ed2d03bc4", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "0b9b326582c946a5c61e402ed2d03bc4", ordinal = 0, offset = 0x0, len = 4, mark = "O" }
+mark = "D"
+users = ["core/runtime"]
+doc = "`ProjectSettings *f(Project *)`: project + 0x30. Pass it to `cf.page.fn.view_track` to get the selected track."
+
+[[fn]]
+name = "cf.project.fn.serialize"
+was = ["dkrt.fw.project_serialize"]
+cpu = "cf"
+sig = "i32 ()"
+rule = { kind = "cf_func", hash = "eeb589cf009de58dead8a8e15bbf8998", offset = 0x0, len = 2 }
+mark = "D"
+users = ["core/runtime"]
+doc = "The firmware's \"serialize the live project into the persistent arena\" (FUN_40030c9c on DT2, FUN_4002c694 on DN2: `int f(void)`, returns 1). The same hash on all four images."
+
+# The firmware's own per-track machine type, read through three accessors (the debug log's machine-change watch; they are the functions the hot-reload
+# runtime used for "is this machine in use", tag digikit-hot-reload-v1): the Project singleton `Project *f(void)` (DT2 1.16 0x401988a2, DN2 1.11
+# 0x4018a97a), the active kit of a project `Kit *f(Project *)`, and the machine type of a track of a kit `int f(Kit *, int track)` (-1: no such track).
+# The kit and track functions have the same hash on both devices' versions; the Project getters differ per image.
+[[fn]]
+name = "cf.project.fn.singleton"
+was = ["cf.project.fn.get", "dkrt.fw.project"]
+cpu = "cf"
+sig = "u32 ()"
+rule.dt2 = { kind = "cf_func", hash = "ec70a039cd46fc8071a7e84112decfb1", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "e722721313b9899418dac1e1d039205c", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "54deb7456141c1db15b19223126a2f54", offset = 0x0, len = 4, mark = "O" }
+mark = "D"
+users = ["core/runtime"]
+doc = "The Project singleton getter `Project *f(void)`; its code differs per image. core/runtime reads it for the machine-change watch."
+
+[[fn]]
+name = "cf.project.fn.track_type"
+was = ["dkrt.fw.track_type"]
+cpu = "cf"
+sig = "i32 (u32 kit, i32 track)"
+rule.dt2 = { kind = "cf_func", hash = "9a76292be32cf9c7a8fd2e7c031c41d9", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "7f68bc71629aaed41f2ffa075e03c222", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "f7397b41ff55f42ea0c66bf04fcf25cd", offset = 0x0, len = 4, mark = "O" }
+mark = "D"
+users = ["core/runtime"]
+doc = "`int f(Kit *, int track)`: the machine type of a track of a kit, -1 when the track does not exist. core/runtime uses it for the machine-change watch."
+
+[[fn]]
+name = "cf.project.fn.transport_state"
+cpu = "cf"
+sig = "u32 ()"
+rule = { kind = "cf_func", hash = "abf06de823684dac9b8ac6a8a12a81eb", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. Finding 147."
+
+# ---- The project service (docs/design/digikit-project.md section 3, docs/findings/110-project-identity.md sections 4 and 5): five hooks on the stock project paths, each only records what
+# happened (`core/services/project`, `hooks.s`); the service acts in its tick. The setter, the save, the clear callbacks and the paste are the same functions on both devices by strict hash.
+
+[[fn]]
+name = "cf.project.fn.mmcfs"
+cpu = "cf"
+sig = "u32 ()"
+rule.dt2 = { kind = "cf_func", hash = "9075f0f4f2508449aee9897308864051", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "05c29994601b095f387f9406eb748abb", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/services/project"]
+doc = "`MmcFs *f(void)`: the card file system singleton (the getter of `std::_Sp_counted_ptr<MmcFs*>`; DT2 1.17 0x4019dbda, DN2 1.12 0x4018e0a8, DN2 1.11 0x4018ddc8; the code differs per image, the hash is unique on each). The firmware's listing of the 129 slots is in it [V]: the record of slot s is at +0x10 + s * 0x1c (slot 0x80 is the live mirror): byte 0 is nonzero when the slot exists (the name, header byte 8, is not empty; the firmware's own accessors test only this byte), byte 1 is 1 for a `DT1P` or `DN1P` header and 0 for the in-memory format magic 0xBEEFBACE, the u32 at +4 is a record format word [D] (5 on a cleared project), the 16 name bytes at +8 (no terminator is written), the u32 at +0x18 is the save stamp (header +0x18). The listing refresh `(MmcFs *, slot)` (DT2 0x4012f2fa, DN2 0x4012dbce) fills it and takes a mutex at +0x1e030 (DN2) or +0x1e034 (DT2) at entry. A header that cannot be read leaves the name \"ERROR\" with bytes 0 and 1 zero [D], unless the static header buffer still holds a valid magic. The project service reads name and stamp there. Not found on Syntakt."
+
+[[site]]
+name = "cf.project.site.slot_set"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "d9416ff018bbb9f13907fd7e9487f36e", offset = 0x0, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "d9416ff018bbb9f13907fd7e9487f36e", offset = 0x0, len = 6 }
+rule.st = { kind = "cf_func", hash = "d9416ff018bbb9f13907fd7e9487f36e", offset = 0x0, len = 6, mark = "O" }
+mark = "V"
+users = ["core/services/project"]
+doc = "DT2 0x400c11ca, DN2 0x400bb7fa: the entry of the project slot setter `void set(int slot)` (slot at 4(SP); -1 is no project; writes the slot byte only on a change): `mvs.b (slot byte).l,D1` (6 bytes, a plain copy)."
+
+[[value]]
+name = "cf.project.value.slot_byte"
+cpu = "cf"
+codegen = false
+rule = { kind = "cf_literal", hash = "d9416ff018bbb9f13907fd7e9487f36e", offset = 0x2, len = 4 }
+mark = "D"
+users = ["core/services/project"]
+doc = "The slot byte of the stock project (one byte, sign-extended by the stock reads; -1 is no project): the absolute operand of the setter's first instruction `mvs.b (slot byte).l,D1` (the literal at the setter's entry + 2). The address is checked against image bytes [V] on DT2 1.17 (0x4099d5c5), DN2 1.12 (0x405ce899) and DN2 1.11 (0x405cd899), Syntakt [O]. The setter writes it with a 1-byte copy only on a change. It lies at +0x3d of a 0x100-byte record (DT2 0x4099d588) that is persisted to flash and read back whole at boot, so it holds the last persisted slot, read before the stock project load [D]; init writes 0, and the project-container decode calls the setter with -1 when no project data exists. The project service reads it once at its start (`firmware_slot` in `dks/src/glue.rs`, named in `[object.externs]` of its `module.toml`; `codegen = false` keeps the shared dkfw crate, and so the runtime object, unchanged)."
+
+[[hook]]
+name = "cf.project.hook.slot_set"
+site = "cf.project.site.slot_set"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = ["d1", "ccr"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "task"
+users = ["core/services/project"]
+doc = "Records the slot the setter was called with (also a call with the current slot: the setter ignores it, so the service does) and runs the displaced `mvs.b` in the tail. D1 and the flags are written by that instruction first."
+
+[[site]]
+name = "cf.project.site.save_exit"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "cdc5ea1e1c6063ed56a6dcf32a4e67a4", offset = 0xee, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "cdc5ea1e1c6063ed56a6dcf32a4e67a4", offset = 0xee, len = 8 }
+rule.st = { kind = "cf_func", hash = "cdc5ea1e1c6063ed56a6dcf32a4e67a4", offset = 0xee, len = 8, mark = "O" }
+mark = "V"
+users = ["core/services/project"]
+doc = "DT2 0x40043b1e, DN2 0x4004027e: the one exit of the stock project save `int save(Project *, int slot, progress)` (the only rts is the next instruction): `movem.l (SP),D2-D4/A2-A6; lea 0x34(SP),SP` (8 bytes, a plain copy). D0.b is nonzero when the card write succeeded and D3 is the slot (0x80 on the mirror save)."
+
+[[hook]]
+name = "cf.project.hook.save_exit"
+site = "cf.project.site.save_exit"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = ["d0", "d3"], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "task"
+users = ["core/services/project"]
+doc = "Before the rts of the save: when D0.b is nonzero and D3 is not 0x80 it records the slot D3. Strict liveness leaves every register and the flags live at the return, so the routine saves D1 and the flags and keeps D0 and D3."
+
+[[site]]
+name = "cf.project.site.clear_one_exit"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "98f2a56b7e645a2636ddcefb2ebf0b73", offset = 0x4a, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "98f2a56b7e645a2636ddcefb2ebf0b73", offset = 0x4a, len = 6 }
+rule.st = { kind = "cf_func", hash = "98f2a56b7e645a2636ddcefb2ebf0b73", offset = 0x4a, len = 6, mark = "O" }
+mark = "V"
+users = ["core/services/project"]
+doc = "DT2 0x400a1368, DN2 1.12 0x4009b4de (function DT2 0x400a131e, DN2 0x4009b494, + 0x4a): the exit of the job callback of the stock clear of one project (`bool f(Job **)`, run on the BgWorker thread: slot = **arg, then the slot record is reset, written to the card and the listing refreshed, all inside the job): `movem.l 0x1c(SP),D2/A2/A3` (6 bytes, a plain copy); `lea 0x38(SP),SP; moveq 1,D0; rts` follow. SP is the entry SP - 0x38, so the job is at 0x3c(SP); D2 still holds the slot. The function always returns 1. Checked against image bytes [V]."
+
+[[hook]]
+name = "cf.project.hook.clear_one_exit"
+site = "cf.project.site.clear_one_exit"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "V"
+context = "task"
+users = ["core/services/project"]
+doc = "At the exit of the clear callback, after the card write and the listing refresh: records the slot **(0x3c(SP)) as cleared, always (a failed clear then archives a `.dkp` that is still needed, which is recoverable). The routine saves D0, D1, D2, A0, A1 and the flags (strict liveness proves only A0 dead)."
+
+[[site]]
+name = "cf.project.site.clear_many_exit"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "eda04f2e77064222a73b84f4a05aa1ca", offset = 0x70, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "eda04f2e77064222a73b84f4a05aa1ca", offset = 0x70, len = 8 }
+rule.st = { kind = "cf_func", hash = "eda04f2e77064222a73b84f4a05aa1ca", offset = 0x70, len = 8, mark = "O" }
+mark = "V"
+users = ["core/services/project"]
+doc = "DT2 0x400a13e6, DN2 1.12 0x4009b55c (function DT2 0x400a1376, DN2 0x4009b4ec, + 0x70): the exit of the job callback of the stock clear of several projects (`bool f(Job **)`, run on the BgWorker thread, finishes its writes and refresh inside the job: **arg is a vector of 32-bit slots, begin at +0 and end at +4): `movem.l (SP),D2-D5/A2-A6; lea 0x34(SP),SP` (8 bytes, a plain copy); the rts follows. The job is at 0x38(SP); D0.b is the AND of the per-slot results. Checked against image bytes [V]."
+
+[[hook]]
+name = "cf.project.hook.clear_many_exit"
+site = "cf.project.site.clear_many_exit"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "V"
+context = "task"
+users = ["core/services/project"]
+doc = "At the exit of the multi-slot clear callback: re-reads the vector from the job and records each slot as cleared, always (at most 129 entries are read). The routine saves D0, D1, D2, A0, A1 and the flags."
+
+[[site]]
+name = "cf.project.site.paste_exit"
+cpu = "cf"
+rule.dt2 = { kind = "cf_call", hash = "74201c46da5dc856daae9e5957420079", call = 0x16, offset = 0x11c, len = 8 }
+rule.dn2 = { kind = "cf_call", hash = "74201c46da5dc856daae9e5957420079", call = 0x16, offset = 0x11c, len = 8 }
+rule.st = { kind = "cf_call", hash = "74201c46da5dc856daae9e5957420079", call = 0x16, offset = 0x11c, len = 8, mark = "O" }
+mark = "V"
+users = ["core/services/project"]
+doc = "DT2 0x400f55aa, DN2 1.12 0x400f6f86, DN2 1.11 0x400f6dba (function DT2 0x400f548e, DN2 0x400f6e6a, DN2 1.11 0x400f6c9e, + 0x11c): the one exit of the stock project paste `bool paste(ProjectCache *, int slot, bool)` (it runs on the BgWorker thread: it copies the clipboard's project over the slot record, stamp and name included, writes the card and refreshes the listing, all inside the job): `movem.l -0x38(A6),D2-D6/A2; unlk A6` (8 bytes, a plain copy; the rts follows). D0.b is nonzero when the copy reached the card write (the write's own result, `FUN_400f5150`, is discarded and not returned), D6 and 12(A6) the destination slot, A6 the frame. The function is found as the target of the `jsr` at +0x16 of the paste job callback (DT2 0x400a12f8, DN2 0x4009b46e, one strict hash on both), because the function's own strict hash differs between the devices (the project size is an immediate); `offset` is added to that target. Checked against image bytes [V]; bytes equal on all three images."
+
+[[hook]]
+name = "cf.project.hook.paste_exit"
+site = "cf.project.site.paste_exit"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = ["d0", "d6"], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "V"
+context = "task"
+users = ["core/services/project"]
+doc = "Before the rts of the paste: when D0.b is nonzero it records the destination slot D6 as pasted over (a paste that did not reach the card write records nothing). The routine saves D1, A0, A1 and the flags and keeps D0 and D6."

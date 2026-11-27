@@ -12,13 +12,14 @@ description = "Coupled ColdFire + SHARC+ run loop shared by the desktop app and 
 name = "digi_coupled"
 
 [features]
-# Local-only DN2 coupling: generated DSP code must never be distributed.
-coupled-audio = ["elektron-native-boot/sharc", "elektron-native-boot/play", "dep:sharc-fast-cl", "dep:sharc-native"]
-# A second generated core (SHARC_GEN_DIR_2) next to the first: the firmware's device picks the core
-# (src/dsp_core.rs). Implies coupled-audio.
-second-core = ["coupled-audio", "elektron-native-boot/second-core", "dep:sharc-native-2", "dep:sharc-fast-cl-2"]
-# Enable this with coupled-audio; it forwards only to the optional native core.
+# Local-only SHARC+ coupling: generated DSP code must never be distributed.
+sharc = ["sharc-peer/host", "dep:sharc-native"]
+# Playback through the default output device (cpal).
+play = ["elektron-native-boot/play"]
+# Enable this with `sharc`; it forwards to the optional native cores.
 region-profile = ["sharc-native?/region-profile"]
+# Run-time switchable ColdFire profile (off until `set_cf_profile(true)`); compiled in to measure the cost of the disabled branches.
+cf-profile = ["elektron-native-boot/cf-profile"]
 # Exact ColdFire instruction mix per PC (boot/src/cfmix.rs); DIGI_CF_MIX_OUT=DIR makes coupled-run write it.
 cf-mix = ["elektron-native-boot/cf-mix"]
 # SHARC_FAST_DUMP kernel and call capture (--diag dump); the hooks are absent otherwise.
@@ -28,14 +29,13 @@ fast-dump = ["sharc-native?/fast-dump"]
 device-profile = { path = "../device-profile" }
 elektron-native-boot = { path = "../boot" }
 emmc-card = { path = "../card" }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-sharc-fast-cl = { path = "../sharc-fast-cl", optional = true }
+sharc-peer = { path = "../sharc-peer" }
 sharc-native = { path = "../sharc", optional = true }
-sharc-native-2 = { path = "../sharc-2", optional = true }
-sharc-fast-cl-2 = { path = "../sharc-fast-cl-2", optional = true }
 
 [[bin]]
 name = "coupled-run"
 path = "src/bin/coupled_run.rs"
-required-features = ["coupled-audio"]
+required-features = ["sharc"]

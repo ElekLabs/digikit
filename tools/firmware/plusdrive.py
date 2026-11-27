@@ -408,6 +408,8 @@ def build_superblock():
     struct.pack_into(">I", buf, 0x28, 0x20)
     struct.pack_into(">I", buf, 0x2C, 0x5EE980)
     struct.pack_into(">I", buf, 0x30, 0x5EF480)
+    # "checked" word: the firmware sets it to 1 after a successful filesystem check, so the boot skips the check.
+    struct.pack_into(">I", buf, 0x34, 1)
     checksum = hashlittle(bytes(buf[:SUPERBLOCK_HASH_LEN]), SUPERBLOCK_HASH_SEED)
     struct.pack_into(">I", buf, SUPERBLOCK_CHECKSUM_OFFSET, checksum)
     return bytes(buf)

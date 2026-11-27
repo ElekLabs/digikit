@@ -76,11 +76,24 @@ impl Firmware {
         self.sections.iter().find(|s| s.id == id)
     }
 
-    /// Replace the decoded bytes of a section; its stored form is repacked.
+    /// The MAIN OS section (`[container] main` of the device).
+    pub fn main(&self) -> Option<&Sec> {
+        self.section(self.device.main_section())
+    }
+
+    /// The SHARC+ boot stream section (`[container] dsp`); `None` on a device without a DSP, whatever its other sections hold.
+    pub fn dsp(&self) -> Option<&Sec> {
+        self.section(self.device.dsp_section()?)
+    }
+
+    /// Replace the decoded bytes of a section; its stored form is repacked. A section of `[container] readonly` (bootstrap,
+    /// updater, boot data, FPGA bitstream, the second CPU's image) is refused: this is the one place a section is changed.
     pub fn replace(&mut self, id: u32, data: Vec<u8>) -> Result<()> {
-        if matches!(id, 2 | 4 | 8) {
+        if self.device.is_readonly(id) {
             return Err(err!(
-                "section {id} (bootstrap, updater, boot data) is never changed"
+                "section {id} is read-only on {} ([container] readonly {:?}) and is never changed",
+                self.device.short(),
+                self.device.readonly_sections()
             ));
         }
         let stored = syx::store_for_section(id, &data)?;
@@ -95,15 +108,54 @@ impl Firmware {
         Ok(())
     }
 
-    /// The container (sealed) and the full `.syx`.
-    pub fn build(&self, max_container: Option<usize>) -> Result<Vec<u8>> {
+    /// Replace the decoded bytes of the MAIN section and give its stored stream, made for the bootstrap's in-place unpack (`aplib::pack_section_in_place`).
+    pub fn replace_main_stored(&mut self, data: Vec<u8>, stored: Vec<u8>) -> Result<()> {
+        let id = self.device.main_section();
+        let s = self
+            .sections
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| err!("the image has no section {id}"))?;
+        s.data = data;
+        s.stored = stored;
+        s.changed = true;
+        Ok(())
+    }
+
+    /// Store a read-only section packed. Its decoded bytes do not change, so the second CPU gets the stock bytes once the module that declared the
+    /// repack has unpacked them. Only a section of `[container] repack` is accepted. Returns the new stored length.
+    pub fn repack(&mut self, id: u32) -> Result<usize> {
+        if !self.device.is_repackable(id) {
+            return Err(err!(
+                "section {id} of {} cannot be stored packed ([container] repack {:?} names the sections that can)",
+                self.device.short(),
+                self.device.repack_roles()
+            ));
+        }
+        let s = self
+            .sections
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| err!("the image has no section {id}"))?;
+        s.stored = crate::aplib::pack_section(&s.data);
+        s.changed = true;
+        Ok(s.stored.len())
+    }
+
+    /// The sealed container of the sections as they are stored now.
+    pub fn container(&self) -> Result<Vec<u8>> {
         let entries: Vec<(u32, u32, &[u8])> = self
             .sections
             .iter()
             .map(|s| (s.id, s.dest, s.stored.as_slice()))
             .collect();
-        let c = syx::build_container(&self.header, &entries, self.first_offset)?;
-        let c = syx::seal(c, self.device);
+        let c = syx::build_container(&self.header, &entries, self.first_offset, self.device)?;
+        Ok(syx::seal(c, self.device))
+    }
+
+    /// The container (sealed) and the full `.syx`.
+    pub fn build(&self, max_container: Option<usize>) -> Result<Vec<u8>> {
+        let c = self.container()?;
         if let Some(max) = max_container
             && c.len() > max
         {

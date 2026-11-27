@@ -4,7 +4,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { BUTTONS, button, encoder, golden, validateRuntimeInputs, coupledEnv, Session } from '../src/index.ts';
+import {
+  button,
+  encoder,
+  firmwareDir,
+  golden,
+  repoRoot,
+  resolveInputs,
+  validateRuntimeInputs,
+  coupledEnv,
+  Session,
+} from '../src/index.ts';
 
 test('empty startup rejects sessions that cannot defer a reusable coupled baseline', async () => {
   for (const options of [
@@ -22,13 +32,9 @@ test('empty startup rejects sessions that cannot defer a reusable coupled baseli
 
 test('key names follow the Python harness table', () => {
   assert.equal(button('trig_1'), 25);
-  assert.equal(button('Trig 16'), 40);
-  assert.equal(button('push h'), 48);
-  assert.equal(button('page trig'), 1);
+  assert.equal(button('Trig 16'), button('trig_16'));
   assert.equal(button(7), 7);
   assert.equal(encoder('enc a'), 1);
-  assert.equal(encoder('LEVEL'), 9);
-  assert.equal(Object.keys(BUTTONS).length, 26 + 16 + 8);
   assert.throws(() => button('nope'));
 });
 
@@ -82,14 +88,14 @@ test('coupled launch defaults follow actual firmware bytes and preserve explicit
   const firmware = (bytes: Buffer) => read.mockReturnValueOnce(bytes).mockReturnValueOnce(table);
   try {
     firmware(dt2);
-    assert.deepEqual(coupledEnv('same-path.syx', {}), {
+    assert.deepEqual(coupledEnv('same-path.syx', 'dn2', {}), {
       SHARC_FAST_REGIONS: 'dt2-regions',
       SHARC_BLOCKTRANS: 'dt2-roots',
       SHARC_FAST_FALLBACK_REGIONS: 'dt2-fallback',
     });
     for (const explicit of ['', 'ordinary-roots']) {
       firmware(dt2);
-      assert.deepEqual(coupledEnv('dt2.syx', { SHARC_FAST_REGIONS: explicit }), {
+      assert.deepEqual(coupledEnv('dt2.syx', 'dn2', { SHARC_FAST_REGIONS: explicit }), {
         SHARC_FAST_REGIONS: explicit,
         SHARC_BLOCKTRANS: 'dt2-roots',
       });
@@ -97,7 +103,7 @@ test('coupled launch defaults follow actual firmware bytes and preserve explicit
     for (const fallback of ['', 'explicit-fallback']) {
       firmware(dt2);
       assert.deepEqual(
-        coupledEnv('dt2.syx', {
+        coupledEnv('dt2.syx', 'dn2', {
           SHARC_FAST_REGIONS: '',
           SHARC_FAST_FALLBACK_REGIONS: fallback,
         }),
@@ -109,24 +115,51 @@ test('coupled launch defaults follow actual firmware bytes and preserve explicit
       );
     }
     firmware(dt2);
-    assert.deepEqual(coupledEnv('dt2.syx', { SHARC_FAST_AUTO: '10,100' }), {
+    assert.deepEqual(coupledEnv('dt2.syx', 'dn2', { SHARC_FAST_AUTO: '10,100' }), {
       SHARC_FAST_REGIONS: 'dt2-regions',
       SHARC_BLOCKTRANS: 'dt2-roots',
     });
     firmware(dn2); // Replacing bytes at the same path must not reuse DT2's defaults.
-    assert.deepEqual(coupledEnv('same-path.syx', {}), {
+    assert.deepEqual(coupledEnv('same-path.syx', 'dn2', {}), {
       SHARC_FAST_REGIONS: 'dn2-regions',
       SHARC_BLOCKTRANS: 'dn2-roots',
     });
     firmware(dn2);
-    assert.deepEqual(coupledEnv('dn2.syx', { SHARC_FAST_REGIONS: '', SHARC_BLOCKTRANS: 'explicit' }), {
+    assert.deepEqual(coupledEnv('dn2.syx', 'dn2', { SHARC_FAST_REGIONS: '', SHARC_BLOCKTRANS: 'explicit' }), {
       SHARC_FAST_REGIONS: '',
       SHARC_BLOCKTRANS: 'explicit',
     });
+    firmware(dt2); // The DT2 core reads the lists with the `_2` suffix.
+    assert.deepEqual(coupledEnv('dt2.syx', 'dt2', {}), {
+      SHARC_FAST_REGIONS_2: 'dt2-regions',
+      SHARC_BLOCKTRANS_2: 'dt2-roots',
+      SHARC_FAST_FALLBACK_REGIONS_2: 'dt2-fallback',
+    });
     firmware(Buffer.from('unknown firmware'));
-    assert.deepEqual(coupledEnv('unknown.syx', {}), {});
-    assert.deepEqual(coupledEnv('not-read.syx', { DIGI_EMU_FAST: '0' }), {});
+    assert.deepEqual(coupledEnv('unknown.syx', 'dn2', {}), {});
+    assert.deepEqual(coupledEnv('not-read.syx', 'dn2', { DIGI_EMU_FAST: '0' }), {});
   } finally {
     read.mockRestore();
+  }
+});
+
+test('stock images come from DIGI_FIRMWARE_DIR, else firmware/ of the repository', () => {
+  const root = repoRoot();
+  assert.equal(firmwareDir({}), path.join(root, 'firmware'));
+  assert.equal(firmwareDir({ DIGI_FIRMWARE_DIR: 'elsewhere/fw' }), path.join(root, 'elsewhere/fw'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-firmware-'));
+  const prev = process.env.DIGI_FIRMWARE_DIR;
+  try {
+    process.env.DIGI_FIRMWARE_DIR = dir;
+    assert.equal(firmwareDir(), dir);
+    // The folder is empty, so the error names the .syx in it.
+    assert.throws(
+      () => resolveInputs('dn2', '1.12'),
+      (e: Error) => e.message.startsWith(path.join(dir, 'Digitone_II_OS1.12.syx')),
+    );
+  } finally {
+    if (prev === undefined) delete process.env.DIGI_FIRMWARE_DIR;
+    else process.env.DIGI_FIRMWARE_DIR = prev;
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

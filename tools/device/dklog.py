@@ -4,6 +4,7 @@
     uv run python -m tools.device.dklog --emu follow                        # the running emulator (out/native/run/current.json)
     uv run --with python-rtmidi python -m tools.device.dklog --port Digitakt follow
     uv run --with python-rtmidi python -m tools.device.dklog --port Digitakt crash
+    uv run python -m tools.device.dklog --emu crash --image out/patch/X.syx [--module M.dkm]...     # with function names
     uv run --with python-rtmidi python -m tools.device.dklog --port Digitakt peek 0x47e8b000 64
 
 `follow` polls LOG (the device sends nothing unless asked) and writes every new event to the terminal as a readable line and to a file
@@ -12,7 +13,10 @@ its own. `grep -v '^#' FILE` is a JSON-lines file. It notes a gap (events the ri
 (the sequence numbers start again). `--once` reads what is there and stops; Ctrl-C stops a follow.
 
 `crash` prints the last crash record the device found at its boot, decoded: the program counter, the vector, the registers, the stack, the
-module, and the events before the crash. A record of a stopped DSP (a hang record, version 2) is decoded the same way: the site, the machine type or the
+module, and the events before the crash. With `--image` (the patched .syx the device runs; `patchkit patch` wrote its `.addrmap.json` and
+`.plan.json` beside it) and `--module` (each .dkm loaded, with its `.addrmap.json`), the pc, the registers and the stack words that point into
+code carry names (docs/ADDRMAP.md); the load addresses of the modules are read from the runtime's module table by PEEK, so they are the
+addresses of the boot that reads the record. A record of a stopped DSP (a hang record, version 2) is decoded the same way: the site, the machine type or the
 effect row, the module, the core step and the module step. The last fault is also kept on the card as the settings key `dk/fault` (it survives power
 cycles); `crash` prints it too (`fault_value`). `peek ADDR LEN` hex-dumps RAM inside the ranges the device file lists (`[digikit] peek`).
 
@@ -43,6 +47,10 @@ from tools.device.dklog_kinds import (
     LEVELS,
     SOURCE_MASK,
     SOURCE_SHIFT,
+)
+from tools.devtools.addrnames import (
+    AddrNames,
+    AddrNamesError,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -76,7 +84,7 @@ CRUMB_STAGES = {
     21: "D_AFTER_L4_L5_STORES",
     22: "D_AFTER_MODE1_READ",
 }
-# The 32 words of dl_diag (modules/core/adapters/dsp-link/README.md), in order.
+# The 32 words of dl_diag (runtime/platform/dsp-link/README.md), in order.
 DIAG_NAMES = (
     "magic_count",
     "link_beat",
@@ -147,7 +155,7 @@ def crumb_text(w: int) -> str:
 
 
 # kind -> (name, argument names): `KINDS` and `GUARD_KINDS` come from sdk/sdk.toml (`dklog_kinds.py`). The argument words are as
-# `modules/core/runtime/src/rs/src` writes them; docs/findings/46-digikit-debug.md.
+# `runtime/core/src/rs/src` writes them; docs/findings/46-digikit-debug.md.
 K = {name: kid for kid, (name, _) in KINDS.items()}
 CARD_STATES = {
     0: "unknown",
@@ -163,6 +171,7 @@ REFUSAL = {
     2: "card read-only",
     3: "claim failed",
     4: "card too small",
+    5: "card driver not ready",
 }
 REGS = [f"d{i}" for i in range(8)] + [f"a{i}" for i in range(8)]
 VECTORS = {
@@ -177,6 +186,10 @@ VECTORS = {
     14: "format error",
 }
 EVENT_FLAG_ERROR = 1
+
+
+# what the module code was doing at a crash (`dlog::PHASE_*` of the runtime): the low half of the first argument of CRASH_MOD
+PHASES = {0: "outside module code", 1: "init", 2: "tick", 3: "fini", 4: "a callback"}
 
 
 def ascii_of(*words: int) -> str:
@@ -211,7 +224,7 @@ def fields_of(kind: int, a: tuple[int, ...]) -> dict[str, Any]:
         else:
             f = {
                 "module": None if a[0] == 0xFFFFFFFF else a[0],
-                "slots_entered": a[1] & 0xFFFF,
+                "phase": a[1] & 0xFFFF,
                 "boot_was_stable": bool(a[1] >> 16),
                 "name": ascii_of(a[2], a[3], a[4]),
             }
@@ -559,7 +572,7 @@ def crash_record(
                 rec["module"] = {
                     "index": None if a[0] == 0xFFFFFFFF else a[0],
                     "name": ascii_of(a[2], a[3], a[4]),
-                    "slots_entered": a[1] & 0xFFFF,
+                    "phase": a[1] & 0xFFFF,
                     "boot_was_stable": bool(a[1] >> 16),
                 }
         elif kind == K["CRASH_REG"]:
@@ -760,7 +773,7 @@ def panic_record(
     return rec
 
 
-def crash_text(rec: dict[str, Any]) -> str:
+def crash_text(rec: dict[str, Any], names: AddrNames | None = None) -> str:
     if rec.get("corrupt"):
         return f"a crash record was found at the boot (event {rec['seq']}) but it failed its CRC"
     m = rec["module"]
@@ -775,6 +788,8 @@ def crash_text(rec: dict[str, Any]) -> str:
             f"  vector {rec['vector']} ({rec['vector_name']}), format {rec['format']}, sr {rec['sr']:04x}",
             f"  pc {rec['pc']:08x}   a7 {rec['a7']:08x}",
         ]
+        if names is not None:
+            lines.append(f"  in {names.text(rec['pc'])}")
     if m is not None:
         where = (
             f"module {m['name']!r} (index {m['index']})"
@@ -782,7 +797,7 @@ def crash_text(rec: dict[str, Any]) -> str:
             else f"outside any module, {m['name']!r}"
         )
         lines.append(
-            f"  in {where}; slots entered mask {m['slots_entered']:#x}; the boot had {'already' if m['boot_was_stable'] else 'not yet'} reached its stable period"
+            f"  in {where}; during {PHASES.get(m['phase'], 'phase ' + str(m['phase']))}; the boot had {'already' if m['boot_was_stable'] else 'not yet'} reached its stable period"
         )
     if rec["regs"]:
         for i in range(0, 16, 4):
@@ -790,6 +805,11 @@ def crash_text(rec: dict[str, Any]) -> str:
                 "  "
                 + "  ".join(f"{r} {rec['regs'].get(r, 0):08x}" for r in REGS[i : i + 4])
             )
+        if names is not None:
+            for r in REGS[8:]:
+                n = names.name(rec["regs"].get(r, 0))
+                if n:
+                    lines.append(f"    {r} points into {n}")
     if rec["stack"]:
         words = [rec["stack"].get(i, 0) for i in range(max(rec["stack"]) + 1)]
         lines.append("  stack from a7:")
@@ -797,6 +817,18 @@ def crash_text(rec: dict[str, Any]) -> str:
             lines.append(
                 f"    +{4 * i:03x}  " + " ".join(f"{w:08x}" for w in words[i : i + 8])
             )
+        if names is not None:
+            # a stack word that names code is probably a return address: the call is the instruction before it
+            seen = [
+                (4 * i, w, names.name(w, ret=True))
+                for i, w in enumerate(words)
+                if w & 1 == 0 and w >> 28 == 4
+            ]
+            seen = [(o, w, n) for o, w, n in seen if n]
+            if seen:
+                lines.append("  stack words that point into code (return addresses?):")
+                for o, w, n in seen:
+                    lines.append(f"    +{o:03x}  {w:08x}  {n}")
     if rec["tail"]:
         lines.append("  events before the crash (oldest first):")
         for seq, t, kind, flags, a in rec["tail"]:
@@ -816,6 +848,19 @@ def hexdump(addr: int, data: bytes) -> str:
         asc = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
         lines.append(f"{addr + i:08x}  {hexs:<47s}  {asc}")
     return "\n".join(lines)
+
+
+def names_for_crash(
+    up: D.Uploader, image: Path, modules: list[Path]
+) -> AddrNames | None:
+    """The names of a running device: the image's address map, the modules' maps and the load table read from the runtime's module table."""
+    try:
+        return AddrNames.for_image(
+            image, modules, peek=lambda a, n: peek_range(up, a, n)
+        )
+    except (AddrNamesError, OSError, KeyError, D.UploadError, TimeoutError) as e:
+        print(f"no names: {e}", file=sys.stderr)
+        return None
 
 
 def peek_range(up: D.Uploader, addr: int, length: int) -> bytes:
@@ -903,7 +948,19 @@ def main(argv: list[str] | None = None) -> int:
         "--module",
         help="show only this module's events (its name from MOD_LIST, or its record index)",
     )
-    sub.add_parser("crash")
+    p = sub.add_parser("crash")
+    p.add_argument(
+        "--image",
+        type=Path,
+        help="the patched .syx the device runs: names for code addresses",
+    )
+    p.add_argument(
+        "--module",
+        type=Path,
+        action="append",
+        default=[],
+        help="a .dkm loaded on the device (with its .addrmap.json); repeatable",
+    )
     p = sub.add_parser("level", help="show or set the log levels")
     p.add_argument(
         "level",
@@ -961,18 +1018,23 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "crash":
             has_log = D.has_cap(up.info(), "LOG")
             evs = read_all(up)[2] if has_log else []
+            addr_names = (
+                names_for_crash(up, args.image, args.module)
+                if args.image and D.has_cap(up.info(), "PEEK")
+                else None
+            )
             rec = crash_record(evs)
             hang = hang_record(evs)
             panic = panic_record(evs)
             if panic and panic["seq"] > max(
                 rec.get("seq", 0) if rec else 0, hang["seq"] if hang else 0
             ):
-                print(crash_text(panic))
+                print(crash_text(panic, addr_names))
             elif hang and (not rec or hang["seq"] > rec.get("seq", 0)):
                 print(hang_text(hang))
             else:
                 print(
-                    crash_text(rec)
+                    crash_text(rec, addr_names)
                     if rec
                     else "no crash record in the log (the last boot did not follow a crash, or the ring has overwritten it)"
                     if has_log

@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cloneFile, type Device } from '@digi/test-support';
-import { cardStore, expansionRegion, uploadStore } from './device-data.ts';
+import { writeIdFile } from './card-cache.ts';
+import { cardStore, deviceProfile, expansionRegion, kitAreas, uploadStore } from './device-data.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
 /** Write-watch and card-overlay safety of the runtime proofs. */
@@ -12,9 +14,6 @@ const SECTOR = 512;
 const RECORD = 8 + 64 + SECTOR;
 // Sectors of one settings copy (tools/device/dkproto.py SETTINGS_SECTORS).
 const SETTINGS_SECTORS = 16;
-// Kit-library sector ranges of the firmware (hi exclusive), allowed by the fx-kit and fx-routes policies.
-export const KIT_AREAS: Record<Device, [number, number][]> = { dt2: [[0x16000, 0x17000]], dn2: [[0x2000, 0x2100]] };
-
 export type SafetyPolicy = 'default' | 'fx-kit' | 'fx-routes';
 
 export function* overlayRecords(blob: Buffer) {
@@ -75,12 +74,21 @@ function overlayOf(file: string): Records {
   return hit.records;
 }
 
+const blobs = new WeakMap<Buffer, Records>();
+
+/** The records of an overlay blob by sector, parsed once for each blob: a reader asks for one sector at a time (`slotImage` asks for thousands). */
+function blobRecords(blob: Buffer): Records {
+  let records = blobs.get(blob);
+  if (!records) {
+    records = new Map(Array.from(overlayRecords(blob), (r) => [r.sector, r]));
+    blobs.set(blob, records);
+  }
+  return records;
+}
+
 /** The sectors FIRST on of the card the guest sees: BUF holds the image bytes, the `overlay.bin` next to it and then the optional EXTRA overlay blob go over them. */
 export function layOver(buf: Buffer, first: number, card: string, extra?: Buffer): void {
-  const records = [
-    overlayOf(overlayFile(card)),
-    new Map(Array.from(overlayRecords(extra ?? Buffer.alloc(0)), (r) => [r.sector, r])),
-  ];
+  const records = [overlayOf(overlayFile(card)), extra ? blobRecords(extra) : new Map()];
   for (let n = 0; n * SECTOR < buf.length; n++)
     for (const map of records) {
       const r = map.get(first + n);
@@ -145,6 +153,18 @@ export function linkCard(base: string, dir: string, overlay: Buffer): string {
     cloneFile(base, card);
   }
   fs.writeFileSync(overlayFile(card), overlay);
+  // The content id of the new card (`card.key`, which the daemon puts in its snapshot key): the id of the base and the sha256 of the
+  // writes, so equal content in another directory finds the snapshot and other writes never share one. A base with no id gives none.
+  const id = path.join(dir, 'card.key');
+  const baseId = path.join(path.dirname(base), 'card.key');
+  fs.rmSync(id, { force: true });
+  if (fs.existsSync(baseId)) {
+    const text = createHash('sha256')
+      .update(`${fs.readFileSync(baseId, 'utf8').trim()}\0${createHash('sha256').update(overlay).digest('hex')}`)
+      .digest('hex')
+      .slice(0, 32);
+    writeIdFile(id, text);
+  }
   return card;
 }
 
@@ -170,11 +190,14 @@ export function dmaHoles(plan: RuntimePlan): [number, number][] {
     if (start !== undefined) holes.push([start, size]);
     return start !== undefined;
   };
-  if (!hole('DKRT_STAGE', 64 * 1024)) throw new Error('no symbol core/runtime:DKRT_STAGE');
+  const stageBytes = deviceProfile(plan.base.device as Device).limits.stage_bytes;
+  if (stageBytes === undefined) throw new Error(`no limits.stage_bytes in the ${plan.base.device} profile`);
+  if (!hole('DKRT_STAGE', stageBytes)) throw new Error('no symbol core/runtime:DKRT_STAGE');
   hole('DKRT_SECBUF', 512);
   hole('DKRT_UPLOAD_BUF', 36896);
   hole('DKRT_SDK_BUF', 17408); // the SDK file calls' table streams (card reads land by DMA)
   hole('DKRT_IO_TASK', 16496); // the I/O task's stack, TCB and semaphore (the kernel writes them)
+  hole('DKRT_AUX_TASK', 4208); // the helper task's stack, TCB and semaphores (the kernel writes them)
   hole('DKRT_STORE_PEEK', 512);
   hole('DKRT_STORE_FP', 512);
   const pdw = ownedSymbol(plan, 'core/plusdrive-write', 'DKPW_DMA'); // the +Drive adapter's buffers that the firmware's file code writes
@@ -206,14 +229,18 @@ export function runtimeWatchEnv(planFile: string, out: string): Record<string, s
   };
 }
 
-function runtimePolicy(device: Device, name: SafetyPolicy) {
+/**
+ * The settings copies (both) are written by the services of the card that keep settings: the fx routes (policy `fx-routes`) and
+ * the machines service (sticky type map, key `machines.types`, flushed on the first boot that loads a machine on a fresh card).
+ */
+function runtimePolicy(device: Device, name: SafetyPolicy, cardServices: readonly string[]) {
   if (name !== 'default' && name !== 'fx-kit' && name !== 'fx-routes')
     throw new Error(`unknown runtime safety policy: ${String(name)}`);
   const store = cardStore(device);
   return {
     name,
-    firmware_areas: name === 'default' ? [] : KIT_AREAS[device],
-    store_extra: name === 'fx-routes' ? [store.setA, store.setB] : [],
+    firmware_areas: name === 'default' ? [] : kitAreas(device),
+    store_extra: name === 'fx-routes' || cardServices.includes('machines') ? [store.setA, store.setB] : [],
   };
 }
 
@@ -239,13 +266,15 @@ export function runtimeSafety(
   device: Device,
   output: string,
   overlays: string[],
-  minEmulators = 1,
-  policy: SafetyPolicy = 'default',
-  storeExtra: readonly number[] = [],
+  minEmulators: number,
+  policy: SafetyPolicy,
+  storeExtra: readonly number[],
+  /** Names of the service files on the card (`neededServices`): a settings writer widens the policy. */
+  cardServices: readonly string[],
 ) {
   if (minEmulators < 1 || !overlays.length)
     throw new Error('runtime safety needs observed emulators and exported overlays');
-  const facts = runtimePolicy(device, policy);
+  const facts = runtimePolicy(device, policy, cardServices);
   facts.store_extra = [...new Set([...facts.store_extra, ...storeExtra])];
   const { dir, name: stem } = path.parse(output);
   const indexed = (suffix: string) => {

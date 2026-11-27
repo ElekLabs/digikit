@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { Device } from '@digi/test-support';
 import { cardStore, uploadStore } from '../runtime/device-data.ts';
-import { KIT_AREAS, overlayWrites, runtimeSafety, type SafetyPolicy } from '../runtime/write-safety.ts';
+import { kitAreas } from '../runtime/device-data.ts';
+import { encodeOverlay, layOver, overlayWrites, runtimeSafety, type SafetyPolicy } from '../runtime/write-safety.ts';
 
 const directories: string[] = [];
 afterEach(() => {
@@ -33,18 +34,34 @@ function run(sectors: number[], count = 1, summary: object = { events: 0, flush_
   return { output: path.join(dir, 'writewatch.jsonl'), overlay };
 }
 
-const check = (device: Device, sectors: number[], policy: SafetyPolicy = 'default', storeExtra: number[] = []) => {
+const safety = (
+  device: Device,
+  output: string,
+  overlays: string[],
+  min = 1,
+  policy: SafetyPolicy = 'default',
+  storeExtra: number[] = [],
+  cardServices: string[] = [],
+) => runtimeSafety(device, output, overlays, min, policy, storeExtra, cardServices);
+
+const check = (
+  device: Device,
+  sectors: number[],
+  policy: SafetyPolicy = 'default',
+  storeExtra: number[] = [],
+  cardServices: string[] = [],
+) => {
   const { output, overlay } = run(sectors);
-  return runtimeSafety(device, output, [overlay], 1, policy, storeExtra);
+  return safety(device, output, [overlay], 1, policy, storeExtra, cardServices);
 };
 
 describe.each(['dt2', 'dn2'] as const)('runtime safety on %s', (device) => {
   const store = cardStore(device);
-  const [kitLo, kitHi] = KIT_AREAS[device][0]!;
+  const [kitLo, kitHi] = kitAreas(device)[0]!;
 
   test('passes with clean logs and allowed sectors', () => {
     const { output, overlay } = run([store.selA, store.selB, 0x58000], 2);
-    const report = runtimeSafety(device, output, [overlay], 2);
+    const report = safety(device, output, [overlay], 2);
     expect(report).toMatchObject({ pass: true, emulators: 2, cpushl: 2, write_events: 0, flush_hits: 0 });
   });
 
@@ -53,12 +70,12 @@ describe.each(['dt2', 'dn2'] as const)('runtime safety on %s', (device) => {
     ['flush hits', { events: 0, flush_hits: [{ line: 16 }], cpushl: 0 }],
   ])('fails on %s', (_name, summary) => {
     const { output, overlay } = run([], 1, summary);
-    expect(runtimeSafety(device, output, [overlay]).pass).toBe(false);
+    expect(safety(device, output, [overlay]).pass).toBe(false);
   });
 
   test('fails when fewer emulators than the minimum left a summary', () => {
     const { output, overlay } = run([], 1);
-    expect(() => runtimeSafety(device, output, [overlay], 2)).toThrow('missing or incomplete');
+    expect(() => safety(device, output, [overlay], 2)).toThrow('missing or incomplete');
   });
 
   test('default policy allows no kit area and no store sector', () => {
@@ -91,6 +108,17 @@ describe.each(['dt2', 'dn2'] as const)('runtime safety on %s', (device) => {
     }
   });
 
+  test('a card with the machines service allows the settings copies, and nothing else in the store', () => {
+    const withMachines = (sectors: number[], policy: SafetyPolicy = 'fx-kit') =>
+      check(device, sectors, policy, [], ['machines']);
+    expect(withMachines([kitLo, store.setA, store.setB]).pass).toBe(true);
+    expect(withMachines([store.setA], 'default').pass).toBe(true);
+    for (const sector of [kitLo - 1, kitHi, store.first, store.setA + 1, store.setB + 1, 7]) {
+      expect(withMachines([sector]).pass, `sector ${sector}`).toBe(false);
+    }
+    expect(check(device, [store.setA], 'fx-kit', [], ['fx']).pass).toBe(false);
+  });
+
   test('outsideStore lists only sectors below the firmware project area', () => {
     // The store lies above the firmware's project area, so only a write below that area is outside both.
     const { firmwareFirst } = uploadStore(device);
@@ -107,6 +135,23 @@ describe.each(['dt2', 'dn2'] as const)('runtime safety on %s', (device) => {
 test('a torn overlay is refused', () => {
   const { output, overlay } = run([]);
   fs.writeFileSync(overlay, 'torn');
-  expect(() => runtimeSafety('dt2', output, [overlay])).toThrow('not a multiple');
+  expect(() => safety('dt2', output, [overlay])).toThrow('not a multiple');
   expect(() => overlayWrites(overlay, 'dt2')).toThrow('not a multiple');
+});
+
+describe('layOver', () => {
+  test('a reader that asks for sectors one by one parses the overlay blob once, not for each sector', () => {
+    const records = 50;
+    const blob = encodeOverlay(
+      new Map(Array.from({ length: records }, (_, i) => [i, Buffer.alloc(512, i + 1)] as const)),
+    );
+    const card = path.join(os.tmpdir(), 'digi-lay-over-no-such-card.img');
+    const reads = vi.spyOn(blob, 'readBigUInt64LE');
+    for (let sector = 0; sector < 4 * records; sector += 1) {
+      const buf = Buffer.alloc(512);
+      layOver(buf, sector, card, blob);
+      expect(buf[0], `sector ${sector} carries its blob data`).toBe(sector < records ? sector + 1 : 0);
+    }
+    expect(reads, 'one sector number read per record, for the whole run').toHaveBeenCalledTimes(records);
+  });
 });

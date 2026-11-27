@@ -1,0 +1,70 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "digikit/debug",
+  "implicitDependencies": ["core/services/machines", "core/services/fx", "dkrt-svc-machines", "dkrt-svc-fx"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/parameter-observer.device.test.ts"],
+        "devices": ["dt2"],
+        "modules": ["digikit/debug"]
+      },
+      {
+        "files": ["tests/view-observer.device.test.ts"],
+        "modules": ["digikit/debug"]
+      },
+      {
+        "files": ["tests/profile-trace.device.test.ts"],
+        "dsp": "sharc",
+        "modules": ["digikit/debug"]
+      },
+      {
+        "files": [
+          "tests/debug-module.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "digikit/probe",
+          "digikit/remote",
+          "test/dyn-dn2",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/probe",
+            "reason": "loaded as a module that logs in its init; the probe itself is not exercised"
+          },
+          {
+            "module": "digikit/remote",
+            "reason": "loaded as a module that registers early; the remote module itself is not exercised"
+          }
+        ]
+      },
+      {
+        "files": [
+          "tests/debug-dsp-stats.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "digikit/debug",
+          "test/sine",
+          "test/dyn-fx-gain",
+          "core/services/machines",
+          "core/services/fx"
+        ]
+      },
+      {
+        "files": [
+          "tests/setup.device.test.ts"
+        ],
+        "modules": [
+          "digikit/debug"
+        ]
+      }
+    ],
+    "mergeTests": ["tests/debug-dsp-stats.device.test.ts", "tests/setup.device.test.ts"]
+  }
+}

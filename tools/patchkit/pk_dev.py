@@ -29,6 +29,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
 from tools import python_env  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 from tools.patchkit import modroots, patchkit  # noqa: E402
 from tools.patchkit import pk_harness as h  # noqa: E402
 
@@ -146,7 +147,7 @@ class Dev:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--modules", required=True, help="a,b (module ids)")
-    ap.add_argument("--device", default="dt2", choices=("dt2", "dn2"))
+    ap.add_argument("--device", default="dt2", choices=device_files.shorts())
     ap.add_argument("--firmware", help="default: 1.17 (dt2), 1.12 (dn2)")
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--no-tests", action="store_true")

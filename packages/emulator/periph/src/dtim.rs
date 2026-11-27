@@ -9,7 +9,8 @@
 //! 0x03  DTERn    8  R/W  event, write-1-to-clear (bit 1 REF, bit 0 CAP)
 //! 0x04  DTRRn   32  R/W  reference value
 //! 0x08  DTCRn   32  R/W  capture (not modelled: unexercised)
-//! 0x0C  DTCNn   32  R    free-running counter (not modelled: unexercised)
+//! 0x0C  DTCNn   32  R    free-running counter (not modelled here; `machine::Board::enable_dtcn_channels`
+//!                        serves it as a bus-clock count for the channels a device enables)
 //! ```
 //!
 //! DTMRn bits: 15-8 PS (prescaler, divides by PS+1), 7-6 CE, 5 OM, 4 ORRI,
@@ -531,6 +532,7 @@ impl DtimBank {
 
     /// Restore scheduling and representable bookkeeping state. Register
     /// pages are intentionally loaded by the board's separate MMIO path.
+    #[allow(clippy::too_many_arguments)]
     pub fn load_checkpoint_state(
         &mut self,
         next: &[Option<f64>; 4],

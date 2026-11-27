@@ -1,0 +1,8 @@
+{
+  "machines": [],
+  "module": "test/sharc-probe",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}

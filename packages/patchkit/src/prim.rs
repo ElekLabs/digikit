@@ -125,7 +125,153 @@ pub fn validate_manifest(m: &Manifest) -> Result<()> {
                     ));
                 }
             }
+            "stub" => {
+                let hook = op.hook.as_deref();
+                let slot = op.slot.as_deref();
+                let (Some(_), Some(slot)) = (hook, slot) else {
+                    return Err(err!("{id}: stub needs hook and slot"));
+                };
+                match op.scratch.as_deref() {
+                    Some(r) => {
+                        parse_scratch(r).map_err(|e| err!("{id}: stub {slot}: {e}"))?;
+                    }
+                    None => {
+                        return Err(err!(
+                            "{id}: stub {slot} needs scratch (a register the hook's regs.clobbers lists)"
+                        ));
+                    }
+                }
+                if let Some(t) = &op.tail {
+                    expr::parse(t).map_err(|e| err!("{id}: stub {slot}: tail: {e}"))?;
+                }
+                match op.when.as_deref() {
+                    None | Some("taken" | "fallthrough") => {}
+                    Some(w) => {
+                        return Err(err!(
+                            "{id}: stub {slot}: when is `taken` or `fallthrough`, not {w:?}"
+                        ));
+                    }
+                }
+                if op.when.is_some() && op.tail.is_some() {
+                    return Err(err!(
+                        "{id}: stub {slot}: `when` lays out the stock path itself, so it takes no `tail`"
+                    ));
+                }
+                let set = [
+                    ("to", op.to.is_some()),
+                    ("anchor", !op.anchor.is_empty()),
+                    ("anchors", op.anchors.is_some()),
+                    ("offset", op.offset != 0),
+                    ("displaced", op.displaced.is_some()),
+                    ("cpu", op.cpu.is_some()),
+                    ("value", op.value.is_some()),
+                    ("hex", op.hex.is_some()),
+                    ("width", op.width.is_some()),
+                ];
+                if let Some((field, _)) = set.iter().find(|(_, s)| *s) {
+                    return Err(err!(
+                        "{id}: a stub op names its hook and slot; {field} is not allowed"
+                    ));
+                }
+                // the slot is declared on every device the stub is active on
+                for d in crate::devdata::all() {
+                    if on(&op.devices, &d.short)
+                        && !m
+                            .slot
+                            .iter()
+                            .any(|s| on(&s.devices, &d.short) && s.name == slot)
+                    {
+                        return Err(err!(
+                            "{id}: stub uses slot {slot}, which is not declared with [[slot]] for {}",
+                            d.short
+                        ));
+                    }
+                }
+            }
             o => return Err(err!("{id}: unknown op {o}")),
+        }
+        if op.op != "stub" {
+            for (field, set) in [
+                ("slot", op.slot.is_some()),
+                ("scratch", op.scratch.is_some()),
+                ("tail", op.tail.is_some()),
+                ("when", op.when.is_some()),
+            ] {
+                if set {
+                    return Err(err!(
+                        "{id}: {field} belongs to op = \"stub\", not {}",
+                        op.op
+                    ));
+                }
+            }
+        }
+    }
+    for (i, sl) in m.slot.iter().enumerate() {
+        check_devices(id, &format!("slot {}", sl.name), &sl.devices)?;
+        if !ident_ok(&sl.name) {
+            return Err(err!("{id}: slot name {:?} is not [a-z][a-z0-9_]*", sl.name));
+        }
+        match sl.space.as_deref() {
+            None | Some("cf") => {}
+            Some("dsp") => {
+                if sl.place.is_some() {
+                    return Err(err!(
+                        "{id}: slot {}: `place` belongs to a ColdFire slot, a DSP slot has no word in the module",
+                        sl.name
+                    ));
+                }
+                if !crate::sdkgen::dsp_slot_names().contains(&sl.name) {
+                    return Err(err!(
+                        "{id}: slot {}: space \"dsp\" names an entry of `[dsp.slots]` in sdk/sdk.toml ({})",
+                        sl.name,
+                        crate::sdkgen::dsp_slot_names().join(", ")
+                    ));
+                }
+            }
+            Some(s) => {
+                return Err(err!(
+                    "{id}: slot {}: space {s:?} is not \"cf\" or \"dsp\"",
+                    sl.name
+                ));
+            }
+        }
+        for o in &m.slot[..i] {
+            let clash = crate::devdata::all()
+                .iter()
+                .any(|d| on(&sl.devices, &d.short) && on(&o.devices, &d.short));
+            if o.name == sl.name && clash {
+                return Err(err!("{id}: slot {} is declared twice", sl.name));
+            }
+        }
+    }
+    for d in crate::devdata::all() {
+        let n = m.slot.iter().filter(|s| on(&s.devices, &d.short)).count();
+        if n > dkneeds::SLOTS_MAX as usize {
+            return Err(err!(
+                "{id}: {n} [[slot]] entries for {}, over the {} of `[limits.format] slots_max`",
+                d.short,
+                dkneeds::SLOTS_MAX
+            ));
+        }
+    }
+    for (i, inf) in m.info.iter().enumerate() {
+        check_devices(id, &format!("info {}", inf.name), &inf.devices)?;
+        if !ident_ok(&inf.name) {
+            return Err(err!(
+                "{id}: info name {:?} is not [a-z][a-z0-9_]*",
+                inf.name
+            ));
+        }
+        if let Some(t) = &inf.symbol {
+            expr::parse(t).map_err(|e| err!("{id}: info {}: symbol: {e}", inf.name))?;
+        }
+        for o in &m.info[..i] {
+            let clash = crate::devdata::all()
+                .iter()
+                .any(|d| on(&inf.devices, &d.short) && on(&o.devices, &d.short));
+            if o.name == inf.name && clash {
+                return Err(err!("{id}: info {} is declared twice", inf.name));
+            }
         }
     }
     for s in &m.section {
@@ -440,6 +586,22 @@ pub fn collect<'a>(lib: &'a Library, order: &[String], dev: &str) -> Result<Acti
         r.live = r.entries.len();
     }
     for r in &act.regs {
+        if let Some(why) = &r.def.refuse_entries
+            && let Some(e) = r.entries.iter().find(|e| {
+                !r.def
+                    .refuse_entries_except
+                    .iter()
+                    .any(|x| x == e.owner.id())
+            })
+        {
+            return Err(err!(
+                "{}: registry {} takes no patch-time entry ({why}); {} adds `{}`",
+                r.owner.id(),
+                r.def.name,
+                e.owner.id(),
+                e.def.id
+            ));
+        }
         if r.entries.len() > r.def.max as usize {
             return Err(err!(
                 "registry {} is full: {} entries, at most {}",
@@ -560,6 +722,7 @@ impl<'a> Active<'a> {
                 registry: r.def.name.clone(),
                 id: "(gap)".into(),
                 devices: vec![],
+                count: None,
                 fields: r.def.gap.clone().unwrap_or_default(),
             };
             let mut it = placed.into_iter().peekable();
@@ -702,6 +865,9 @@ pub struct PlanHook {
     pub ret: u64,
     /// displaced instructions (ColdFire) with their original and re-encoded bytes
     pub displaced_insns: Vec<String>,
+    /// `op = "stub"`: the slot the stub at `to` loads
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<String>,
 }
 
 /// The values of one entry's fields (and `index`), as evaluated.
@@ -970,6 +1136,229 @@ pub fn cf_tail(s: &CfSite, base: u64, ret: u64) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+// ---- pointer-slot stubs --------------------------------------------------------------------------------------
+
+/// Bytes of the stub prefix (load the slot, test it, branch to the handler); the stock path follows.
+pub const STUB_PREFIX_LEN: usize = 12;
+
+/// "DKIT": the first word of the image's info table (`dkrt_abi::platform::INFO_MAGIC`; the runtime reads the table with `info_find`).
+pub const INFO_TABLE_MAGIC: u32 = 0x444b_4954;
+
+/// A scratch register: 0..=7 `d0`..`d7`, 8..=14 `a0`..`a6`. `a7` is the stack pointer and is refused.
+pub fn parse_scratch(r: &str) -> Result<u8> {
+    let b = r.as_bytes();
+    if b.len() == 2 && b[1].is_ascii_digit() {
+        let n = b[1] - b'0';
+        match (b[0], n) {
+            (b'd', 0..=7) => return Ok(n),
+            (b'a', 0..=6) => return Ok(8 + n),
+            _ => {}
+        }
+    }
+    Err(err!("scratch {r:?} is not d0..d7 or a0..a6"))
+}
+
+/// The registers (0..=7 `d`, 8..=15 `a`) an effective address names.
+fn ea_regs(ea: &coldfire::Ea) -> Vec<u8> {
+    use coldfire::Ea;
+    match *ea {
+        Ea::Dn(n) => vec![n],
+        Ea::An(n) | Ea::Ind(n) | Ea::Post(n) | Ea::Pre(n) | Ea::Disp(n, _) => vec![8 + n],
+        Ea::Idx { an, xn, .. } => vec![8 + an, xn],
+        Ea::PcIdx { xn, .. } => vec![xn],
+        _ => vec![],
+    }
+}
+
+/// The first displaced instruction that reads `reg` before an instruction overwrites it. The stub clobbers `reg`, so a stock path that
+/// reads it would run on the slot address. Only a plain write (`move`, `movea`, `moveq`, `lea`, `clr`, `mvs`, `mvz` into `reg`) ends the
+/// search; a byte or word write leaves the upper bits of `reg` unchanged, which the hook's clobber list has to cover.
+pub fn scratch_read_by(insns: &[DispInsn], reg: u8) -> Option<&DispInsn> {
+    use coldfire::{Form, Operand};
+    for d in insns {
+        let ops = d.insn.operands();
+        let ops: Vec<&Operand> = ops.iter().filter(|o| !matches!(o, Operand::None)).collect();
+        let write_only = matches!(
+            d.insn.form,
+            Form::Move | Form::Movea | Form::Moveq | Form::Lea | Form::Clr | Form::Mvs | Form::Mvz
+        );
+        let dest_is_reg = |o: &Operand| {
+            matches!(o, Operand::Ea(coldfire::Ea::Dn(n)) if *n == reg)
+                || matches!(o, Operand::Ea(coldfire::Ea::An(n)) if 8 + *n == reg)
+        };
+        let last = ops.len().saturating_sub(1);
+        let mut written = false;
+        for (i, o) in ops.iter().enumerate() {
+            let mentions = match o {
+                Operand::Ea(ea) => ea_regs(ea).contains(&reg),
+                Operand::MacReg { r, .. } => *r == reg,
+                Operand::RegList(m) => *m & (1 << reg) != 0,
+                _ => false,
+            };
+            if !mentions {
+                continue;
+            }
+            if write_only && i == last && dest_is_reg(o) {
+                written = true;
+            } else {
+                return Some(d);
+            }
+        }
+        if written {
+            return None;
+        }
+    }
+    None
+}
+
+/// The parts of a site that `when` can lay out: the bytes of the instructions before the last one, the condition code of the last one (a short or long `Bcc`, not `bra` or
+/// `bsr`) and its target. The instructions before the branch must not branch themselves.
+fn guarded_parts(s: &CfSite) -> Result<(usize, u8, u32)> {
+    use coldfire::{Form, Operand};
+    let Some((last, pre)) = s.insns.split_last() else {
+        return Err(err!("the site has no instruction"));
+    };
+    if pre.is_empty() || !matches!(last.insn.form, Form::Bcc) {
+        return Err(err!(
+            "`when` needs a site of instructions that set the flags and end in a conditional branch (the site at {:#x} ends in {})",
+            s.addr,
+            last.insn
+        ));
+    }
+    if let Some(d) = pre
+        .iter()
+        .find(|d| matches!(d.insn.form, Form::Bra | Form::Bsr | Form::Bcc))
+    {
+        return Err(err!(
+            "`when`: the instruction at {:#x} ({}) before the final branch branches itself",
+            d.addr,
+            d.insn
+        ));
+    }
+    let cc = last.raw[0] & 0x0f;
+    let target = last.insn.operands().iter().find_map(|o| match o {
+        Operand::Target(t) => Some(*t),
+        _ => None,
+    });
+    match (cc, target) {
+        (2..=15, Some(t)) => {
+            let mut n = 0;
+            for d in pre {
+                n += relocate_insn(d, 0)?.len();
+            }
+            Ok((n, cc, t as u32))
+        }
+        _ => Err(err!(
+            "`when`: the final branch at {:#x} ({}) is not a conditional branch with a target",
+            last.addr,
+            last.insn
+        )),
+    }
+}
+
+/// Bytes of a `when` stub: the instructions before the branch, the 2-byte branch around the slot test, the 12-byte slot test and two `jmp.l`.
+pub fn guarded_stub_len(s: &CfSite) -> Result<usize> {
+    Ok(guarded_parts(s)?.0 + 2 + STUB_PREFIX_LEN + 2 * CF_JMP_LEN)
+}
+
+/// The stub of `op = "stub"` with `when`, at `base`. The displaced instructions before the final branch run as they did; the stock branch then decides:
+///
+/// - `taken_only` (the slot is tested where the stock branch is taken): `b<not cc>.b L; <slot test>; jmp.l <target>; L: jmp.l ret`;
+/// - otherwise (the slot is tested where it falls through): `b<cc>.b L; <slot test>; jmp.l ret; L: jmp.l <target>`.
+///
+/// The slot test overwrites `scratch` and the flags only on the path that tests the slot; the other outcome leaves them as the stock code would.
+pub fn cf_guarded_stub(
+    s: &CfSite,
+    base: u64,
+    ret: u64,
+    scratch: u8,
+    slot_addr: u32,
+    taken_only: bool,
+) -> Result<Vec<u8>> {
+    let (_, cc, target) = guarded_parts(s)?;
+    let mut out: Vec<u8> = vec![];
+    for d in &s.insns[..s.insns.len() - 1] {
+        out.extend(relocate_insn(d, base + out.len() as u64)?);
+    }
+    // the branch around the slot test and its `jmp.l` skips 12 + 6 bytes
+    let skip = (STUB_PREFIX_LEN + CF_JMP_LEN) as u16;
+    let cond = if taken_only { cc ^ 1 } else { cc };
+    out.extend_from_slice(&(0x6000 | (cond as u16) << 8 | skip).to_be_bytes());
+    out.extend(stub_prefix(scratch, slot_addr));
+    let (first, second) = if taken_only {
+        (target as u64, ret)
+    } else {
+        (ret, target as u64)
+    };
+    for to in [first, second] {
+        out.extend_from_slice(&CF_JMP_L.to_be_bytes());
+        out.extend_from_slice(&(to as u32).to_be_bytes());
+    }
+    Ok(out)
+}
+
+/// The stub prefix: load the slot word into `scratch`, run the handler when it is not zero, else fall through to the stock path.
+///
+/// Address register: `movea.l slot,aN; tst.l aN; beq.b +2; jmp (aN)`. Data register (flags come from the move): `move.l slot,dN; beq.b +4;
+/// move.l dN,-(sp); rts`. Both are 12 bytes and enter the handler with `scratch` = its address; the handler must not rely on `scratch`.
+pub fn stub_prefix(scratch: u8, slot_addr: u32) -> Vec<u8> {
+    let mut b: Vec<u16> = vec![];
+    if scratch < 8 {
+        b.push(0x2039 | (scratch as u16) << 9);
+    } else {
+        b.push(0x2079 | ((scratch - 8) as u16) << 9);
+    }
+    let mut out: Vec<u8> = vec![];
+    out.extend_from_slice(&b[0].to_be_bytes());
+    out.extend_from_slice(&slot_addr.to_be_bytes());
+    let rest: [u16; 3] = if scratch < 8 {
+        [0x6704, 0x2f00 | scratch as u16, 0x4e75]
+    } else {
+        let n = (scratch - 8) as u16;
+        [0x4a88 | n, 0x6702, 0x4ed0 | n]
+    };
+    for w in rest {
+        out.extend_from_slice(&w.to_be_bytes());
+    }
+    debug_assert_eq!(out.len(), STUB_PREFIX_LEN);
+    out
+}
+
+/// The kind of an info table entry: a data table (`[[info]]`).
+pub const INFO_KIND_DATA: u32 = 0;
+/// The kind of an info table entry: a pointer slot word (`[[slot]]`), a kind a service file's `SLOTS` item may fill.
+pub const INFO_KIND_SLOT: u32 = 1;
+/// The kind of an info table entry: a DSP slot (`[[slot]] space = "dsp"`). The value is the word index in core/dsp-link's slot block (window 0 of the link), not an address. A
+/// `SLOTS` item with the flag `dkneeds::keys::SLOT_DSP` fills it.
+pub const INFO_KIND_DSP_SLOT: u32 = 2;
+
+/// The image's one info table, `dkrt_info_table`: big endian `{magic "DKIT", count}`, then one `{name hash, address, kind}` per entry (`entries` in order: the
+/// `[[slot]]` and `[[info]]` entries of all image adapters; kind is [`INFO_KIND_SLOT`] or [`INFO_KIND_DATA`]). `dkrt_abi::platform::info_find` searches it.
+pub fn build_info_table(entries: &[(u32, u32, u32)]) -> Vec<u8> {
+    let mut out: Vec<u8> = vec![];
+    out.extend_from_slice(&INFO_TABLE_MAGIC.to_be_bytes());
+    out.extend_from_slice(&(entries.len() as u32).to_be_bytes());
+    for (hash, addr, kind) in entries {
+        out.extend_from_slice(&hash.to_be_bytes());
+        out.extend_from_slice(&addr.to_be_bytes());
+        out.extend_from_slice(&kind.to_be_bytes());
+    }
+    out
+}
+
+/// Size of the info table with `n` entries.
+pub fn info_table_len(n: usize) -> usize {
+    8 + 12 * n
+}
+
+/// The displaced instructions of a site as plan lines: address, bytes, instruction.
+pub fn fmt_displaced(site: &CfSite) -> Vec<String> {
+    site.insns
+        .iter()
+        .map(|d| format!("{:#010x}  {}  {}", d.addr, hex(&d.raw), d.insn))
+        .collect()
+}
+
 // ---- tests of the byte-level builders -----------------------------------------------------------------------
 
 #[cfg(test)]
@@ -1039,6 +1428,65 @@ mod tests {
         let s = site(&code, 0x4000_0000).unwrap();
         let e = cf_tail(&s, 0x47e8_c000, 0x4000_0008).unwrap_err();
         assert!(e.0.contains("refused"), "{e}");
+    }
+
+    #[test]
+    fn a_guarded_stub_keeps_the_stock_compare_and_tests_the_slot_on_one_outcome_only() {
+        // moveq #6,d7; cmp.l d3,d7; beq.b +0x28 (to 0x4000002e) at 0x40000000
+        let beq = [0x7e, 0x06, 0xbe, 0x83, 0x67, 0x28];
+        let s = site(&beq, 0x4000_0000).unwrap();
+        let slot = 0x47e8_b000;
+        // `taken`: the slot is tested where the stock beq jumps: bne.b around it, the slot test, jmp.l target, jmp.l ret
+        let t = cf_guarded_stub(&s, 0x47e8_c000, 0x4000_0006, 0, slot, true).unwrap();
+        assert_eq!(t.len(), guarded_stub_len(&s).unwrap());
+        assert_eq!(
+            &t[..4],
+            &beq[..4],
+            "the moveq and the compare run first, as stock"
+        );
+        assert_eq!(
+            &t[4..6],
+            [0x66, 18],
+            "bne.b over the slot test and the jump after it"
+        );
+        assert_eq!(&t[6..18], stub_prefix(0, slot).as_slice());
+        assert_eq!(
+            &t[18..24],
+            [0x4e, 0xf9, 0x40, 0x00, 0x00, 0x2e],
+            "an empty slot: the stock target"
+        );
+        assert_eq!(
+            &t[24..],
+            [0x4e, 0xf9, 0x40, 0x00, 0x00, 0x06],
+            "the other outcome: the stock fall-through"
+        );
+        // `fallthrough` on a bne: the slot is tested where the stock bne does not jump
+        let bne = [0x74, 0x06, 0xb4, 0x83, 0x66, 0x2a];
+        let s = site(&bne, 0x4000_0000).unwrap();
+        let t = cf_guarded_stub(&s, 0x47e8_c000, 0x4000_0006, 2, slot, false).unwrap();
+        assert_eq!(&t[..4], &bne[..4]);
+        assert_eq!(
+            &t[4..6],
+            [0x66, 18],
+            "bne.b to the stock target, over the slot test"
+        );
+        assert_eq!(&t[6..18], stub_prefix(2, slot).as_slice());
+        assert_eq!(
+            &t[18..24],
+            [0x4e, 0xf9, 0x40, 0x00, 0x00, 0x06],
+            "an empty slot: the stock fall-through"
+        );
+        assert_eq!(
+            &t[24..],
+            [0x4e, 0xf9, 0x40, 0x00, 0x00, 0x30],
+            "the stock branch target"
+        );
+        // a site that does not end in a conditional branch, or has no instruction before it, is refused
+        let plain = [0x20, 0x3c, 0x00, 0x00, 0x00, 0x01, 0x4e, 0x75];
+        let e = guarded_stub_len(&site(&plain, 0x4000_0000).unwrap()).unwrap_err();
+        assert!(e.0.contains("conditional branch"), "{e}");
+        let alone = [0x66, 0x00, 0x00, 0x20, 0x4e, 0x71, 0x4e, 0x71, 0x4e, 0x71];
+        assert!(guarded_stub_len(&site(&alone, 0x4000_0000).unwrap()).is_err());
     }
 
     #[test]

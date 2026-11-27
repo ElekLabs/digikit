@@ -1,114 +1,118 @@
-// The desktop workbench's side of the Transfer pane (apps/web/src/transfer/env.ts): the library folder of built modules, the MIDI ports and
-// the emulator through the Tauri commands, the samples mode and the Card panel. Loaded first by main.tsx.
-import { invoke } from '@tauri-apps/api/core';
+// The desktop workbench's side of the Transfer pane (packages/workbench-core/src/transfer/env.ts): the library folder of built modules, the MIDI ports and
+// the emulator through the Host (host/host.ts), the samples mode and the card-folder strip of the Files page. main.tsx builds it with `createDesktopApps`.
 import { EmuBulkLink } from '@digi/dk-session';
-import { listingChanged } from '../../../web/src/transfer/refresh-core';
-import { setTransferEnv, type SamplesSlot, type TransferEnv } from '../../../web/src/transfer/env';
-import { MODULE_FILES } from '../../../web/src/transfer/module-files.generated';
-import { target, targetLabel, type Target } from '../../../web/src/transfer/target';
-import { sampleLink, setSampleLink } from '../../../web/src/transfer/transfer-state';
-import { failureLine } from '../../../web/src/transfer/wait-core';
-import './desktop-firmware';
+import { deviceNameOf, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
+import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
+import type { SamplesSlot, TransferEnv } from '@digi/workbench-core/transfer/env.ts';
+import type { Target } from '@digi/workbench-core/transfer/target.ts';
 import { bumpCardRefresh } from './card-state';
-import { reloadWithRuntime } from './emulator-actions';
-import { TauriBulkLink } from './bulk-link';
-import { EmuUsbTransport, emulatorMode, emuCall } from './desktop-transport';
-import { logInput } from './log-state';
+import { readSystemPackage } from './system-package';
+import { hostWasmSource } from './desktop-wasm';
+import { TauriBulkLink } from '@digi/workbench-core/host/bulk-link.ts';
+import { EmuUsbTransport, emulatorMode } from '@digi/workbench-core/host/emu-transport.ts';
+import type { LogWriter } from './log-state';
 import { transferEntry } from './log-core';
-import { closeMidiPort, listMidiPorts, MidiPortTransport, openMidiPort } from './midi-transport';
-import { deviceStorage, listLocalNow, readLocal, readSamples } from './samples-backend';
-import { samplesBar, uploadLines } from './samples-core';
-import {
-  localEntries,
-  localFolder,
-  setSampleEntries,
-  setSampleFolder,
-  setSampleTicks,
-  setUploads,
-  uploadBase,
-  uploadAverage,
-  uploadNotes,
-  uploads,
-} from './samples-state';
-import SamplesMode from './SamplesMode';
-
+import type { Host, LibBuildReport } from '@digi/workbench-core/host/host.ts';
+import { MidiPortTransport } from '@digi/workbench-core/host/midi-transport.ts';
 export const PAUSED =
   'The emulator is paused: nothing would run the transfer. Resume it (the Run button of the workbench), then try again.';
 
-const samples: SamplesSlot = {
-  Mode: SamplesMode,
-  async read() {
-    // the device and the folder fail apart: both are read, the errors are shown together
-    const errors: string[] = [];
-    for (const step of [readSamples, readLocal])
-      try {
-        await step();
-      } catch (e) {
-        errors.push(failureLine(e, targetLabel(target())));
-      }
-    if (errors.length) throw new Error(errors.join('\n'));
-  },
-  reset() {
-    setSampleEntries(undefined);
-    setSampleFolder('');
-    setSampleTicks(new Set<string>());
-    setUploads({});
-    setSampleLink(undefined);
-  },
-  bar(busy) {
-    const info = samplesBar(uploads(), uploadBase(), busy === 'Uploading', uploadAverage(), sampleLink());
-    return info ? { info, running: busy === 'Uploading' } : undefined;
-  },
-  lines: () => [...uploadNotes(), ...uploadLines(uploads(), uploadBase())],
-  async localChanged() {
-    if (!localFolder()) return false;
-    const now = await listLocalNow();
-    return !!now && listingChanged(localEntries(), now);
-  },
-};
+/** One entry per module that did not build, one for what changed; nothing when all is unchanged. */
+function logBuild(device: string, report: LibBuildReport, logInput: LogWriter['logInput']): void {
+  for (const f of report.failed)
+    logInput({
+      source: 'transfer',
+      level: 'error',
+      text: `module ${f.id} did not build for ${device}`,
+      detail: f.error,
+    });
+  const { changed, removed, ms } = report;
+  if (changed.length || removed.length) {
+    const detail = [...changed.map((id) => `packed ${id}`), ...removed.map((id) => `removed ${id}`)].join('\n');
+    logInput({
+      source: 'transfer',
+      level: 'info',
+      text: `${device} library: ${changed.length} packed new, ${removed.length} removed (${ms} ms)`,
+      detail,
+    });
+  }
+}
 
-const emulatorBulk = EmuBulkLink.opener(emuCall);
+/**
+ * The Transfer environment of the desktop app over `host`. `app` is the app that will own it (the bulk link uses its
+ * target and page state); it is a function because the app is built from the environment.
+ */
+export function createDesktopEnv(
+  host: Host,
+  app: () => TransferApp,
+  writer: LogWriter,
+  samples: SamplesSlot,
+  reloadWithRuntime: () => void,
+): TransferEnv {
+  const emulatorBulk = EmuBulkLink.opener((method, params) => host.rpc.call(method, params));
+  const builds = new Map<string, Promise<void>>();
+  /** Build and pack the device's run-time modules (`lib_build`) before the library is read; callers that ask together share one build. */
+  const buildLibrary = (device: string): Promise<void> => {
+    let run = builds.get(device);
+    if (!run) {
+      run = host.library
+        .build(device)
+        .then((report) => logBuild(device, report, writer.logInput))
+        .finally(() => builds.delete(device));
+      builds.set(device, run);
+    }
+    return run;
+  };
 
-export const desktopEnv: TransferEnv = {
-  library: {
-    scan: (device) => invoke<{ path: string; size: number }[]>('lib_scan', { device }),
-    read: async (device, path) => new Uint8Array(await invoke<ArrayBuffer>('lib_read', { device, path })),
-  },
-  moduleFiles: (id) => MODULE_FILES[id],
-  patchkitWasm: () => invoke<ArrayBuffer>('patchkit_wasm'),
-  deviceName: async (device) => (await deviceStorage(device)).name,
-  // the Emulator target has its own bulk link (the daemon's usb.bulk.in/out), so the pill and the transfers there follow the same path as a device
-  bulk: {
-    candidates: () => (target().kind === 'emulator' ? emulatorBulk.candidates() : TauriBulkLink.candidates()),
-    open: (id) => (id === 'emulator' ? emulatorBulk.open(id) : TauriBulkLink.open(id)),
-  },
-  targets: {
-    emulator: true,
-    inHeader: true,
-    ports: listMidiPorts,
-    async open(t: Target) {
-      if (t.kind === 'emulator') return new EmuUsbTransport();
-      if (t.kind === 'none') throw new Error('No MIDI port.');
-      await openMidiPort(t.port);
-      return new MidiPortTransport();
+  const env: TransferEnv = {
+    libraryDevices: [...runtimeDeviceIds],
+    library: {
+      scan: async (device) => {
+        await buildLibrary(device);
+        return host.library.scan(device);
+      },
+      read: async (device, path) => new Uint8Array(await host.library.read(device, path)),
     },
-    async close(t: Target) {
-      if (t.kind === 'midi') await closeMidiPort();
+    wasm: hostWasmSource(host),
+    deviceName: async (device) => deviceNameOf(device),
+    // the Emulator target has its own bulk link (the daemon's usb.bulk.in/out), so the pill and the transfers there follow the same path as a device
+    bulk: {
+      candidates: () =>
+        app().target.target().kind === 'emulator'
+          ? emulatorBulk.candidates()
+          : TauriBulkLink.candidates(host.ports.bulk),
+      open: (id) => (id === 'emulator' ? emulatorBulk.open(id) : TauriBulkLink.open(host.ports.bulk, id)),
+      // the OUT-only interface of a real device (USB AUDIO/MIDI mode); the Emulator target has none here
+      outOnlyCandidates: () =>
+        app().target.target().kind === 'emulator'
+          ? Promise.resolve([])
+          : TauriBulkLink.outOnlyCandidates(host.ports.bulk),
+      openOutOnly: (id, poll) => TauriBulkLink.openOutOnly(host.ports.bulk, id, poll),
     },
-    async preflight(t: Target) {
-      if (t.kind === 'emulator' && (await emulatorMode()) === 'paused') throw new Error(PAUSED);
+    targets: {
+      emulator: true,
+      inHeader: true,
+      ports: () => host.ports.midi.ports(),
+      async open(t: Target) {
+        if (t.kind === 'emulator') return new EmuUsbTransport(host.rpc);
+        if (t.kind === 'none') throw new Error('No MIDI port.');
+        return MidiPortTransport.open(host.ports.midi, t.port);
+      },
+      async preflight(t: Target) {
+        if (t.kind === 'emulator' && (await emulatorMode(host.rpc)) === 'paused') throw new Error(PAUSED);
+      },
     },
-  },
-  logRun: (run) => logInput(transferEntry(run)),
-  extras: {
-    samples,
-    reloadWithRuntime,
-    onJobEnd() {
-      // the Card panel reads the folder now and again after the emulator's quiet period (the folder follows the card about 2 s later)
-      bumpCardRefresh();
-      window.setTimeout(bumpCardRefresh, 2500);
+    logRun: (run) => writer.logInput(transferEntry(run)),
+    extras: {
+      samples,
+      reloadWithRuntime,
+      systemPackage: host.firmware.systemPackage && (() => readSystemPackage(host.firmware)),
+      onJobEnd() {
+        // the card-folder strip reads the folder now and again after the emulator's quiet period (the folder follows the card about 2 s later)
+        bumpCardRefresh();
+        window.setTimeout(bumpCardRefresh, 2500);
+      },
     },
-  },
-};
-
-setTransferEnv(desktopEnv);
+  };
+  return env;
+}

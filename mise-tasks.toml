@@ -14,9 +14,14 @@ description = "Install the Python and web dependencies"
 
 [workbench]
 alias = "wb"
-depends = ["module:pack-all", "wasm:patchkit"]
+depends = ["workbench:inputs"]
 run = "uv run python -m tools.emulator.native_emu"
-description = "Build once and run the desktop emulator (DN2 and DT2 audio when both local input sets are ready; DIGI_EMU_SECOND_CORE=0 selects one core); the digikit runtime is patched into a stock firmware unless `-- --no-runtime` (the header checkbox Boot with digikit runtime decides for Open and Reload); `-- --build-only` builds without launching. The +Drive is plus_drive/<device>/ when it exists (`-- --plus-drive DIR` picks another folder, `--samples DIR` is the same option; the firmware's changes are exported back to the folder on exit, `-- --no-sync` turns that off)"
+description = "Build once and open the desktop app with DN2 and DT2 audio engines when both local input sets are ready. Set DIGI_EMU_SECOND_CORE=0 to select one device. `mise run workbench -- FILE.syx` opens that firmware at startup. Without a launch file, Auto-load firmware reopens the last opened file. Boot with runtime controls patching unless the command line specifies `--runtime` or `--no-runtime`. Pass `-- --build-only` to build without opening Workbench. The +Drive uses plus_drive/<device>/ when present. Pick a different folder with `--plus-drive DIR` or `--samples DIR`, and use `--no-sync` to skip exporting changes on exit."
+
+["workbench:inputs"]
+hide = true
+run = "pnpm nx:pilot run @digi/desktop:workbench-inputs --output-style=stream"
+description = "Build the desktop UI, Patchkit and transfer Wasm files, port files, production services (dist/modules/<device>/*.dks), and the system package (dist/syspkg/runtime/system.dksp). Nx restores unchanged outputs from cache."
 
 ["emu:serve"]
 run = "uv run python -m tools.emulator.native_emu --daemon"
@@ -32,9 +37,23 @@ description = "Build a device's ready snapshot from the .syx alone: mise run emu
 
 # --- web panel ---
 
-["ui:preview"]
+["wb:preview-assets"]
+hide = true
+depends = ["wasm:patchkit", "wasm:dkprof"]
+run = "node apps/web/scripts/gen-modules.mjs --workbench-preview"
+
+["wb:preview"]
+depends = ["wb:preview-assets"]
 run = "pnpm --filter @digi/desktop exec vite --config ui/preview/vite.config.ts"
-description = "Serve the desktop UI pages in a browser (http://127.0.0.1:5199/) over a fake device and a fake samples folder; the state is in the address (?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=3&mode=modules|samples&mkdir=0|1); screenshots: node tools/devtools/ui_shots.mjs"
+description = "Open the Workbench in a browser (http://127.0.0.1:5199/) with simulated devices and files; the state is in the address (?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=3&mode=modules|samples&mkdir=0|1); screenshots: node tools/devtools/ui_shots.mjs"
+
+["wb:preview:real"]
+depends = ["wasm:patchkit", "wasm:dkprof"]
+run = [
+  "node apps/web/scripts/gen-modules.mjs --workbench-preview --real-packs",
+  "pnpm --filter @digi/desktop exec vite --config ui/preview/vite.config.ts",
+]
+description = "Run the Workbench preview with executable content-module packs built by patchkit"
 
 [web]
 dir = "{{config_root}}/apps/web"
@@ -56,8 +75,12 @@ run = "node tools/nx/wasm.mjs"
 description = "Build only the browser emulator core (WASM); the coupled core goes through wasm-opt -O3 (--wasm-opt= turns it off)"
 
 ["wasm:patchkit"]
-run = "node tools/nx/wasm.mjs --patchkit-only"
-description = "Build only the small wasm modules: apps/web/public/patchkit.wasm (the patch tool; its `pk_needs` is the Transfer page's needs reader), dkupload.wasm and dksample.wasm (`mise run workbench` runs it first; cargo skips the work when nothing changed)"
+run = "pnpm nx:pilot run @digi/web:patchkit-wasm"
+description = "Build apps/web/public/patchkit.wasm (the patch tool; its `pk_needs` is the Transfer page's needs reader), dkupload.wasm and dksample.wasm through the cached Nx target (replayed when the inputs are unchanged)"
+
+["wasm:dkprof"]
+run = "node tools/nx/wasm.mjs --dkprof-only"
+description = "Build only apps/web/public/dkprof.wasm, the profile, address lookup and module analysis code that `wb` (tools/devtools/wb.mjs) loads for its profile, addrmap and module commands"
 
 ["wasm:dksample"]
 run = "node tools/nx/wasm.mjs --dksample-only"
@@ -77,16 +100,38 @@ description = "Build the dkmidi MIDI bridge (the workbench's MIDI port code on s
 
 ["dkbulk:build"]
 run = "cargo build -p dkbulk --release --offline --target-dir \"$(SHARC_GEN_DIR= uv run python -m tools.emulator.native_target dir)\""
-description = "Build the dkbulk USB bulk bridge and uploader (packages/dkbulk) into the nogen target dir, where tools/devtools/wb.mjs looks; `dkbulk list` shows the devices that offer the bulk interface"
+description = "Build the dkbulk USB bulk bridge and uploader (packages/dkbulk) into the nogen target dir, where tools/devtools/wb.mjs looks; `dkbulk list` shows the devices that offer the bulk interface; `dkbulk descriptors [ID]` checks the WinUSB descriptors of a device"
+
+["dkaudio:build"]
+run = "node tools/nx/rust-env.mjs -- cargo build -p dkaudio --release --locked --offline"
+description = "Build the Workbench USB audio capture bridge"
 
 ["wb:cli"]
-depends = ["dkmidi:build", "dkbulk:build"]
+env = { DIGI_WB_MISE = "1" }
 run = "node tools/devtools/wb.mjs"
-description = "Workbench actions from the command line through the workbench's own code: mise run wb:cli -- samples put FILE... --folder F [--bulk auto|off|force] | samples ls | store put LOCAL REMOTE | store ls [PREFIX] | store rm REMOTE | info | ports"
+description = "Workbench CLI: session inspect FOLDER | profile report FILE | module render ID --device ID --case GROUP/NAME --out DIR | audio compare A B --out DIR | audio reference prepare/prepare-project/inspect/inputs/run/compare | samples ls/put | store ls/put/rm | transfer install/restart/delete | info | ports"
+
+["wb:reference-card-inputs"]
+hide = true
+run = [
+  "pnpm nx:pilot run plusdrive-format:cli --output-style=stream",
+  "pnpm nx:pilot run core/runtime:package --output-style=stream",
+  "pnpm nx:pilot run-many -t pack -p digikit/debug,digikit/remote --output-style=stream",
+]
+description = "Prepare the card builder and runtime packs for an emulator reference project"
+
+["wb:device-inputs"]
+hide = true
+depends = ["dkmidi:build", "dkbulk:build", "services:pack"]
+description = "Prepare the MIDI and USB bridges and Transfer service packs for device-facing wb:cli commands"
 
 ["bootscreen"]
 run = "node packages/dkbs/cli/bootscreen.mjs"
 description = "Boot screen authoring without a device: mise run bootscreen (no arguments: gallery of the examples in a browser, --no-open skips the browser) | -- pack SRC.mjs | sheet SRC.mjs | dev SRC.mjs | put SRC.mjs [--port SUB] [--bin PATH] (pack, then send to the device)"
+
+["glyphs"]
+run = "node packages/dkglyph/cli/glyphs.mjs"
+description = "Glyph authoring without a device: mise run glyphs -- check [SET] (errors, warnings, coverage) | -- sheet [SET] [-o PNG] | -- json [SET] (built set as JSON) | -- dev [SET] [--no-open] [--port N] (live preview); SET defaults to sdk/glyphs/digikit"
 
 # --- scenarios (tests/scenarios/README.md) ---
 
@@ -123,11 +168,15 @@ description = "Cheap preflight only: affected lint, format, types, host tests an
 
 [test]
 run = "node tools/nx/gate.mjs --tier merge"
-description = "Default affected verification and merge gate against DIGI_GATE_BASE (default main); the Nx launcher sets a CPU budget from the machine, DIGI_BUDGET overrides it"
+description = "Default affected verification and merge gate against DIGI_GATE_BASE (default main): affected targets, then the device tests of the changed areas plus the smoke set (-- --all-affected: every affected device test); the Nx launcher sets a CPU budget from the machine, DIGI_BUDGET overrides it"
 
 ["test:plan"]
 run = "node tools/nx/gate.mjs --tier merge --explain"
-description = "Explain the default test selection; runs nothing. DIGI_GATE_BASE sets the shared comparison base"
+description = "Explain the default test selection (affected plan, then the area device selection with its skipped list); runs nothing. DIGI_GATE_BASE sets the shared comparison base"
+
+["test:subset"]
+run = "node tools/nx/test-subset.mjs"
+description = "Device tests of the named Nx projects and of the projects that name them (core/runtime-lfo-tests ...) and, with --base REF, of the projects that own the changed paths plus gate-device-smoke; gate-smoke and gate-pins when affected selects them: prints the Nx targets; add --run to run them (DIGI_EMU_SLOTS honoured)"
 
 ["test:full"]
 run = "node tools/nx/gate.mjs --tier full"
@@ -183,8 +232,8 @@ run = "uv run --no-project --python pypy3.11 --with pytest --with networkx pytho
 description = "The SHARC core's tests under PyPy 3.11 (slow; needs uv and a PyPy download)"
 
 ["lint:rust"]
-run = "pnpm nx:pilot run workspace:rust-fmt"
-description = "cargo fmt --check on the crates listed in the workspace rust-fmt target"
+run = ["pnpm nx:pilot run workspace:rust-fmt", "pnpm nx:pilot run workspace:rust-clippy"]
+description = "cargo fmt --check and cargo clippy on the crates listed in the workspace rust-fmt and rust-clippy targets"
 
 ["fmt:c"]
 run = "pnpm fmt:c"
@@ -230,17 +279,19 @@ run = "node tools/devtools/runtime_fixture.ts"
 description = "Cold-boot the patched runtime of one device and save it as a replay fixture in out/fixtures/runtime/<dev>/ (use: mise run perf:fixture -- --device dn2|dt2). Two-core PGO training and timing cells read it."
 
 ["perf:pgo:both"]
+depends = ["workbench:inputs"]
 run = "uv run python -m tools.emulator.native_pgo train --device both"
-description = "Retrain the two-core PGO profile (the desktop build with both generated cores). Needs the runtime fixtures of both devices (out/fixtures/runtime/<dev>/)."
+description = "Retrain the two-core PGO profile (the desktop build with both generated cores). Needs the runtime fixtures of both devices (out/fixtures/runtime/<dev>/). Until it runs, the two-core desktop/workbench build runs without PGO and prints the fallback notice."
 
 ["perf:pgo"]
+depends = ["workbench:inputs"]
 run = [
-  "uv run python -m tools.emulator.native_pgo train",
-  "uv run python -m tools.emulator.native_pgo train --device dt2",
-  "uv run python -m tools.emulator.native_pgo train --device both",
+  "uv run python -m tools.emulator.native_pgo train --set-current-at-main",
+  "uv run python -m tools.emulator.native_pgo train --device dt2 --set-current-at-main",
+  "uv run python -m tools.emulator.native_pgo train --device both --set-current-at-main",
   "uv run python -m tools.emulator.native_emu --build-only",
 ]
-description = "Retrain the DN2, DT2 and two-core PGO profiles, then rebuild the launcher with PGO. Run after core or engine changes, when `mise run workbench` reports a stale profile."
+description = "Retrain the DN2, DT2 and two-core (`both`) PGO profiles in that order (a training whose profile key is current is skipped; `both` reuses the instrumented libraries of the first two and needs the runtime fixtures of both devices), then rebuild the launcher with PGO. For --force use perf:pgo:dn2 / perf:pgo:dt2 / perf:pgo:both -- --force. Run after core or engine changes, when `mise run workbench` reports a stale profile. In a lane the profiles become current for the launcher only when HEAD is origin/main's commit; otherwise they stay by-key and each training prints the `--set-current` command."
 
 ["perf:aot"]
 run = "uv run python -m tools.sharc_dev.aot_gen"
@@ -254,7 +305,7 @@ description = "Write the generated module sources from devices/*.toml and sdk/sd
 
 ["fw:reference"]
 run = "uv run python -m tools.patchkit.patchkit reference"
-description = "Write the searchable firmware reference page out/reference/fw.html from modules/core/fw/reference.json"
+description = "Write the searchable firmware reference page out/reference/fw.html from ports/bindings/reference.json"
 
 ["gen:core"]
 run = "uv run python -m tools.sharc_dev.sharc_transpile --strict --out out/native/shared-core/gen --work out/native/shared-core/work"
@@ -287,23 +338,23 @@ description = "Build or inspect a standalone +Drive image"
 
 ["module:new"]
 run = "uv run python -m tools.patchkit.pk_new"
-description = "Create a run-time module from a template in sdk/templates and build it: mise run module:new -- machine|fx|tool AUTHOR/NAME [--dir DIR] (docs/MODULE-AUTHORING.md)"
+description = "Create a run-time module from a template in sdk/templates and build it: mise run module:new -- machine|fx|tool AUTHOR/NAME [--dir DIR], or a service crate of the runtime: module:new -- service NAME (docs/MODULE-AUTHORING.md)"
 
 ["module:build"]
 run = "uv run python -m tools.patchkit.patchkit build"
-description = "Compile module sources to objects (core/* modules: build/*.dko.json, committed; every other module: the cache out/cache/dko): mise run module:build [-- modules/fx/NAME] [--check]. Pack, dk:run and the Rust tests build stale objects themselves"
+description = "Compile module sources to objects (core/* modules: build/*.dko.json, committed; every other module: the cache out/cache/dko): mise run module:build [-- modules/fx/OWNER/NAME] [--check]. Pack, dk:run and the Rust tests build stale objects themselves"
 
 ["module:check"]
 run = "uv run python -m tools.patchkit.pk_modcheck"
-description = "Check one module: module:check ID [--device dt2|dn2] [--trace]. Machine/effect conformance and own Python tests, then any module-owned Nx test-device target; may build or emulate. Modules without tests retain source/size checks; not an all-module patched load proof. Size/fit follows only after all owned stages pass"
+description = "Check one module: module:check ID [--device dt2|dn2] [--trace]; a service crate: module:check service/NAME (structure check, then its host tests). Machine/effect conformance and own Python tests, then any module-owned Nx test-device target; may build or emulate. Modules without tests retain source/size checks; not an all-module patched load proof. Size/fit follows only after all owned stages pass"
 
 ["module:audit"]
 run = "sh tools/devtools/module_audit.sh"
-description = "ColdFire memory audit of one run-time module in the emulator: `module:audit NAME [--device dt2|dn2]`. Loads the module (and the run-time modules it requires) on a ColdFire-only rig, drives the UI for a bounded time (DIGIKIT menu, machine list, parameter turns, project save and load) and reports every store into the free regions outside the module blocks by code that is not a patch object (pc, address, size, the code it belongs to). Runs a Vitest device test (modules/core/runtime/tests/memaudit-module.device.test.ts) with DIGI_AUDIT_MODULE=NAME. About 1 to 2 minutes per device"
+description = "ColdFire memory audit of one run-time module in the emulator: `module:audit NAME [--device dt2|dn2]`. Loads the module (and the run-time modules it requires) on a ColdFire-only rig, drives the UI for a bounded time (DIGIKIT menu, machine list, parameter turns, project save and load) and reports every store into the free regions outside the module blocks by code that is not a patch object (pc, address, size, the code it belongs to). Runs a Vitest device test (runtime/core/tests/diag/memaudit-module.manual.device.test.ts) with DIGI_AUDIT_MODULE=NAME. About 1 to 2 minutes per device"
 
-["module:pack-all"]
-run = "uv run python -m tools.device.dkpackall"
-description = "Build and pack every run-time module for every device into out/modules/<device>/<id>.dkm, the folder the workbench's Transfer page reads (only what changed costs time; `mise run workbench` runs it first): mise run module:pack-all [-- --force]"
+["lfo:report"]
+run = "sh tools/devtools/lfo_report.sh"
+description = "Output report of an LFO shape module on the emulator: `mise run lfo:report -- <author/name> [--device dn2|dt2]` (default device dn2). Per shape: wave number, fit error against its own table, the closest other table, min and max of the output, swing against full scale and a verdict; a table on stdout, one SVG per shape and report.json in out/runs/lfo-shape-report/<device>/<module>/. About 5 minutes. A Vitest file that asserts nothing and joins no gate"
 
 ["module:pack"]
 run = "uv run python -m tools.patchkit.patchkit pack"
@@ -327,7 +378,7 @@ description = "Open the DIGIKIT menu in a visible browser faceplate on the kept 
 
 ["dk:module"]
 run = "uv run python -m tools.patchkit.pk_panel module"
-description = "Open a runtime module in the browser faceplate: mise run dk:module ID [--device dn2|dt2] [--dsp] [--stop]; zero-DSP machine UI preview by default, --dsp packs the full module for audio; selects its card .dkm, opens DIGIKIT MODULES, restarts the kept emulator when the module changes"
+description = "Open a runtime module in the browser faceplate: mise run dk:module ID [--device dn2|dt2] [--stop]; packs the full module with its DSP; selects its card .dkm, opens DIGIKIT MODULES, restarts the kept emulator when the module changes"
 
 ["dk:ui-demo"]
 run = "uv run python -m tools.patchkit.pk_panel ui-demo"
@@ -364,11 +415,11 @@ description = "Site-by-site account of a patch (disassembly before and after, al
 
 ["patch:mem"]
 run = "uv run python -m tools.patchkit.pk_mem"
-description = "Patch memory per region (size, used by each module, free; also the runtime's own bytes), refused when the modules do not fit: mise run patch:mem -- core/machines test/patched-pluck [--device dt2|dn2] [--firmware VER] [--json]"
+description = "Patch memory per region (size, used by each module, free; also the runtime's own bytes), refused when the modules do not fit: mise run patch:mem -- core/rows core/rows [--device dt2|dn2] [--firmware VER] [--json]"
 
 ["patch:test"]
 run = "uv run python -m tools.patchkit.pk_harness run"
-description = "Smoke tour and module tests over the matrix (tests/patchkit/smoke/matrix.toml): mise run patch:test [-- --matrix FILE | --cell dt2-1.17:core/fx,test/fx-gain | --update]; one PASS/FAIL line per cell, logs in out/runs/patchkit/"
+description = "Smoke tour and module tests over the matrix (tests/patchkit/smoke/matrix.toml): mise run patch:test [-- --matrix FILE | --cell dt2-1.17:core/fx | --update]; one PASS/FAIL line per cell, logs in out/runs/patchkit/"
 
 ["patch:runtime-proof"]
 run = "uv run python -m tools.patchkit.pk_dkrt proof"
@@ -376,11 +427,11 @@ description = "digikit runtime in the emulator: patch core/runtime, boot with a 
 
 ["patch:proofs"]
 run = "uv run python -m tools.patchkit.pk_proofs"
-description = "Every emulator proof on its quick tier, in sequence (DT2: fx, voice, machines, pluck; DN2: fx, voice, machines, pages, pluck): mise run patch:proofs [-- --only pluck,machines --jobs N]; one PASS/FAIL line per tool and a total, logs in out/runs/proofs"
+description = "Every emulator proof on its quick tier, in sequence (DT2: voice, machines; DN2: voice, machines, pages): mise run patch:proofs [-- --only voice,machines --jobs N]; one PASS/FAIL line per tool and a total, logs in out/runs/proofs"
 
 ["patch:port"]
 run = "uv run python -m tools.patchkit.port_resolve"
-description = "Resolve the anchors and regions of a firmware into devices/ports/*.toml: mise run patch:port [-- X.syx] (no argument: the supported firmwares: DT2 1.17, DN2 1.12, DN2 1.11)"
+description = "Resolve the anchors and regions of a firmware into ports/*.toml: mise run patch:port [-- X.syx] (no argument: the supported firmwares: DT2 1.17, DN2 1.12, DN2 1.11)"
 
 # --- dk: the digikit runtime on a device or the emulator ---
 
@@ -404,9 +455,15 @@ description = "Screenshot of the device or emulator display as PNG: mise run dk:
 run = "uv run --with python-rtmidi --with sounddevice python -m tools.device.devprobe"
 description = "Press keys through the digikit remote, record the device's USB audio and analyse each hit: mise run device:probe -- --list-audio | --steps 'trig1*10@500' [--device dt2|dn2] [--no-remote] [--analyse WAV]"
 
+["services:pack"]
+hide = true
+run = "pnpm nx:pilot run-many -t pack -p core/services/machines,core/services/fx,core/services/lfo,core/services/samples,core/services/project --output-style=stream"
+description = "Pack the services (dist/modules/<device>/*.dks) from the committed objects; Transfer and wb:cli read them there"
+
 [transfer]
-run = "uv run --with python-rtmidi python -m tools.device.dktransfer"
-description = "The repo's run-time modules on a target and their install: mise run transfer -- list --emu [--json] | install <author/name> [MOD ...] [--keep PATH ...] (or --port NAME; a paused emulator is refused, --step lets the tool step it)"
+depends = ["dkmidi:build", "services:pack"]
+run = "node tools/devtools/wb.mjs transfer"
+description = "Install, restart and delete run-time modules on a target, through the workbench's own code (wb transfer): mise run transfer -- install ID... [--restart] [--library DIR] | restart | delete PATH... (the target is --port NAME, default Digitakt, or --emu [--run-dir DIR]; the services a module needs go on the card as built, with the port file of the device's firmware)"
 
 ["dk:store"]
 run = "uv run --with python-rtmidi python -m tools.device.dkupload"

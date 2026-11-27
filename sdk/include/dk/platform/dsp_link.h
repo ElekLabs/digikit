@@ -1,4 +1,4 @@
-/* <dk/platform/dsp_link.h>: the per-block callback of the DSP link (needs core/dsp-link). Hand-written. Include <dk/core/module.h> first.
+/* <dk/platform/dsp_link.h>: the per-block callback of the DSP link (needs core/dsp-link). Hand-written.
 
    `dk_dsp_link_open(ctx, &dl)` in `init`; without core/dsp-link it returns DK_E_MISSING. `dk_dsp_link_set_tick(dl, cb)` sets the one callback
    `void cb(const volatile u16 *rec)` (0: off) that runs every block in the block interrupt with the copy of the previous DSP reply record. It must

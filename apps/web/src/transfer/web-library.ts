@@ -1,8 +1,8 @@
 // The library of the site's Transfer page (pure apart from the two fetch functions it is given; apps/web/tests/web-library.test.ts): the modules the
 // site ships (public/modules/index.json, made by scripts/gen-modules.mjs) with their prebuilt .dkm files per device, plus the .dkm files the user adds.
 import { hexOf } from '@digi/dk-session';
-import { headerInfo } from '../modules/dktransfer';
-import type { LibraryFile, TransferLibrary, TransferSource } from './env';
+import { headerInfo } from '@digi/workbench-core/modules/dktransfer.ts';
+import type { LibraryFile, TransferLibrary, TransferSource } from '@digi/workbench-core/transfer/env.ts';
 
 export interface ShippedFile {
   file: string;
@@ -26,8 +26,20 @@ export function parseIndex(text: string): ShippedModule[] {
   return j.modules;
 }
 
+/** The `.dks` service files of the index, per device (an index without `services` has none). */
+export function parseServices(text: string): Record<string, ShippedFile[]> {
+  const j = JSON.parse(text) as { services?: Record<string, ShippedFile[]> };
+  return j.services ?? {};
+}
+
+/** The `.dkport` port files of the index, per device (an index without `ports` has none). */
+export function parsePorts(text: string): Record<string, ShippedFile[]> {
+  const j = JSON.parse(text) as { ports?: Record<string, ShippedFile[]> };
+  return j.ports ?? {};
+}
+
 export interface Fetchers {
-  /** The bytes of a file under the site's modules folder (`dt2/<name>.dkm`, `index.json`). */
+  /** The bytes of a file under the site's modules folder (`<device>/<name>.dkm`, `index.json`). */
   bytes(path: string): Promise<Uint8Array>;
   /** The text of a file under it (`src/<author/name>/src/module.c`). */
   text(path: string): Promise<string>;
@@ -36,21 +48,35 @@ export interface Fetchers {
 const USER = 'added/';
 
 export function createWebLibrary(fetchers: Fetchers): { library: TransferLibrary; source: TransferSource } {
-  let index: Promise<ShippedModule[]> | undefined;
+  let index:
+    | Promise<{
+        modules: ShippedModule[];
+        services: Record<string, ShippedFile[]>;
+        ports: Record<string, ShippedFile[]>;
+      }>
+    | undefined;
   const shipped = () => {
-    index ??= fetchers.text('index.json').then(parseIndex, (e) => {
-      index = undefined; // tried again at the next read
-      throw e;
-    });
+    index ??= fetchers
+      .text('index.json')
+      .then((text) => ({ modules: parseIndex(text), services: parseServices(text), ports: parsePorts(text) }))
+      .catch((e) => {
+        index = undefined; // tried again at the next read
+        throw e;
+      });
     return index;
   };
   // the modules of the last scan: `files` answers synchronously for the rows that are shown
   let known: ShippedModule[] = [];
+  let knownServices: ShippedFile[] = [];
+  let knownPorts: ShippedFile[] = [];
   const added = new Map<string, { data: Uint8Array; id: string }>();
 
   const library: TransferLibrary = {
     async scan(device): Promise<LibraryFile[]> {
-      known = await shipped();
+      const shippedIndex = await shipped();
+      known = shippedIndex.modules;
+      knownServices = shippedIndex.services[device] ?? [];
+      knownPorts = shippedIndex.ports[device] ?? [];
       const mine = new Set([...added.values()].map((a) => a.id));
       const out: LibraryFile[] = [];
       for (const m of known) {
@@ -58,6 +84,8 @@ export function createWebLibrary(fetchers: Fetchers): { library: TransferLibrary
         // a file the user added with the same module id replaces the shipped one
         if (f && !mine.has(m.id)) out.push({ path: f.file, size: f.size });
       }
+      // the .dks services the modules need, as built, and the port files of the firmware versions the site knows: the backend uploads them with the modules
+      for (const f of [...knownServices, ...knownPorts]) out.push({ path: f.file, size: f.size });
       for (const [name, a] of added) out.push({ path: USER + name, size: a.data.length });
       return out;
     },
@@ -67,7 +95,9 @@ export function createWebLibrary(fetchers: Fetchers): { library: TransferLibrary
         if (!a) throw new Error(`${path} is not in the list any more`);
         return a.data;
       }
-      const f = known.flatMap((m) => Object.values(m.devices)).find((x) => x.file === path);
+      const f = [...known.flatMap((m) => Object.values(m.devices)), ...knownServices, ...knownPorts].find(
+        (x) => x.file === path,
+      );
       const data = await fetchers.bytes(path);
       if (f && hexOf(new Uint8Array(await crypto.subtle.digest('SHA-256', data as BufferSource))) !== f.sha256)
         throw new Error(`${path} does not match modules/index.json: reload the page to get the current files`);

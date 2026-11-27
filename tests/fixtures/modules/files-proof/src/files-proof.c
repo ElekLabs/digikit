@@ -1,12 +1,12 @@
-/* Public SDK only, no slot0, firmware symbols, or backend assumptions. */
+/* Public SDK only, no tick, firmware symbols, or backend assumptions. */
 #include <dk/core/bytes.h>
+#include <dk/core/module.h>
 #include <dk/platform/files.h>
-_Static_assert(__builtin_offsetof(dk_api, sample_status) == 76, "old API prefix");
-_Static_assert(__builtin_offsetof(dk_api, files_client) == 80, "append-only API1.4");
-_Static_assert(__builtin_offsetof(dk_api, files_cancel) == 92, "API1.4 tail");
+#include <dk/platform/host.h>
 _Static_assert(__builtin_offsetof(dk_file_entry, hash) == 16, "hash bytes");
 #define ROWS 32u
-static const dk_api *sdk;
+static dk_module_ctx *module_ctx;
+static dk_files *files;
 static volatile uint32_t client, ticket, old_ticket, count, callbacks, mode;
 static volatile int32_t terminal, last_hint;
 static volatile uint32_t terminal_ticket, hint_ticket;
@@ -16,33 +16,33 @@ static struct {
     dk_file_entry row;
 } rows[ROWS];
 static uint32_t context_word = 0x46494c45;
-static void event(uint32_t h, uint32_t t, int32_t hint, uint8_t *context)
+static void event(uint32_t h, uint32_t t, int32_t hint, void *context)
 {
     dk_file_entry row;
     ++callback_seq;
     ++callbacks;
     last_hint = hint;
     hint_ticket = t;
-    if (context != (uint8_t *)&context_word || context_word != 0x46494c45) {
+    if (context != (void *)&context_word || context_word != 0x46494c45) {
         terminal = -5;
         terminal_ticket = t;
     } else if (h == client && !(mode & 4u)) {
         /* Poll the supplied identity even if list has not returned to MIDI yet.
          * Append immutable ticket-tagged rows; never reset/overwrite them when a
          * new request supersedes an old callback. Host filters by exact ticket. */
-        int32_t rc = sdk->files_poll(h, t, (uint8_t *)&row, sizeof(row));
+        int32_t rc = dk_files_poll(files, t, &row, sizeof(row));
         if (rc == DK_FILES_ROW) {
             if (count == ROWS) {
                 terminal = -13;
                 terminal_ticket = t;
-                sdk->files_cancel(h, t);
+                dk_files_cancel(files, t);
             } else {
                 rows[count].ticket = t;
                 rows[count].row = row;
                 __asm__ volatile("" ::: "memory");
                 ++count;
                 if (mode & 2u) {
-                    sdk->files_cancel(h, t);
+                    dk_files_cancel(files, t);
                     terminal = -1;
                     terminal_ticket = t;
                 }
@@ -56,16 +56,18 @@ static void event(uint32_t h, uint32_t t, int32_t hint, uint8_t *context)
 }
 /* ColdFire text must contain instructions, not dense switch-table data. */
 __attribute__((optimize("no-jump-tables"))) static int32_t
-command(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *out)
+command(uint32_t cmd, uint32_t seq, const void *request, uint32_t len, void *reply)
 {
+    const uint8_t *body = request;
+    uint8_t *out = reply;
     (void)seq;
     if (cmd == 0x38) {
         if (len < 3 || body[len - 1] != 0)
             return -50;
         old_ticket = ticket;
         mode = body[1];
-        int32_t t = sdk->files_list(client, body[0], body + 2, (mode & 1u) ? event : 0,
-                                    (uint8_t *)&context_word);
+        int32_t t = dk_files_list(files, body[0], (const char *)body + 2, (mode & 1u) ? event : 0,
+                                  &context_word);
         if (t < 0)
             return t;
         ticket = (uint32_t)t;
@@ -99,7 +101,7 @@ command(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *
     if (cmd == 0x3b) {
         if (len != 4)
             return -50;
-        dk_bytes_put32(out, (uint32_t)sdk->files_cancel(client, dk_bytes_get32(body)));
+        dk_bytes_put32(out, (uint32_t)dk_files_cancel(files, dk_bytes_get32(body)));
         return 4;
     }
     if (cmd == 0x3c) {
@@ -109,8 +111,8 @@ command(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *
         uint8_t *p = (uint8_t *)&row;
         for (uint32_t i = 0; i < sizeof(row); ++i)
             p[i] = 0xa5;
-        int32_t rc = sdk->files_poll(client, dk_bytes_get32(body), p,
-                                     body[4] ? sizeof(row) - 1 : sizeof(row));
+        int32_t rc =
+            dk_files_poll(files, dk_bytes_get32(body), p, body[4] ? sizeof(row) - 1 : sizeof(row));
         uint32_t untouched = 1;
         for (uint32_t i = 0; i < sizeof(row); ++i)
             if (p[i] != 0xa5)
@@ -125,28 +127,31 @@ command(uint32_t cmd, uint32_t seq, const uint8_t *body, uint32_t len, uint8_t *
         return 8;
     }
     if (cmd == 0x3d) {
-        dk_bytes_put32(out, sdk->size);
-        dk_bytes_put32(out + 4, sdk->runtime);
+        dk_files *again = 0;
+        dk_bytes_put32(out, dk_module_ctx_device(module_ctx));
+        dk_bytes_put32(out + 4, dk_module_ctx_runtime_version(module_ctx));
         dk_bytes_put32(out + 8, sizeof(dk_file_entry));
-        dk_bytes_put32(out + 12, (uint32_t)sdk->files_client());
-        return 16; /* getter outside init must fail */
+        dk_bytes_put32(out + 12, (uint32_t)dk_files_open(module_ctx, &again));
+        return 16; /* dk_files_open outside init must fail */
     }
     return -50;
 }
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
-    if (api->size < sizeof(dk_api))
-        return -48;
-    sdk = api;
-    int32_t h = sdk->files_client();
-    if (h <= 0)
-        return h;
-    client = (uint32_t)h;
-    return sdk->register_cmds(0x38, 6, command);
+    int32_t r = dk_files_open(ctx, &files);
+    if (r != DK_OK)
+        return r;
+    module_ctx = ctx;
+    /* the handle is the client number the callback receives */
+    client = (uint32_t)(uintptr_t)files;
+    return dk_host_register(0x38, 6, command);
 }
-void dkm_fini(const dk_api *api)
+
+static void fini(dk_module_ctx *ctx)
 {
-    (void)api;
+    (void)ctx;
     if (ticket)
-        sdk->files_cancel(client, ticket);
+        dk_files_cancel(files, ticket);
 }
+
+const dk_module_def dk_module = {.init = init, .fini = fini};

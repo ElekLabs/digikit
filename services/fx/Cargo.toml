@@ -1,0 +1,20 @@
+[package]
+name = "dkrt-svc-fx"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The fx service of the digikit runtime: effect pages, FX parameters, routes and send amounts, linked into the runtime object (interface B handlers over CoreApi)"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+dkrt-abi = { path = "../../runtime/core/abi" }
+dkrt-sdk = { path = "../../runtime/core/sdk" }
+dkrt-svc-rows = { path = "../rows" }
+dkneeds = { path = "../../packages/dkneeds" }
+
+[dev-dependencies]
+dkrt-test-support = { path = "../../runtime/core/test-support" }
+# the service file's own source is compiled into two tests by path (tests/file.rs, tests/contract.rs): it has its own cargo workspace, so it cannot be a dependency
+dkrt-svc-rt = { path = "../../runtime/core/svc-rt" }

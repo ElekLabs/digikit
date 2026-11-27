@@ -2,27 +2,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError } from '@digi/dk-session';
-import { shouldInstallAtStart } from '../src/default-modules.ts';
-import { defaultModuleIds, entries, summaryOf, waitForRuntime } from '../src/default-modules-data.ts';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
+import { entries, summaryOf, waitForRuntime } from '../src/default-modules-data.ts';
 
-test('both device files list digikit/debug and digikit/remote, and each entry has the summary of its module.toml', () => {
-  for (const device of ['dt2', 'dn2']) {
+test('every runtime device file lists digikit/debug first, and each entry has the summary of its module.toml', () => {
+  for (const device of registry.runtimeIds) {
     const list = entries(device);
     assert.deepEqual(
       list.map((e) => e.id),
-      ['digikit/debug', 'digikit/remote'],
+      registry.get(device).defaultModules,
     );
+    assert.equal(list[0]!.id, 'digikit/debug');
     assert.match(list[0]!.summary, /log/);
-    assert.match(list[1]!.summary, /USB MIDI/);
+    for (const e of list.slice(1)) assert.equal(e.id, 'digikit/remote');
+    for (const e of list.slice(1)) assert.match(e.summary, /USB MIDI/);
   }
   assert.deepEqual(entries('st1'), []);
-});
-
-test('a device file without the key has no default modules, and a wrong value is an error', () => {
-  assert.deepEqual(defaultModuleIds('[digikit]\nid = 1\n'), []);
-  assert.deepEqual(defaultModuleIds('[digikit]\ndefault_modules = ["a/b", "c/d"]\n'), ['a/b', 'c/d']);
-  assert.throws(() => defaultModuleIds('[digikit]\ndefault_modules = "a/b"\n'), /not a list of module ids/);
-  assert.throws(() => defaultModuleIds('[digikit]\ndefault_modules = [1]\n'), /not a list of module ids/);
 });
 
 test('summaryOf finds a module by id and says nothing for an unknown one', () => {
@@ -72,13 +67,4 @@ test('waitForRuntime asks again until a runtime answers, and gives up with the l
     ),
     DkError,
   );
-});
-
-test('the install starts at launch only with the runtime on and set, a status, and no install yet', () => {
-  const base = { runtimeOn: true, runtimeSet: true, started: false, hasStatus: true };
-  assert.equal(shouldInstallAtStart(base), true);
-  assert.equal(shouldInstallAtStart({ ...base, runtimeOn: false }), false);
-  assert.equal(shouldInstallAtStart({ ...base, runtimeSet: false }), false);
-  assert.equal(shouldInstallAtStart({ ...base, started: true }), false);
-  assert.equal(shouldInstallAtStart({ ...base, hasStatus: false }), false);
 });

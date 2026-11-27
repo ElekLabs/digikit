@@ -8,10 +8,10 @@ gcc_jit_rev = "37ea7cd851f04ee6a313c5067c9fde9328f876aa"  # = libgccjit.version 
 # `build/gen` and `src` in front). `patchkit build --print-include-dirs` and tools/devtools/layercheck.py read these lists.
 [include]
 cf = [
-  "modules/core/fw/inc",
-  "modules/core/fw/include",
-  "modules/core/runtime/include",
-  "modules/core/adapters/ui/include",
+  "ports/bindings/inc",
+  "ports/bindings/include",
+  "runtime/core/include",
+  "runtime/platform/ui/include",
   "sdk/include",
 ]
 sharc = ["sdk/dsp/contract", "sdk"]

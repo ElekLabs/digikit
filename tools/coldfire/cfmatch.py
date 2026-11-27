@@ -539,19 +539,26 @@ class AddrMapper:
 # -- database output -----------------------------------------------------------
 
 
-def write_matches(mt: Matcher) -> None:
-    db = mt.dst.cf.db
+def save_matches(db, dst_image, src_image, matches) -> None:
+    """Install one image pair's matches in the caller's transaction."""
     db.execute(
         "CREATE TABLE IF NOT EXISTS matches (image TEXT, src_image TEXT, "
         "src_entry INTEGER, dst_entry INTEGER, method TEXT, "
         "PRIMARY KEY (image, src_image, src_entry))"
     )
     db.execute(
-        "DELETE FROM matches WHERE image=? AND src_image=?", (mt.dst.name, mt.src.name)
+        "DELETE FROM matches WHERE image=? AND src_image=?", (dst_image, src_image)
     )
     db.executemany(
         "INSERT INTO matches VALUES (?,?,?,?,?)",
-        [(mt.dst.name, mt.src.name, s, d, mt.method[s]) for s, d in mt.m.items()],
+        ((dst_image, src_image, src, dst, method) for src, dst, method in matches),
+    )
+
+
+def write_matches(mt: Matcher) -> None:
+    db = mt.dst.cf.db
+    save_matches(
+        db, mt.dst.name, mt.src.name, ((s, d, mt.method[s]) for s, d in mt.m.items())
     )
     db.commit()
 

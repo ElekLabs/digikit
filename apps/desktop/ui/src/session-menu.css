@@ -1,0 +1,58 @@
+.workbench-session {
+  position: relative;
+  min-width: 0;
+}
+
+.workbench-session summary {
+  cursor: pointer;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 0.6rem;
+  line-height: 30px;
+  max-inline-size: clamp(11rem, 25vw, 20rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbench-session .session-name {
+  margin-inline: 0.4rem;
+}
+
+.workbench-session-menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 0.8rem);
+  inset-inline-start: 0;
+  width: min(25rem, 70vw);
+  max-height: 70vh;
+  overflow: auto;
+  padding: 0.8rem;
+  background: var(--shell-bar);
+  color: var(--ink);
+  border: 1px solid var(--shell-divider);
+  border-radius: 0.6rem;
+  box-shadow: 0 0.5rem 1.25rem #0005;
+  white-space: normal;
+}
+
+.workbench-session-menu .session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.workbench-session-menu button,
+.workbench-session-menu label {
+  margin-block: 0.2rem;
+}
+
+.workbench-session-menu label {
+  display: block;
+}
+
+.workbench-session-menu :is(p, h4) {
+  margin-block: 0.5rem 0.25rem;
+}

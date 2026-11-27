@@ -1,4 +1,4 @@
-//! The fit rule for hosts: does a module (its `dkneeds`) fit the capacity of a device? The rule is `dkrt-fit` (modules/core/runtime/fit), the code
+//! The fit rule for hosts: does a module (its `dkneeds`) fit the capacity of a device? The rule is `dkrt-fit` (runtime/core/fit), the code
 //! the DIGIKIT menu runs; the web app calls this through `pk_fit` (wasm) and the device tools through `patchkit fit --json -`. Only the wordings
 //! for a person (`describe`, `describe_by`) are written here.
 //!
@@ -20,40 +20,14 @@ use dkrt_sdk::DkrtCap;
 use dkrt_sdk::proto::*;
 use serde_json::{Map, Value, json};
 
-/// The resources a fit looks at: the name in JSON and the CAPACITY kind.
-const KINDS: [(&str, u8); 10] = [
-    ("MODULES", CAPK_MODULES),
-    ("SELECTION", CAPK_SELECTION),
-    ("ARENA", CAPK_ARENA),
-    ("STAGE", CAPK_STAGE),
-    ("DSP_AREA", CAPK_DSP_AREA),
-    ("MACHINE_ROWS", CAPK_MACHINE_ROWS),
-    ("VOICE_ROWS", CAPK_VOICE_ROWS),
-    ("PARAM_ROWS", CAPK_PARAM_ROWS),
-    ("PAGE_ROWS", CAPK_PAGE_ROWS),
-    ("FX_SLOTS", CAPK_FX_SLOTS),
-];
-
-/// What a resource is called to a person.
-const LABEL: [(&str, &str); 10] = [
-    ("STAGE", "file"),
-    ("MODULES", "module records"),
-    ("SELECTION", "selection paths"),
-    ("DSP_AREA", "DSP memory"),
-    ("ARENA", "CPU memory"),
-    ("VOICE_ROWS", "voice rows"),
-    ("MACHINE_ROWS", "machine rows"),
-    ("PARAM_ROWS", "parameter rows"),
-    ("PAGE_ROWS", "page rows"),
-    ("FX_SLOTS", "effect slots"),
-];
+// The resources a fit looks at, with what a person calls each: `CAP_FIT`, from `[capacity.kinds]` of sdk/sdk.toml.
 
 fn name_of(kind: u8) -> &'static str {
-    KINDS.iter().find(|k| k.1 == kind).map_or("", |k| k.0)
+    CAP_FIT.iter().find(|k| k.1 == kind).map_or("", |k| k.0)
 }
 
 fn label_of(name: &str) -> &str {
-    LABEL.iter().find(|l| l.0 == name).map_or(name, |l| l.1)
+    CAP_FIT.iter().find(|l| l.0 == name).map_or(name, |l| l.2)
 }
 
 fn u32_of(v: &Value, what: &str) -> Result<u32> {
@@ -73,7 +47,7 @@ fn caps_of(v: &Value) -> Result<Vec<DkrtCap>> {
     let mut out = vec![];
     for (name, c) in o {
         // an unknown name is ignored
-        let Some(&(_, kind)) = KINDS.iter().find(|k| k.0 == name) else {
+        let Some(&(_, kind, _)) = CAP_FIT.iter().find(|k| k.0 == name) else {
             continue;
         };
         out.push(DkrtCap {
@@ -99,6 +73,8 @@ fn needs_of(v: &Value) -> Result<Needs> {
         param_rows: g("PARAM_ROWS")?,
         page_rows: g("PAGE_ROWS")?,
         fx_slots: g("FX_SLOTS")?,
+        dsp_cost_voice: g("DSP_COST_VOICE")?,
+        dsp_cost_fx: g("DSP_COST_FX")?,
     })
 }
 
@@ -209,7 +185,7 @@ mod tests {
 
     fn vectors() -> Value {
         serde_json::from_str(include_str!(
-            "../../../modules/core/runtime/vectors/fit-vectors.json"
+            "../../../runtime/core/vectors/fit-vectors.json"
         ))
         .unwrap()
     }
@@ -283,7 +259,7 @@ mod tests {
         let v = vectors();
         for c in v["shorts"].as_array().unwrap() {
             let s = Short {
-                kind: KINDS.iter().find(|k| k.0 == c["resource"]).unwrap().1,
+                kind: CAP_FIT.iter().find(|k| k.0 == c["resource"]).unwrap().1,
                 need: c["need"].as_u64().unwrap() as u32,
                 free: c["free"].as_u64().unwrap() as u32,
             };

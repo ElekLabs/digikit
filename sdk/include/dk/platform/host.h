@@ -1,4 +1,4 @@
-/* <dk/platform/host.h>: SysEx commands of the module (dk_host_register). Hand-written. Include <dk/core/module.h> first.
+/* <dk/platform/host.h>: SysEx commands of the module (dk_host_register). Hand-written.
 
    dk_host_register(first, count, fn) registers the SysEx commands `first .. first + count` of the digikit protocol with the handler `fn` (a `dk_host_cmd_fn`). Call it in
    `init`. The range must lie inside one of the ranges that sdk/sdk.toml [protocol.ranges] reserves and overlap no registered one: the result is

@@ -13,14 +13,14 @@ export const createDependencies = (_opts, ctx) => {
     mods
       .filter((p) => path === p.root || path.startsWith(p.root + '/'))
       .sort((a, b) => b.root.length - a.root.length)[0]?.name;
-  // Shipped content modules (not core/*, not fixtures) need the runtime and the adapters of their type.
+  // Release modules need the runtime and the adapters of their type.
   const implicit = (p, type) =>
-    !p.root.startsWith('modules/') || p.root.startsWith('modules/core/')
+    !p.tags?.includes('release-module')
       ? []
       : [
           runtime,
-          ...(type === 'machine' ? ['core/dynreg', 'core/dsp-voice'] : []),
-          ...(type === 'fx' ? ['core/dynfx', 'core/fxpages'] : []),
+          ...(type === 'machine' ? ['core/rows', 'core/dsp-voice'] : []),
+          ...(type === 'fx' ? ['core/dynfx'] : []),
         ];
   const all = Object.values(ctx.projects);
   return all

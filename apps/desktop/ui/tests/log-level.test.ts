@@ -134,6 +134,7 @@ test('the follow object sets a level on the origin asked and keeps the state it 
   await createRoot(async (dispose) => {
     const follow = createLogFollow({
       follow: () => false,
+      push: () => {},
       flashing: () => false,
       emulator: { running: () => true, session: async () => emulator },
       device: { port: () => 'Digitakt', session: async () => device, present: async () => true },

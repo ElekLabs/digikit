@@ -1,0 +1,33 @@
+[module]
+id = "digikit/track-manager"
+version = "0.1.0"
+name = "Track manager"
+category = "tools"
+type = "service"
+author = "digikit"
+status = "experimental"
+summary = "Names the tracks: a manager screen in SETTINGS, and a name hint while TRK and YES are held."
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = ["core/ui"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# A run-time module (`.dkm`), built from C. `init` loads the names (setting `names`), adds the SETTINGS row TRACK MANAGER (core/ui) and binds
+# [TRK]+[YES] (`dk_shortcut_add`: the shortcuts service is a need of the module through that import) to the hint strip. The logic in track_names.c and grid_cursor.c has host tests (tests/logic.test.ts).
+[[object]]
+path = "build/track-manager.dko.json"
+sources = [
+  "src/c/track_manager.c",
+  "src/c/manager_screen.c",
+  "src/c/hint_overlay.c",
+  "src/c/active_track.c",
+  "src/c/track_names.c",
+  "src/c/grid_cursor.c",
+]
+place = "cf.expansion"
+
+[workbench_preview]
+extra_services = ["shortcuts"]

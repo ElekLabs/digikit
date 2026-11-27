@@ -1,0 +1,194 @@
+[module]
+id = "core/services/machines"
+version = "0.8.2"
+name = "machines service"
+category = "core"
+role = "service"
+service = "machines"
+callback_order = 200
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "The machines service of the runtime as a service file: machine types, parameters, pages, page clicks and native pages; it owns their record kinds, exports dk_param_get, dk_param_set and the builder calls of the machines and takes the hooks of the machine framework"
+requires = ["core/rows"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The hooks it takes (ports/fw/machine.toml and page.toml), for each device that has them. They have no `handler`: each is a routine of this file that runs in place of the
+# stock instructions at the site and continues in the stock code through the table `DKRT_MF_TAB` (the registry words of `rows_info` of core/rows) (the port file makes the site jump straight to the entry).
+# `init` declares the hooks of its device again with dk_service_declare_hook.
+
+[[hook]]
+name = "cf.machine.hook.clone.5"
+entry = "mf_clone5"
+devices = ["dt2"]
+
+[[hook]]
+name = "cf.machine.hook.param_code.args"
+entry = "mf_typearg"
+devices = ["dt2"]
+
+[[hook]]
+name = "cf.machine.hook.srcpage"
+entry = "mf_srcpage"
+devices = ["dt2"]
+
+[[hook]]
+name = "cf.machine.hook.list_rank_insert"
+entry = "mf_rank"
+devices = ["dt2"]
+
+# The machine list getter's copy: a device whose getter has a call and a store after it replaces them (a hook); the other points its `jsr` at the service's copy (a patch, below). Both leave out the reserved
+# machine rows that no module has filled.
+[[hook]]
+name = "cf.machine.hook.list.copy_call"
+entry = "mf_copy"
+devices = ["dn2"]
+
+[[hook]]
+name = "cf.page.hook.source_draw"
+entry = "mf_draw_hook"
+
+[[hook]]
+name = "cf.page.hook.source_code"
+entry = "mf_code_hook"
+
+[[hook]]
+name = "cf.page.hook.source_key"
+entry = "mf_key_hook"
+
+[[hook]]
+name = "cf.page.hook.source_turn"
+entry = "mf_turn_hook"
+
+[[hook]]
+name = "cf.machine.hook.group"
+entry = "mf_group"
+devices = ["dn2"]
+
+[[hook]]
+name = "cf.machine.hook.type_page.count"
+entry = "mf_typemap0"
+devices = ["dn2"]
+
+[[hook]]
+name = "cf.machine.hook.type_page.desc"
+entry = "mf_typemap1"
+devices = ["dn2"]
+
+[[hook]]
+name = "cf.machine.hook.param_code.map"
+entry = "mf_typemap2"
+devices = ["dn2"]
+
+[[hook]]
+name = "cf.machine.hook.type_reader.load"
+entry = "mf_reader"
+devices = ["dn2"]
+
+[[hook]]
+name = "cf.machine.hook.owner_type_load"
+entry = "mf_owner"
+devices = ["dn2"]
+
+# The frame type (the device with a frame builder interrupt site): the frame builder's interrupt site (vector 191) is a hook like the others (RC4-3): the installer writes its jump under one interrupt mask.
+[[hook]]
+name = "cf.machine.hook.frametype"
+entry = "mf_frametype"
+devices = ["dn2"]
+
+# The dispatch code of the machine voices (the part of core/dsp-voice behind its hook stubs: mask scan, contract adapter, output guard, breadcrumbs). The image keeps the stubs, the heartbeat and all data
+# of the adapter (on DN2 also the stereo code, which shares data with the dispatch both ways); the object reaches them through DSP imports (the table of core/dyndsp) and fills the slots the stubs read
+# (DT2 two, DN2 the render slot).
+[[fill]]
+slot = "voice_render"
+entry = "_dv_run"
+space = "dsp"
+devices = ["dt2"]
+
+[[fill]]
+slot = "voice_unpack"
+entry = "_dv_unpack_run"
+space = "dsp"
+devices = ["dt2"]
+
+[[fill]]
+slot = "voice_render"
+entry = "_dv_run"
+space = "dsp"
+devices = ["dn2"]
+
+# The patches of the machine list builder (ports/fw/machine.toml): `start` builds the list and `Machines::list_*` give the bytes.
+[[patch]]
+name = "cf.machine.hook.patch_list_alloc"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_vector_end"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_buffer_end"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_buffer"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_copy"
+devices = ["dt2"]
+
+[[gen]]
+kind = "sharc-adapter"
+path = "build/gen/adapter-{dev}.inc"
+
+[[object]]
+path = "build/machines-dsp-dt2.dko.json"
+sources = ["dsp/dispatch-dt2.s"]
+place = "dsp.l2"
+devices = ["dt2"]
+
+[[object]]
+path = "build/machines-dsp-dn2.dko.json"
+sources = ["dsp/dispatch-dn2.s"]
+place = "dsp.l2"
+devices = ["dn2"]
+
+# Rust and assembler (the assembler is in `src/hooks.rs`), built with rustc_codegen_gcc for -mcpu=54418 (`patchkit build`). Packed as a .dks (`patchkit pack core/services/machines`): the file is `machines.dks`.
+[[object]]
+path = "build/machines.dko.json"
+sources = ["Cargo.toml"]
+place = "cf.expansion"
+
+# The firmware names of the assembler files, as aliases (`patchkit pack` makes the imports the port file resolves: docs/PATCHING.md "Firmware references"). The hooks leave
+# only by `jmp` to these: `exit.<n>` is the exit n of the hook in `ports/fw` (`exit` alone: the end of the site), `ret` is an `rts`, `stock` the stock path called from the hook.
+[object.externs]
+mf_stock_draw = "hook.cf.page.hook.source_draw.stock"
+mf_ret_draw = "hook.cf.page.hook.source_draw.ret"
+mf_ret_code = "hook.cf.page.hook.source_code.ret"
+mf_ret_turn = "hook.cf.page.hook.source_turn.ret"
+mf_x_c5_ne = "hook.cf.machine.hook.clone.5.exit.1"
+mf_x_c5_eq = "hook.cf.machine.hook.clone.5.exit.2"
+mf_x_typearg = "hook.cf.machine.hook.param_code.args.exit.1"
+mf_x_sp_stock = "hook.cf.machine.hook.srcpage.exit.1"
+mf_x_sp_alt = "hook.cf.machine.hook.srcpage.exit.2"
+mf_spt = "cf.machine.fn.current_track_type"
+mf_x_rank = "hook.cf.machine.hook.list_rank_insert.tail"
+mf_x_copy = "hook.cf.machine.hook.list.copy_call.exit"
+mf_x_g_next = "hook.cf.machine.hook.group.exit"
+mf_x_g_taken = "hook.cf.machine.hook.group.exit.1"
+mf_ret_tm0 = "hook.cf.machine.hook.type_page.count.ret"
+mf_ret_tm1 = "hook.cf.machine.hook.type_page.desc.ret"
+mf_ret_tm2 = "hook.cf.machine.hook.param_code.map.ret"
+mf_x_ft = "hook.cf.machine.hook.frametype.exit"
+mf_x_rd = "hook.cf.machine.hook.type_reader.load.exit.1"
+mf_x_ow = "hook.cf.machine.hook.owner_type_load.exit"
+mf_rc0 = "cf.machine.site.type_reader.call.0"
+mf_rc1 = "cf.machine.site.type_reader.call.1"
+mf_rc2 = "cf.machine.site.type_reader.call.2"
+mf_rc3 = "cf.machine.site.type_reader.call.3"
+mf_rc4 = "cf.machine.site.type_reader.call.4"
+mf_rc5 = "cf.machine.site.type_reader.call.5"
+mf_rc6 = "cf.machine.site.type_reader.call.6"
+mf_rc7 = "cf.machine.site.type_reader.call.7"
+mf_rc8 = "cf.machine.site.type_reader.call.8"

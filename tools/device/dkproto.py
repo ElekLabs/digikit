@@ -13,22 +13,61 @@ DSP_HEADER = 64
 MAX_RECORDS = 32
 MAX_RELOCS = 4096
 MAX_IMPORTS = 32
-MAX_CF_IMPORTS = 64
+MAX_CF_IMPORTS = 128
 MAX_STATE_VOICES = 64
 MAX_STATE_BYTES = 16777216
 GRANULE = 64
 DSP_SLACK = 8
 ARENA_HDR = 16
-SLOTS = 8
+COLLECT_BYTES = 1618
+TABLE_MAGIC = 1145787458
+TABLE_VERSION = 3
+PROVIDER_MAX = 8
+INSTALL_SITES = 48
+INSTALL_PATCHES = 16
+SERVICE_PATCHES_MAX = 8
+SLOTS_MAX = 16
+INFO_MAX = 64
+DSP_SLOT_WORDS = 16
 MAX_VOICES = 8
 MAX_FX = 4
+H_ROLE = 56
+
+# the record kinds of a .dkm ([records.kinds])
+RECORD_KIND: dict[str, int] = {
+    "PARAM": 1,
+    "MACHINE": 2,
+    "PAGE": 3,
+    "EFFECT": 4,
+    "ACTION": 5,
+    "NATIVE_PAGE": 6,
+    "NATIVE_PAGE_V2": 7,
+    "LFO_SHAPE": 8,
+    "SHORTCUT": 9,
+}
+
+# the resources of a module's uses ([records.resources])
+RESOURCE: dict[str, int] = {
+    "MACHINE_ROWS": 1,
+    "PARAM_ROWS": 2,
+    "PAGE_ROWS": 3,
+    "RECORD_BYTES": 4,
+    "DSP_COST_VOICE": 5,
+    "DSP_COST_FX": 6,
+}
 
 CMD: dict[str, int] = {
+    "MODULE_UI": 0x00,
     "INFO": 0x01,
     "LIST": 0x02,
     "MODULES": 0x03,
     "CAPACITY": 0x04,
     "LOADS": 0x05,
+    "RELOAD": 0x06,
+    "RELOAD_STATE": 0x07,
+    "LOAD": 0x08,
+    "UNLOAD": 0x09,
+    "RETRY": 0x0B,
     "BEGIN": 0x10,
     "DATA": 0x11,
     "END": 0x12,
@@ -44,11 +83,17 @@ CMD: dict[str, int] = {
     "SELECT": 0x30,
     "RESTART": 0x31,
 }
+CMD_MODULE_UI = 0x00
 CMD_INFO = 0x01
 CMD_LIST = 0x02
 CMD_MODULES = 0x03
 CMD_CAPACITY = 0x04
 CMD_LOADS = 0x05
+CMD_RELOAD = 0x06
+CMD_RELOAD_STATE = 0x07
+CMD_LOAD = 0x08
+CMD_UNLOAD = 0x09
+CMD_RETRY = 0x0B
 CMD_BEGIN = 0x10
 CMD_DATA = 0x11
 CMD_END = 0x12
@@ -65,8 +110,10 @@ CMD_SELECT = 0x30
 CMD_RESTART = 0x31
 
 SERVICE_CMD: dict[str, int] = {
-    "USB_FAST_TAKEOVER": 0x1E,
-    "USB_FAST_RELEASE": 0x1F,
+    "SETUP": 0x0A,
+    "PROFILE_DSP": 0x1B,
+    "PROFILE_STATE": 0x1E,
+    "PROFILE_READ": 0x1F,
     "LOG": 0x20,
     "PEEK": 0x21,
     "LOGCFG": 0x22,
@@ -89,7 +136,10 @@ STATUS: dict[int, tuple[str, str]] = {
     -58: ("E_READ", "the firmware's block read failed"),
     -59: ("E_NOFILE", "that path is not in the store"),
     -60: ("E_PROTO", "unknown protocol version, command or option"),
-    -61: ("E_NOSTORE", "the store header is unreadable (CLEAR still works)"),
+    -61: (
+        "E_NOSTORE",
+        "the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)",
+    ),
     -62: ("E_INUSE", "the card's store area is not ours and not blank"),
     -63: ("E_PEEK", "PEEK range not allowed, or length 0 or over 512"),
     -64: ("E_CMD_RANGE", "command range not reserved, taken, or empty"),
@@ -112,6 +162,11 @@ STATUS: dict[int, tuple[str, str]] = {
         "E_AGAIN",
         "usb_bulk_send: the engine refused and nothing is in flight; wait for the wake, retry",
     ),
+    -88: ("E_MODULE_UI_CONFLICT", "the module setting revision changed"),
+    -89: (
+        "E_MODULE_UI_SCOPE",
+        "project settings are active; change this setting on the device",
+    ),
 }
 
 LOAD_STATUS: dict[int, tuple[str, str]] = {
@@ -121,11 +176,10 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -4: ("E_SHA", "store file hash or .dkm sha256 does not match"),
     -5: ("E_FORMAT", "bad magic, version, bounds or alignment of the .dkm"),
     -6: ("E_RUNTIME", "the module needs a newer runtime"),
-    -7: ("E_IMPORT", "an import name is not in the runtime's table"),
+    -7: ("E_IMPORT", "an import is unknown, or a provider the module needs is absent"),
     -8: ("E_NOMEM", "arena full"),
     -9: ("E_INIT", "init returned non-zero"),
     -10: ("E_LOADED", "a module of that name is loaded"),
-    -11: ("E_SLOT", "a slot it binds is taken"),
     -12: (
         "E_BUSY",
         "a task is still inside the module, or the store is in use (try again)",
@@ -135,10 +189,10 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -15: ("E_LOST", "the sample backing was lost and the reload failed"),
     -16: ("E_POOL", "the sample pool is full"),
     -17: ("E_CHANGED", "the sample file differs from the selection snapshot"),
-    -18: ("E_EXISTS", "the file exists already (file_create does not overwrite)"),
+    -18: ("E_EXISTS", "the file exists already (dk_files_create does not overwrite)"),
     -19: (
         "E_CONTEXT",
-        "the call is not allowed in this context (file_* run in an I/O step)",
+        "the call is not allowed in this context (dk_files_* writes run in an I/O step)",
     ),
     -20: ("E_NO_REGISTRY", "register records, but the image has no registry"),
     -21: ("E_REG_DEVICE", "the records are for another device"),
@@ -147,6 +201,18 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -24: ("E_PARAM_FULL", "no free reserved parameter row"),
     -25: ("E_PAGE_FULL", "no free reserved page row (Digitone II)"),
     -26: ("E_TYPE_IN_USE", "reserved (hot reload is archived); never returned"),
+    -27: (
+        "E_DECL_ID",
+        "a builder call names a machine or effect id that the keys table of the header lacks",
+    ),
+    -28: (
+        "E_DECL_USES",
+        "init declared more machine, param or page rows than the [uses] counts of the header say",
+    ),
+    -29: (
+        "E_FX_ID_DUP",
+        "reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned",
+    ),
     -30: ("E_NO_DSP", "DSP code in the file, no DSP loader in the image"),
     -31: ("E_DSP_FORMAT", "the DSP section is malformed"),
     -32: ("E_DSP_IMPORT", "a DSP symbol is not exported by the image"),
@@ -160,14 +226,66 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -42: ("E_SEL_WRITE", "the firmware's block write failed"),
     -43: ("E_CARD_BUSY", "a card transfer is in flight"),
     -44: ("E_SAFE_MODE", "this boot is in safe mode: no module was loaded"),
-    -45: ("E_BOOT_ONLY", "the module set is fixed after the boot hook"),
+    -45: (
+        "E_BOOT_ONLY",
+        "the module set is fixed after the boot hook: a service that must start at boot cannot load now, restart the device to load it (a reload of a loaded module is the only later load)",
+    ),
     -46: ("E_RANGE", "a card write outside the store range"),
     -47: ("E_CARD_RO", "the card's store area is not ours and not blank"),
-    -48: ("E_CONTRACT", "the module was built for another SDK contract"),
+    -48: (
+        "E_CONTRACT",
+        "the module needs another runtime version than this one (another major or minor, or a higher patch)",
+    ),
     -49: ("E_TABLE", "the runtime's tables failed their check"),
     -73: (
         "E_MISSING",
         "the service is not in the image (the module that provides it is not loaded)",
+    ),
+    -74: ("E_DECL_FULL", "init made more builder calls than the record limit allows"),
+    -75: (
+        "E_PLAN_KIND",
+        "the boot plan refused the module: a record kind of its header table has no owning service",
+    ),
+    -76: (
+        "E_PLAN_OWNER",
+        "the boot plan refused the module: another module owns the kind, slot or hook site it takes",
+    ),
+    -77: (
+        "E_PLAN_KEY",
+        "the boot plan refused the module: another module of the selection has the same key for a kind",
+    ),
+    -78: (
+        "E_PLAN_FIT",
+        "the boot plan refused the module: its uses do not fit what the earlier modules of the selection left",
+    ),
+    -79: (
+        "E_DECL_KIND",
+        "a service declared a record kind that the header table does not carry, or with another length",
+    ),
+    -81: (
+        "E_SVC_ABI",
+        "a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint)",
+    ),
+    -82: (
+        "E_HOOK_STOCK",
+        "a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init",
+    ),
+    -83: (
+        "E_RELOAD_PLAYING",
+        "reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read)",
+    ),
+    -84: ("E_RELOAD_MENUS", "reload refused: the module built menus of its own"),
+    -85: (
+        "E_RELOAD_ROUTED",
+        "reload refused: a service cannot give back the module's state now",
+    ),
+    -86: (
+        "E_RELOAD_KEYS",
+        "reload refused: the new file lacks a key of the file it replaces",
+    ),
+    -87: (
+        "E_RELOAD_RETAINED",
+        "reload refused: the DSP loader holds a module it could not release; restart the device",
     ),
 }
 
@@ -188,19 +306,28 @@ CAP: dict[str, int] = {
     "RENAME": 13,
     "READBACK": 14,
     "LOADS": 15,
+    "SVC_ABI": 16,
+    "RELOAD": 17,
+    "FW_ID": 18,
+    "LIVE": 19,
+    "MODULE_UI": 20,
+    "MODULE_SECTIONS": 21,
 }
 
 RANGES: dict[str, tuple[int, int]] = {
     "debug": (0x20, 0x22),
+    "debug_profile": (0x1E, 0x1F),
+    "debug_profile_dsp": (0x1B, 0x1B),
+    "debug_setup": (0x0A, 0x0A),
     "entry_demo_test": (0x1C, 0x1D),
     "file_write_test": (0x24, 0x27),
     "file_write_test_b": (0x28, 0x2B),
     "probe": (0x32, 0x35),
     "remote": (0x38, 0x3D),
     "remote_state": (0x3E, 0x3F),
+    "ui_views_test": (0x0F, 0x0F),
     "usb_echo_test": (0x2C, 0x2F),
     "usb_fast": (0x36, 0x37),
-    "usb_fast_takeover": (0x1E, 0x1F),
 }
 
 CAPACITY_KINDS: dict[str, int] = {
@@ -218,6 +345,9 @@ CAPACITY_KINDS: dict[str, int] = {
     "STORE": 12,
     "SETTINGS": 13,
     "SEND_SLOTS": 14,
+    "DSP_COST": 15,
+    "DSP_VOICES": 16,
+    "PACKAGE": 17,
 }
 
 SETTINGS_SECTORS = 16  # one copy of the settings record

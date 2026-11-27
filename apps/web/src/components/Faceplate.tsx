@@ -1,19 +1,31 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { panels } from '../data/faceplates';
-import { deviceProfiles, localReadyFirmwareSha256, type DeviceId } from '../data/device-profiles';
-import { browserRuntime, type EmulatorRuntime, type RuntimeUpdate } from '../runtime/runtime';
-import { parseLeds } from '../runtime/leds';
+import { panels, type Panel as PanelData } from '@digi/workbench-core/data/faceplates.ts';
+import { siteDeviceNamesText, siteFaceplateIds, siteOffers } from '../firmware/site-policy';
+
+import {
+  deviceNameOf,
+  deviceProfiles,
+  localReadyFirmwareSha256,
+  type DeviceId,
+} from '@digi/workbench-core/data/device-profiles.ts';
+import { browserRuntimeDeps } from '../runtime/browser-deps';
+import { browserRuntime, type EmulatorRuntime, type RuntimeUpdate } from '@digi/workbench-core/runtime/runtime.ts';
+import { parseLeds } from '@digi/workbench-core/runtime/leds.ts';
 import { PcmSink, resumeOnNextGesture } from '../runtime/audio';
-import { fetchLocalInputs, localManifest, sha256Hex } from '../runtime/local-inputs';
+import { fetchLocalInputs, localManifest, sha256Hex } from '@digi/workbench-core/runtime/local-inputs.ts';
 import CoupledAudio, { startCoupled } from './CoupledAudio';
-import LivePanel, { type LivePanelApi } from './LivePanel';
-import PanelArt from './PanelArt';
+import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
+import PanelArt from '@digi/workbench-core/ui/components/PanelArt.tsx';
 import SyxFile from './SyxFile';
 import { benchRequested, runBench } from '../runtime/bench';
 import { devEnabled } from '../dev';
-import { identify } from '../patch/identify';
-import { takeHandoff } from '../patch/handoff';
+import { identify } from '@digi/workbench-core/patch/identify.ts';
+import { handoffStore, takeHandoff } from '../patch/handoff';
 import './faceplate.css';
+
+/** What the emulator page says for a firmware of a device the site does not offer. */
+const unsupportedMessage = (name: string) =>
+  `${name} is not supported on this site yet. Choose the firmware of ${siteDeviceNamesText('or')}.`;
 
 function BenchStatus() {
   onMount(() => {
@@ -33,7 +45,7 @@ export default function Faceplate(props: { runtime?: EmulatorRuntime } = {}) {
 
 function Panel(props: { runtime?: EmulatorRuntime }) {
   const dev = devEnabled();
-  const [device, setDevice] = createSignal<'dt2' | 'dn2'>('dt2');
+  const [device, setDevice] = createSignal<DeviceId>(siteFaceplateIds()[0] ?? '');
   // `?leds=<128 hex digits>` shows a fixed LED state without a running emulator (a styling aid; a loaded firmware replaces it).
   onMount(() => {
     const preview = dev ? new URLSearchParams(location.search).get('leds') : null;
@@ -62,7 +74,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   let runtimeReady: Promise<EmulatorRuntime | undefined> | undefined;
   let live: LivePanelApi | undefined;
   let firmwareFile: File | undefined;
-  const panel = () => panels[device()];
+  const panel = () => panels[device()] as PanelData;
   const clearCanvas = () => live?.clear();
   const update = (event: RuntimeUpdate) => {
     if (event.type === 'error') {
@@ -82,7 +94,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
       setLoaded(true);
       setPaused(false);
     }
-    if (s.device === 'dt2' || s.device === 'dn2') setDevice(s.device);
+    if (siteFaceplateIds().includes(s.device)) setDevice(s.device);
     setRunning({ device: s.device, version: s.version });
     const display =
       s.frame_revision === 0
@@ -97,7 +109,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   };
   let disposed = false;
   onMount(() => {
-    runtimeReady = Promise.resolve(props.runtime ?? browserRuntime(update)).then((selected) => {
+    runtimeReady = Promise.resolve(props.runtime ?? browserRuntime(update, browserRuntimeDeps())).then((selected) => {
       if (disposed) {
         selected.dispose();
         return undefined;
@@ -138,6 +150,10 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
       if (firmwareFile !== file) return;
       setChosenFirmware({ name: file.name, bytes: bytes.slice() });
       const identity = identify(await sha256Hex(bytes));
+      if (identity && !siteOffers(identity.device)) {
+        setStatus(unsupportedMessage(deviceNameOf(identity.device)));
+        return;
+      }
       if (identity) setDevice(identity.device);
       const selected = await runtimeReady;
       if (firmwareFile !== file || !selected) return;
@@ -191,13 +207,17 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   onMount(() => {
     if (new URLSearchParams(location.search).get('handoff') !== '1') return;
     setStage('run');
-    void takeHandoff()
+    void takeHandoff(handoffStore())
       .then((item) => {
         if (!item) {
           setStatus('Nothing to boot: open the patch page and press Boot in emulator.');
           return;
         }
-        if (item.device === 'dt2' || item.device === 'dn2') setDevice(item.device);
+        if (item.device && !siteOffers(item.device)) {
+          setStatus(unsupportedMessage(deviceNameOf(item.device)));
+          return;
+        }
+        if (item.device && Object.hasOwn(panels, item.device)) setDevice(item.device);
         void choose(new File([item.bytes], item.name));
       })
       .catch((error) =>
@@ -239,7 +259,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
   const runningName = () => {
     const r = running();
     if (!r) return panel().name;
-    const name = r.device === 'dt2' || r.device === 'dn2' ? panels[r.device].name : r.device;
+    const name = panels[r.device]?.name ?? r.device;
     return `${name} · OS ${r.version}`;
   };
   const restart = async () => {
@@ -277,7 +297,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
             <p>Pick your device, then choose its firmware file: stock, or patched with digikit. Nothing is uploaded.</p>
           </header>
           <div class="devices">
-            <For each={['dt2', 'dn2'] as const}>
+            <For each={siteFaceplateIds()}>
               {(d) => (
                 <button
                   type="button"

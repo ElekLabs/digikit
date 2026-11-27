@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """Resolve the anchors and regions of one firmware into its port lockfile.
 
-    uv run python -m tools.patchkit.port_resolve resolve FIRMWARE.syx [--out devices/ports/NAME.toml]
+    uv run python -m tools.patchkit.port_resolve resolve FIRMWARE.syx [--out ports/NAME.toml]
     uv run python -m tools.patchkit.port_resolve resolve-all [--root DIR]      # the supported firmwares: DT2 1.17, DN2 1.12, DN2 1.11
-    uv run python -m tools.patchkit.port_resolve rule-sharc IMAGE PC [--len N] # print a devices/fw rule for a SHARC pc
+    uv run python -m tools.patchkit.port_resolve rule-sharc IMAGE PC [--len N] # print a ports/fw rule for a SHARC pc
     (for a rule of either CPU and a declaration entry, see tools/firmware/catalog.py: emit-rule, declare)
 
-A port (devices/ports/<short>-<version>.toml) records, for one stock `.syx` (keyed by its sha256), the
+A port (ports/<short>-<version>.toml) records, for one stock `.syx` (keyed by its sha256), the
 named anchors the modules and frameworks need (address, length, sha256 of the bytes there; never the bytes),
 the allocatable regions and the container limits. patchkit only reads it and verifies the hashes.
 
-Anchors are declared in devices/fw/<subsystem>.toml (docs/design/firmware-decls.md), not in module manifests. One
+Anchors are declared in ports/fw/<subsystem>.toml (docs/design/firmware-decls.md), not in module manifests. One
 entry is one declaration; its `rule` is shared, or `rule.dt2` / `rule.dn2` give one rule per device:
 
     [[fn]]
     name = "dsp.master.fn.q31_converter"   # <cpu>.<subsystem>.<kind>.<name>; the kind is the table, the
-                                           # subsystems are listed in devices/fw/subsystems.toml
+                                           # subsystems are listed in ports/fw/subsystems.toml
     cpu = "sharc"
     devices = ["dt2"]                # the devices that have it; the entry is skipped on the others
+                                     # (a SHARC rule and a SHARC hook are also skipped on a device without a DSP)
     rule = { kind = "sharc_func", reloc_hash = "...", offset = 0x0, len = 6 }   # kind: see below
     mark = "D"
 
@@ -60,11 +61,14 @@ Rule kinds (SHARC rules use the image's sharcdb through tools/sharc_dev/sharc.py
 
   cf_params_t1   the parameter descriptor table (60-byte rows), found by the 36-byte signature of its reader (finding 02,
                  exactly one match): a data anchor over all rows (the row count is the length / 60).
-  cf_params_sites  the sites of the code that depend on that table, for core/params: the 2-aligned words that point
+  cf_params_sites  the sites of the code that depend on that table, for core/rows: the 2-aligned words that point
                  into it and the clamp bounds (`cmpi.l #N,Dn` / `cmpa.l #N,An` with N the row count or one less,
                  followed by scs/scc/bhi/bls), found by the scan of scan_param_sites below. An anchor of
                  kind "sites": addr = the table, len = number of sites, sha256 = their digest.
 
+  cf_call        hash, ordinal as cf_func, `call` = <bytes from the entry of that function to a `jsr (xxx).l` (4eb9) or `jsr d16(pc)` (4eba)>, `offset` = <bytes from
+                 the callee's entry; default 0>, len: a code anchor on the function that the call reaches. For a function whose own hash differs between
+                 firmwares (an immediate that the hash does not mask) while its caller's hash does not; `src` = the call instruction.
   cf_ptr         as cf_func (hash, ordinal, offset), but the 4 bytes at entry + offset are an absolute address literal
                  (a `lea table,An`, a `pea`, an `addi.l #table,Dn`): the anchor is the table the literal points to
                  (kind data, `src` = the literal, `len` bytes of the table hashed).
@@ -88,7 +92,10 @@ from __future__ import annotations
 import argparse
 import functools
 import hashlib
+import json
+import os
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -127,13 +134,23 @@ def load_profiles(root: Path = ROOT) -> dict[str, dict]:
                 "device": d["device"]["short"],
                 "version": fw["version"],
                 "dsp": (fw.get("dsp") or {}).get("image"),
+                "container": d.get("container") or {},
                 "filename": fw.get("filename"),
                 "port": bool(fw.get("port")),
                 "patch": d.get("patch") or {},
                 # RAM inside cf.expansion that another patcher's build uses at fixed addresses (`[[firmware]] cf_expansion_excludes`)
                 "cf_expansion_excludes": fw.get("cf_expansion_excludes", []),
+                # a region the analysis cannot find, kept by hand: `[start, end]` each (`[[firmware]] cf_flash_cave`, `cf_expansion`)
+                "cf_flash_cave": fw.get("cf_flash_cave"),
+                "cf_expansion": fw.get("cf_expansion"),
             }
     return out
+
+
+def dsp_section(prof: dict) -> int | None:
+    """The container section of the DSP stream of a firmware profile, None when the firmware has no DSP image (a device with
+    `[capabilities] dsp = "none"`)."""
+    return prof["container"].get("dsp") if prof["dsp"] else None
 
 
 def ported_firmware(root: Path = ROOT) -> list[str]:
@@ -149,8 +166,8 @@ NAME_SEGMENT = re.compile(r"[a-z0-9_]+")
 
 
 def load_subsystems(root: Path) -> dict[str, set[str]]:
-    """cpu -> the allowed subsystem words, from devices/fw/subsystems.toml."""
-    d = tomllib.loads((root / "devices" / "fw" / SUBSYSTEMS).read_text())
+    """cpu -> the allowed subsystem words, from ports/fw/subsystems.toml."""
+    d = tomllib.loads((root / "ports" / "fw" / SUBSYSTEMS).read_text())
     return {cpu: set(words) for cpu, words in d.items()}
 
 
@@ -167,7 +184,7 @@ def check_name(name: str, table: str, vocab: dict[str, set[str]]) -> None:
         raise ResolveError(f"{name}: cpu {cpu!r} is not one of {sorted(vocab)}")
     if subsystem not in vocab[cpu]:
         raise ResolveError(
-            f"{name}: {subsystem!r} is not a {cpu} subsystem in devices/fw/{SUBSYSTEMS}"
+            f"{name}: {subsystem!r} is not a {cpu} subsystem in ports/fw/{SUBSYSTEMS}"
         )
     if kind != table:
         raise ResolveError(
@@ -181,9 +198,9 @@ def check_name(name: str, table: str, vocab: dict[str, set[str]]) -> None:
 
 
 def fw_rules(root: Path) -> list[dict]:
-    """The rules of devices/fw/**/*.toml, one dict per device filter, with `_source` = "fw/<file without .toml>".
+    """The rules of ports/fw/**/*.toml, one dict per device filter, with `_source` = "fw/<file without .toml>".
     Each has the declaration's `was` (former names, never resolved; empty by default)."""
-    fw = root / "devices" / "fw"
+    fw = root / "ports" / "fw"
     vocab = load_subsystems(root)
     former: list[tuple[str, str]] = []  # (a former name, the declaration it was)
     rules = []
@@ -231,9 +248,9 @@ def fw_rules(root: Path) -> list[dict]:
 
 
 def fw_hooks(root: Path) -> list[dict]:
-    """The `[[hook]]` entries of devices/fw/**/*.toml: name, site, offset (default 0), mode, cpu, devices (when the entry has
+    """The `[[hook]]` entries of ports/fw/**/*.toml: name, site, offset (default 0), mode, cpu, devices (when the entry has
     them) and `_source` as in fw_rules."""
-    fw = root / "devices" / "fw"
+    fw = root / "ports" / "fw"
     hooks = []
     for f in sorted(fw.rglob("*.toml")):
         if f == fw / SUBSYSTEMS:
@@ -253,6 +270,9 @@ def fw_hooks(root: Path) -> list[dict]:
             }
             if "devices" in e:
                 hook["devices"] = e["devices"]
+            clobbers = e.get("regs", {}).get("clobbers")
+            if clobbers:
+                hook["clobbers"] = list(clobbers)
             hook["_source"] = source
             hooks.append(hook)
     return hooks
@@ -610,6 +630,32 @@ def resolve_cf_anchor(cf: CfFacts, rule: dict) -> dict:
         }
     if kind == "cf_words":
         return resolve_cf_words(cf, rule)
+    if kind == "cf_call":
+        src = cf_func_addr(cf, {**rule, "offset": rule["call"]})
+        op = cf.bytes_at(src, 2)
+        if op == b"\x4e\xb9":
+            target = int.from_bytes(cf.bytes_at(src + 2, 4), "big")
+        elif op == b"\x4e\xba":
+            target = (
+                src + 2 + int.from_bytes(cf.bytes_at(src + 2, 2), "big", signed=True)
+            )
+        else:
+            raise ResolveError(
+                f"{rule['name']}: no jsr at call offset {rule['call']:#x} of the caller"
+            )
+        if not cf.base <= target < cf.base + len(cf.main):
+            raise ResolveError(
+                f"{rule['name']}: the call target {target:#x} is not in the MAIN OS image"
+            )
+        addr = target + int(rule.get("offset", 0))
+        n = int(rule["len"])
+        return {
+            "kind": "code",
+            "addr": addr,
+            "len": n,
+            "src": src,
+            "sha256": sha(cf.bytes_at(addr, n)),
+        }
     if kind == "cf_ptr":
         # a table the code reaches through an absolute 32-bit literal: the anchor is the table (`len` bytes of it are
         # hashed), `src` the literal at entry + offset of the function `hash`
@@ -774,6 +820,36 @@ def expansion_excludes(excludes: list, start: int, end: int) -> list:
     return out
 
 
+def manual_cave(cf: CfFacts, span: list) -> dict:
+    """The flash cave a firmware entry keeps by hand (`cf_flash_cave = [start, end]`): the analysis rejects a zero run that a
+    pointer literal reaches, and the init table that ends where the cave starts is such a pointer. The kept run must be zero bytes in
+    the image and end at the clear start (the linker puts bss and tables before it), the same two facts `cave()` demands."""
+    start, end = (int(v) for v in span)
+    clear = cf.reset["clear_start"]
+    if end != clear:
+        raise ResolveError(
+            f"cf_flash_cave [{start:#x}, {end:#x}] does not end at the reset clear start {clear:#x}"
+        )
+    if start >= end or any(cf.bytes_at(start, end - start)):
+        raise ResolveError(
+            f"cf_flash_cave [{start:#x}, {end:#x}] is not all zero bytes of the image"
+        )
+    return {"start": start, "size": end - start}
+
+
+def manual_expansion(cf: CfFacts, span: list) -> dict:
+    """The expansion region a firmware entry keeps by hand (`cf_expansion = [start, end]`) where the DMA-arena heuristic of
+    `regions.analyse` finds no cluster: inside the analysis' own bounds (above the bss end, below the stack reserve)."""
+    start, end = (int(v) for v in span)
+    auto = cf.analysis["expansion"]
+    bss_end = cf.reset["clear_end"]
+    if not bss_end <= start < end <= auto["end"]:
+        raise ResolveError(
+            f"cf_expansion [{start:#x}, {end:#x}] is not between the bss end {bss_end:#x} and the stack reserve {auto['end']:#x}"
+        )
+    return {"start": start, "end": end}
+
+
 def dsp_l2_region(stream, patch: dict) -> dict:
     lo, hi = patch["dsp_l2_lo"], patch["dsp_l2_hi"]
     end = max(
@@ -817,6 +893,8 @@ def render(
         "dsp_sha256",
         "resolved_by",
     ):
+        if k == "dsp_sha256" and not port[k]:
+            continue  # a device without a DSP has no stream to name
         o.append(f'{k} = "{port[k]}"')
     o += ["", "[limits]"]
     for k, v in limits.items():
@@ -844,7 +922,52 @@ def render(
         if h["offset"]:
             o.append(f"offset = {toml_int(h['offset'])}")
         o.append(f'mode = "{h["mode"]}"')
+        if h.get("clobbers"):
+            o.append("clobbers = [" + ", ".join(f'"{c}"' for c in h["clobbers"]) + "]")
+        if "len" in h:
+            # site facts of a hook that a service uses (`patchkit port facts`): no bytes, a length, a kind and a truncated sha256
+            o += [
+                f"len = {h['len']}",
+                f'kind = "{h["kind"]}"',
+                f'check = "{h["check"]}"',
+            ]
     return "\n".join(o) + "\n"
+
+
+def patchkit_bin(root: Path) -> Path:
+    """The built patchkit (`pnpm nx:pilot run patchkit:cli`), or the one PATCHKIT_BIN names."""
+    p = Path(os.environ.get("PATCHKIT_BIN") or root / "dist" / "patchkit" / "patchkit")
+    if not p.is_file():
+        raise ResolveError(
+            f"{p} is missing: build patchkit first (pnpm nx:pilot run patchkit:cli) or set PATCHKIT_BIN"
+        )
+    return p
+
+
+def site_facts(syx: Path, root: Path, port_text: str) -> dict[str, dict]:
+    """hook name -> {len, kind, check} for the hooks of the port text that a service uses (ports/fw `users`), read from the image by
+    `patchkit port facts` (its ColdFire decoder gives the whole instructions the 6-byte jump covers)."""
+    r = subprocess.run(
+        [
+            str(patchkit_bin(root)),
+            "--root",
+            str(root),
+            "port",
+            "facts",
+            "--firmware",
+            str(syx),
+            "--port",
+            "-",
+        ],
+        input=port_text,
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        raise ResolveError(
+            f"patchkit port facts: {r.stderr.strip() or r.stdout.strip()}"
+        )
+    return json.loads(r.stdout)
 
 
 def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
@@ -856,8 +979,9 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
         raise ResolveError(f"{syx}: not a firmware listed in devices/*.toml ({digest})")
     secs = sections_of(syx)
     device, version = prof["device"], prof["version"]
-    dsp = Dsp(secs[7], prof["dsp"])
-    cf = CfFacts(f"{device}-{version}", secs[3])
+    main_sec, dsp_sec = prof["container"]["main"], dsp_section(prof)
+    dsp = Dsp(secs[dsp_sec], prof["dsp"]) if dsp_sec is not None else None
+    cf = CfFacts(f"{device}-{version}", secs[main_sec])
     anchors = []
     pending = []
     for rule in fw_rules(root):
@@ -866,11 +990,12 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
         if rule.get("kind") in MULTI_KINDS:
             pending.append(rule)  # after the single anchors they may exclude
             continue
-        a = (
-            resolve_cf_anchor(cf, rule)
-            if rule.get("cpu") == "cf"
-            else resolve_anchor(dsp, rule)
-        )
+        if rule.get("cpu") == "cf":
+            a = resolve_cf_anchor(cf, rule)
+        elif dsp is None:
+            continue  # a SHARC rule cannot apply to a device without a DSP (`[capabilities] dsp = "none"`)
+        else:
+            a = resolve_anchor(dsp, rule)
         anchor = {
             "name": rule["name"],
             "cpu": rule.get("cpu", "sharc"),
@@ -910,8 +1035,8 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
             "cpu": "cf",
             "kind": "code",
             "addr": main_dest,
-            "len": len(secs[3]),
-            "sha256": sha(secs[3]),
+            "len": len(secs[main_sec]),
+            "sha256": sha(secs[main_sec]),
             "mark": "V",
             "rule": "builtin",
         }
@@ -922,6 +1047,8 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
     for h in fw_hooks(root):
         if h.get("devices") and device not in h["devices"]:
             continue
+        if h["cpu"] != "cf" and dsp is None:
+            continue  # its SHARC site is not in this port
         site = by_name.get(h["site"])
         if site is None:
             raise ResolveError(
@@ -931,9 +1058,17 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
             raise ResolveError(
                 f"{h['name']}: cpu {h['cpu']} differs from the cpu {site['cpu']} of site {h['site']}"
             )
-        hooks.append({k: h[k] for k in ("name", "site", "offset", "mode")})
-    cave = cf.cave()
-    exp = cf.analysis["expansion"]
+        hooks.append(
+            {k: h[k] for k in ("name", "site", "offset", "mode", "clobbers") if k in h}
+        )
+    cave = (
+        manual_cave(cf, prof["cf_flash_cave"]) if prof["cf_flash_cave"] else cf.cave()
+    )
+    exp = (
+        manual_expansion(cf, prof["cf_expansion"])
+        if prof["cf_expansion"]
+        else cf.analysis["expansion"]
+    )
     regions = [
         {
             "name": "cf.flash_cave",
@@ -953,17 +1088,29 @@ def resolve(syx: Path, root: Path = ROOT) -> tuple[str, str]:
             ),
             "mark": "D",
         },
-        dsp_l2_region(dsp.stream, prof["patch"]),
+        *([dsp_l2_region(dsp.stream, prof["patch"])] if dsp is not None else []),
     ]
     port = {
         "device": device,
         "version": version,
         "syx_sha256": digest,
-        "main_sha256": sha(secs[3]),
-        "dsp_sha256": sha(secs[7]),
+        "main_sha256": sha(secs[main_sec]),
+        "dsp_sha256": sha(secs[dsp_sec]) if dsp_sec is not None else "",
         "resolved_by": RESOLVED_BY,
     }
-    limits = {k: prof["patch"][k] for k in LIMIT_KEYS}
+    # the dsp_* limits are absent from the `[patch]` of a device without a DSP
+    limits = {k: prof["patch"][k] for k in LIMIT_KEYS if k in prof["patch"]}
+    if dsp_sec is not None:
+        for k in ("dsp_stored_max", "dsp_depacked_max"):
+            if k not in limits:
+                raise ResolveError(
+                    f"{device}: [patch] {k} is missing, and the firmware has a DSP section"
+                )
+    # the site facts of the hooks that services use: the first text has none, `patchkit port facts` reads them from the image through it
+    facts = site_facts(syx, root, render(port, limits, regions, unique, hooks))
+    for h in hooks:
+        if h["name"] in facts:
+            h.update(facts[h["name"]])
     return f"{device}-{version}", render(port, limits, regions, unique, hooks)
 
 
@@ -980,15 +1127,19 @@ def stock_profile(name: str, root: Path = ROOT) -> tuple[Path, dict]:
 @functools.cache
 def load_cf(name: str, root: Path = ROOT) -> CfFacts:
     """The ColdFire facts of the stock firmware NAME; depacks only the MAIN OS section."""
-    syx, _prof = stock_profile(name, root)
-    return CfFacts(name, sections_of(syx, (3,))[3])
+    syx, prof = stock_profile(name, root)
+    main_sec = prof["container"]["main"]
+    return CfFacts(name, sections_of(syx, (main_sec,))[main_sec])
 
 
 @functools.cache
 def load_dsp(name: str, root: Path = ROOT) -> Dsp:
     """The DSP of the stock firmware NAME; depacks only the DSP section."""
     syx, prof = stock_profile(name, root)
-    return Dsp(sections_of(syx, (7,))[7], prof["dsp"])
+    dsp_sec = dsp_section(prof)
+    if dsp_sec is None:
+        raise ResolveError(f"{name}: the device has no DSP image")
+    return Dsp(sections_of(syx, (dsp_sec,))[dsp_sec], prof["dsp"])
 
 
 def load_image(name: str, root: Path = ROOT) -> tuple[CfFacts, Dsp]:
@@ -1119,9 +1270,7 @@ def main() -> int:
         for f in files:
             name, text = resolve(f, a.root)
             out = (
-                a.out
-                if getattr(a, "out", None)
-                else a.root / "devices" / "ports" / f"{name}.toml"
+                a.out if getattr(a, "out", None) else a.root / "ports" / f"{name}.toml"
             )
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(text)

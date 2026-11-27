@@ -14,19 +14,31 @@ const fake = vi.hoisted(() => {
     guardSet: vi.fn(),
     call: vi.fn(),
   };
-  return { client, close: vi.fn(), spawn: vi.fn(), coupledEnv: vi.fn() };
+  return {
+    client,
+    close: vi.fn(),
+    spawn: vi.fn(),
+    coupledEnv: vi.fn(),
+    coreLibEnv: vi.fn(),
+    settleBootWindow: vi.fn(),
+  };
 });
 vi.mock('@digi/control-client', async (original) => ({
   ...(await original<object>()),
   spawnDaemon: fake.spawn,
 }));
-vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
+vi.mock('../../../packages/test-support/src/firmware-inputs.ts', async (original) => ({
   ...(await original<object>()),
   validateRuntimeInputs: vi.fn(),
   coupledEnv: fake.coupledEnv,
+  coreLibEnv: fake.coreLibEnv,
   resolveInputs: () => ({ syx: '/stock.syx', cfSnapshot: '/ready.snap', dspImage: '/dsp.bin', dspState: '/dsp.snap' }),
 }));
-import { PRE_SOCKET_HANG_MS, Session } from '@digi/test-support';
+vi.mock('../../../packages/test-support/src/boot-window-emulator.ts', async (original) => ({
+  ...(await original<object>()),
+  settleEmulatorBootWindow: fake.settleBootWindow,
+}));
+import { PRE_SOCKET_HANG_MS, Session, type Device } from '@digi/test-support';
 import { startPatchedSession } from '../support.ts';
 import { startNoProgressWatchdog } from '../watchdog.ts';
 
@@ -42,6 +54,7 @@ const identity = {
 beforeEach(() => {
   vi.resetAllMocks();
   fake.coupledEnv.mockReturnValue({ SHARC_FAST_REGIONS: 'fixture-regions' });
+  fake.coreLibEnv.mockReturnValue({ DIGI_SHARC_CORE_LIB_DN2: '/fixture/core.lib' });
   fake.spawn.mockResolvedValue({ client: fake.client, close: fake.close });
   fake.client.cardLoad.mockResolvedValue({ card: '/card.img' });
   fake.client.firmwareLoad.mockResolvedValue({ runtime: identity, start_used: 'snapshot' });
@@ -76,11 +89,24 @@ test('zero-DSP runtime startup selects the firmware before applying the runtime 
       syx: '/stock.syx',
       start: 'auto',
       force: true,
-      auto_no: true,
+      auto_no: false,
       runtime: true,
       patch_set: undefined,
     });
     expect(fake.client.call).toHaveBeenCalledWith('run.mode', { mode: 'free' });
+    // the boot window is settled from the firmware's view stack, not by the daemon's press of NO at ready
+    expect(fake.settleBootWindow).toHaveBeenCalledTimes(1);
+  } finally {
+    await session.close();
+  }
+});
+
+test('a device without boot window facts keeps the daemon press of NO and settles nothing', async () => {
+  fake.settleBootWindow.mockClear();
+  const session = await Session.start({ device: 'dn2', firmware: '1.12', dsp: 'zero', runtime: {} });
+  try {
+    expect(fake.client.firmwareLoad).toHaveBeenCalledWith(expect.objectContaining({ runtime: true, auto_no: true }));
+    expect(fake.settleBootWindow).not.toHaveBeenCalled();
   } finally {
     await session.close();
   }
@@ -109,8 +135,11 @@ test('a mirrored runtime owns its mirror inside the temporary run directory', as
   const runDir = runtime.session.runDir;
   try {
     expect(fs.existsSync(runDir)).toBe(true);
-    expect(fake.coupledEnv).toHaveBeenCalledWith('/stock.syx');
-    expect(fake.spawn.mock.calls[0]?.[0].env).toEqual({ SHARC_FAST_REGIONS: 'fixture-regions' });
+    expect(fake.coupledEnv).toHaveBeenCalledWith('/stock.syx', 'dn2');
+    expect(fake.spawn.mock.calls[0]?.[0].env).toEqual({
+      ...fake.coupledEnv('/stock.syx', 'dn2'),
+      ...fake.coreLibEnv('dn2'),
+    });
     expect(fake.client.firmwareLoad).toHaveBeenCalledWith(expect.objectContaining({ auto_no: false }));
     expect(fake.spawn.mock.calls[0]?.[0].args.slice(-2)).toEqual(['--mirror-dir', `${runDir}/mirror`]);
     fs.mkdirSync(`${runDir}/mirror/digikit/modules`, { recursive: true });
@@ -134,7 +163,7 @@ test('patched fixture loads the card, requests runtime auto boot and free mode, 
       syx: '/stock.syx',
       start: 'auto',
       force: true,
-      auto_no: true,
+      auto_no: false,
       runtime: true,
       patch_set: 'emulator',
       card: '/card.img',
@@ -262,8 +291,8 @@ test('concurrent fixture and Session closes await the same daemon cleanup', asyn
   expect(closed).toBe(true);
 });
 
-async function reusableSession() {
-  const session = await Session.start({ device: 'dn2', firmware: '1.12', dsp: 'sharc', runtime: { reuse: true } });
+async function reusableSession(device: Device = 'dn2', firmware = '1.12') {
+  const session = await Session.start({ device, firmware, dsp: 'sharc', runtime: { reuse: true } });
   const directory = path.join(session.runDir, 'pristine');
   fs.mkdirSync(directory);
   const cardImage = path.join(directory, 'card.img');
@@ -301,6 +330,28 @@ test('baseline reload replaces Session identity/card/events and reapplies actor 
     expect(fake.spawn).toHaveBeenCalledTimes(1);
   } finally {
     await session.close();
+  }
+});
+
+test('a baseline reload settles the boot window itself where the device has one; a paused one and a device without one keep the daemon press of NO', async () => {
+  for (const [device, firmware, paused, settles] of [
+    ['dt2', '1.17', false, true],
+    ['dt2', '1.17', true, false],
+    ['dn2', '1.12', false, false],
+  ] as const) {
+    const { session, baseline } = await reusableSession(device, firmware);
+    try {
+      fake.settleBootWindow.mockClear();
+      fake.client.firmwareLoad.mockClear();
+      fake.client.status
+        .mockResolvedValueOnce({ epoch: 2, job: null })
+        .mockResolvedValueOnce({ epoch: 3, mode: paused ? 'paused' : 'free', cf: { ready: true } });
+      await session.reloadRuntimeBaseline({ ...baseline, paused });
+      expect(fake.client.firmwareLoad).toHaveBeenLastCalledWith(expect.objectContaining({ auto_no: !settles }));
+      expect(fake.settleBootWindow).toHaveBeenCalledTimes(settles ? 1 : 0);
+    } finally {
+      await session.close();
+    }
   }
 });
 

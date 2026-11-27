@@ -1,0 +1,22 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "test/syspkg",
+  "tags": ["test-only"],
+  "targets": {
+    "pack": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "description": "The fixture system package: body.bin (1000 bytes, more than one chunk of stage 1) behind the header `patchkit syspkg pack` writes, built against resident table 2.0 (an older minor than the core's, which stage 1 accepts). The one input of the stage-1 assembly case.",
+      "inputs": [
+        "{projectRoot}/body.bin",
+        { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }
+      ],
+      "dependsOn": ["patchkit:cli"],
+      "outputs": ["{workspaceRoot}/dist/syspkg/test"],
+      "options": {
+        "command": "dist/patchkit/patchkit --root . syspkg pack tests/fixtures/syspkg/body.bin --out dist/syspkg/test/system.dksp --table 2.0",
+        "cwd": "."
+      }
+    }
+  }
+}

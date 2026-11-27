@@ -1,0 +1,95 @@
+//! The fixture of a service that provides an API of its own (`local_ping_value`) and the whole provider contract of RC3: an owner object with the lifecycle part (it counts
+//! the consumers that attach and detach), the tick part (it counts the passes) and the query part (it answers the counters). Its record kind, resource, hook and settings
+//! fields wait for header table v4 and the Settings part.
+#![no_std]
+
+use dkrt_svc_rt::dkrt_abi::core_api::CoreApi;
+use dkrt_svc_rt::dkrt_abi::provider::{Consumer, ConsumerId, Provider, Query, Status, Ticker};
+use dkrt_svc_rt::dkrt_sdk::{E_NOT_FOUND, E_TOO_BIG};
+
+/// The operation of the query: the three counters as big-endian words.
+pub const OP_COUNTERS: u32 = 1;
+/// The reply of `OP_COUNTERS`: attaches, detaches, ticks.
+pub const COUNTERS_LEN: usize = 12;
+
+/// The owner object: what it saw since `start`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct LocalPing {
+    attached: u32,
+    detached: u32,
+    ticks: u32,
+    /// The consumer attached last (its owner id), 0 before any.
+    last: u8,
+}
+
+impl LocalPing {
+    pub fn attached(&self) -> u32 {
+        self.attached
+    }
+
+    pub fn detached(&self) -> u32 {
+        self.detached
+    }
+
+    pub fn ticks(&self) -> u32 {
+        self.ticks
+    }
+
+    pub fn last_attached(&self) -> u8 {
+        self.last
+    }
+}
+
+impl<C: CoreApi> Provider<C> for LocalPing {
+    fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<LocalPing>) -> Result<(), Status> {
+        slot.write(LocalPing::default());
+        Ok(())
+    }
+
+    fn attach(&mut self, _: &C, consumer: &Consumer<'_>) -> Result<(), Status> {
+        self.attached += 1;
+        self.last = consumer.id().get();
+        Ok(())
+    }
+
+    fn detach(&mut self, _: &C, _: ConsumerId) {
+        self.detached += 1;
+    }
+}
+
+impl<C: CoreApi> Ticker<C> for LocalPing {
+    fn tick(&mut self, _: &C, _: u32) {
+        self.ticks += 1;
+    }
+}
+
+impl Query for LocalPing {
+    fn query(&self, op: u32, _: &[u8], reply: &mut [u8]) -> Result<usize, Status> {
+        if op != OP_COUNTERS {
+            return Err(E_NOT_FOUND);
+        }
+        let out = reply.get_mut(..COUNTERS_LEN).ok_or(E_TOO_BIG)?;
+        for (word, value) in out
+            .chunks_exact_mut(4)
+            .zip([self.attached, self.detached, self.ticks])
+        {
+            word.copy_from_slice(&value.to_be_bytes());
+        }
+        Ok(COUNTERS_LEN)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn local_ping_value() -> u32 {
+    42
+}
+
+dkrt_svc_rt::service!(
+    LocalPing,
+    "local-ping",
+    &[],
+    parts = [Tick, Query],
+    hooks = [],
+    fills = [],
+    exports = [("local_ping_value", local_ping_value)]
+);

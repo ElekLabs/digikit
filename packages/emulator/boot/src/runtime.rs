@@ -9,7 +9,11 @@ use serde::Serialize;
 
 use crate::capture::Dspi2Capture;
 use crate::common::*;
+use crate::dspi1_status::DSPI1_SR;
+use crate::flash_hle::*;
+use crate::fs_check::*;
 use crate::guard::{GuardHit, GuardRange, GuardReport};
+use crate::peer_service::*;
 use crate::ram_clear::RamClear;
 use crate::softfloat::{ExecutionPolicy, SoftfloatAbi, SoftfloatCounts};
 #[cfg(feature = "diagnostic-events")]
@@ -19,6 +23,57 @@ use coldfire::fused::Loop;
 
 mod call;
 pub use call::{CallResult, CallSpec};
+
+/// `Emulator::peer_report`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PeerReport {
+    pub stream_bytes: u64,
+    /// Each image the peer was sent: length and SHA-256.
+    pub images: Vec<(usize, String)>,
+    pub doorbell_edges: u64,
+    pub irq4_delivered: u64,
+    /// Audio frame interrupts MAIN took (peer CPU mode).
+    pub frames_delivered: u64,
+    /// Times the frame deadline was moved to now because it lagged by a period or more (a restore or a long masked stretch).
+    pub frame_resyncs: u64,
+    /// The peer CPU (`[emulator] peer = "coldfire"`), once started.
+    pub cpu: Option<PeerCpuReport>,
+}
+
+/// What the peer CPU did (`Emulator::peer_report`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PeerCpuReport {
+    pub icount: u64,
+    pub pc: u32,
+    pub frames_raised: u64,
+    pub frames_taken: u64,
+    /// Instructions the frame interrupt handler ran, summed and the largest single run.
+    pub isr_instructions: u64,
+    pub isr_max: u64,
+    /// Peer GPIO pin changes MAIN saw as IRQ4.
+    pub pin_edges: u64,
+    /// Bytes the peer's eDMA moved.
+    pub dma_bytes: u64,
+    /// Accesses to addresses the peer map does not have.
+    pub faults: usize,
+    /// Host wall time spent running the peer core, in nanoseconds (0 in the browser build).
+    pub wall_ns: u64,
+    /// Native kernel runs, the instructions in them (the peer's `icount` counts them too), and the instructions a `DIGI_CF_NATIVE=check` run
+    /// compared with the interpreter.
+    pub native_runs: u64,
+    pub native_insns: u64,
+    pub native_checked_insns: u64,
+    /// The first accesses outside the peer's map: "pc address size R/W".
+    pub first_faults: Vec<String>,
+    /// With `DIGI_PEER_PROFILE=1`: the busiest 64-byte code buckets of the frame handler, "address count".
+    pub isr_profile: Vec<String>,
+}
+
+/// Captured PCM kept for a consumer that is late (about ten seconds), in stereo frames.
+const PCM_QUEUE_FRAMES: usize = 480_000;
+
+/// MAIN ticks between two peer slices: the two CPUs run in lock step at this granularity (deterministic).
+const PEER_SLICE: u64 = 2048;
 
 /// ENDPTCTRL2 of the USB controller (the RX enable bit is 0x80).
 const USB_ENDPTCTRL2: u32 = 0xfc0b_01c8;
@@ -34,6 +89,60 @@ fn dtd_addr(pages: &[u32; 5], at: usize) -> u32 {
 /// at +0x0800_0000, and the internal SRAM backdoor at 0x8000_0000. Other addresses give a bus error to the DMA.
 fn usb_dma_reachable(addr: u32) -> bool {
     matches!(addr, 0x4000_0000..=0x4fff_ffff | 0x8000_0000..=0x8bff_ffff)
+}
+
+/// Reads one audio frame of MAIN's output (finding 136 "Audio"): the half of the converter ring that the engine tick filled for the frame
+/// that just ended, named by the TCD of the audio channel (`[emulator.peer_audio]`). It runs at the peer's doorbell edge, which MAIN's
+/// frame handler makes once per frame before the next tick starts. Edges less than half a frame apart (a handler that preempted a tick)
+/// are not read twice.
+fn capture_peer_audio(
+    board: &mut Board,
+    audio: Option<&device_profile::PeerAudio>,
+    now: u64,
+    clock: &mut u64,
+    pcm: &mut std::collections::VecDeque<f32>,
+    frames: &mut u64,
+) {
+    let Some(audio) = audio else {
+        return;
+    };
+    let period = board
+        .peer()
+        .map_or(periph::peer::FRAME_TICKS, |peer| peer.frame_ticks());
+    if *frames != 0 && now.saturating_sub(*clock) < period / 2 {
+        return;
+    }
+    *clock = now;
+    let tcd = periph::edma::tcd_offset(usize::from(audio.dma_channel));
+    let regs = &board.dma.edma_regs;
+    let (ring, words, count) = (
+        regs.u32_at(tcd + periph::edma::SADDR),
+        regs.u32_at(tcd + periph::edma::NBYTES) / 4,
+        u32::from(regs.u16_at(tcd + periph::edma::BITER) & 0x1ff),
+    );
+    if words == 0 || count < 2 {
+        return;
+    }
+    let half = count / 2;
+    let base = ring.wrapping_add(half * words * 4);
+    let scale = 1.0 / (1u64 << (audio.bits - 1)) as f32;
+    for frame in 0..half {
+        for slot in audio.slots {
+            let at = base.wrapping_add((frame * words + u32::from(slot)) * 4);
+            let Some(word) = board.peer_ram_word(at) else {
+                return;
+            };
+            // Right-aligned signed `bits` bits in a 32-bit word.
+            let shift = 32 - u32::from(audio.bits);
+            let value = ((word << shift) as i32) >> shift;
+            pcm.push_back(value as f32 * scale);
+        }
+        if pcm.len() > PCM_QUEUE_FRAMES * 2 {
+            pcm.pop_front();
+            pcm.pop_front();
+        }
+    }
+    *frames += u64::from(half);
 }
 
 /// The rules the controller applies when a dTD is primed (manual 24-49, 24-54, 24-71): the dTD is 32-byte aligned and its 28 bytes stay in one
@@ -269,6 +378,8 @@ struct ActiveCall {
 /// Persistent, bounded Oracle diagnostic state. It has no host I/O and does
 /// not claim a hardware or interrupt-device model.
 pub struct Emulator {
+    /// Guest instructions per emulated second, resolved once at creation (`clock::resolve_ips`).
+    ips: u64,
     main: Vec<u8>,
     cpu: Cpu,
     bus: LoggingBus<CAPTURE_BUS_TRACE>,
@@ -290,6 +401,8 @@ pub struct Emulator {
     flash_writes: FlashWrites,
     flash: Vec<u8>,
     fs_worker: Option<(u32, u32, u32, u32)>,
+    /// RAM words (mounted, state, checked) that tell whether the filesystem check is needed; resolved with `fs_worker`.
+    fs_flags: Option<(u32, u32, u32)>,
     intro_done: u32,
     intro_callback_return: u32,
     display_start: u32,
@@ -374,6 +487,8 @@ pub struct Emulator {
     probe_hits: BTreeMap<u32, u64>,
     /// Host-requested instruction spans between two PCs (`add_span`).
     spans: crate::spans::Spans,
+    /// Host-requested PC probe (`set_pc_probe`). See `pcprobe.rs`.
+    pc_probe: crate::pcprobe::PcProbe,
     /// Late frame sends (`set_late_send`, off by default).
     late_send: Option<crate::late_send::LateSend>,
     /// The DSPI1 peer's IRQ1 (EPORT, INTC0 source 1) after a transfer; not saved.
@@ -400,8 +515,25 @@ pub struct Emulator {
     ram_clear_fast_forwarded_instructions: u64,
     flash_hle_calls: u64,
     dspi2_capture: Option<Dspi2Capture>,
+    /// The peer CPU (`[emulator] peer = "coldfire"`) and the MAIN tick it has run up to. It starts at the first doorbell edge after its
+    /// program arrived.
+    peer_cpu: Option<Box<machine::peer_cpu::PeerCpu>>,
+    peer_started: bool,
+    peer_clock: u64,
+    peer_pin_edges: u64,
+    peer_wall_ns: u64,
+    /// `[emulator.peer_audio]`: where MAIN's own mixed output of the peer's voices is read (`capture_peer_audio`).
+    peer_audio: Option<device_profile::PeerAudio>,
+    /// Stereo frames (interleaved, -1..1) captured and not yet taken by `take_pcm`; bounded at `PCM_QUEUE_FRAMES`.
+    pcm: std::collections::VecDeque<f32>,
+    pcm_frames: u64,
+    pcm_clock: u64,
     #[cfg(feature = "cf-profile")]
     prof: crate::cfprof::CfProf,
+    /// Run-time switch of `prof` (off by default). The recording sites test
+    /// it once per `step_chunk`/`run_fast` call, never per instruction.
+    #[cfg(feature = "cf-profile")]
+    prof_on: bool,
 }
 
 impl Emulator {
@@ -430,6 +562,11 @@ impl Emulator {
         self.dspi2_capture.as_ref().map(Dspi2Capture::bytes)
     }
 
+    /// Guest instructions per emulated second of this emulator.
+    pub fn cf_ips(&self) -> u64 {
+        self.ips
+    }
+
     pub fn enable_ssi_diagnostic(&mut self, request_hz: u64) -> Result<(), String> {
         if request_hz == 0 || request_hz > 132_000_000 {
             return Err("SSI request clock must be between 1 and 132000000 Hz".into());
@@ -439,7 +576,7 @@ impl Emulator {
         }
         self.bus
             .board
-            .enable_ssi_diagnostic(request_hz, periph::clock::cf_ips())
+            .enable_ssi_diagnostic(request_hz, self.ips)
             .then_some(())
             .ok_or_else(|| "SSI diagnostic is already enabled".into())
     }
@@ -581,6 +718,12 @@ impl Emulator {
             &data_mask(FLASH_PROGRAM_SIG, None),
         )
         .ok();
+        let fs_flags = match contract {
+            device_profile::ReadinessContract::MainPanelFsCheckV1 => {
+                Some(resolve_fs_check_flags(&main)?)
+            }
+            device_profile::ReadinessContract::MainPanelV1 => None,
+        };
         let fs_worker = match contract {
             device_profile::ReadinessContract::MainPanelFsCheckV1 => {
                 Some(resolve_fs_worker(&main)?)
@@ -617,11 +760,17 @@ impl Emulator {
                     .map_err(|e| format!("empty +Drive card identity: {e:?}"))?
             }
         };
+        // This emulator's instruction rate: `DIGI_CF_IPS`, else the device's, else the base.
+        let ips = periph::clock::resolve_ips(device.instructions_per_second);
         let mut board = Board::new(card, semaphores, CompletionPolicy::Oracle);
-        // DMA timer 0's counter runs at the bus clock (`Board::enable_dtcn0`), see `dtcn0_on`.
-        if dtcn0_on(&device.short, std::env::var("DIGI_DTCN0").ok().as_deref())? {
-            board.enable_dtcn0();
-        }
+        board.set_cf_ips(ips);
+        // The DMA timer counters that run at the bus clock (`Board::enable_dtcn_channels`): the device's
+        // `[emulator] free_running_dtcn`, or every channel of `DIGI_DTCN0` (`bus` / `off`) for channel 0.
+        let dtcn_mask = dtcn_mask(
+            device.free_running_dtcn_mask(),
+            std::env::var("DIGI_DTCN0").ok().as_deref(),
+        )?;
+        board.enable_dtcn_channels(dtcn_mask);
         board
             .enable_sd_gate(false)
             .map_err(|e| format!("SdGateEnable({e:?})"))?;
@@ -629,7 +778,7 @@ impl Emulator {
             TimerPolicy::Oracle,
             vec![3, 2, 0],
             vec![3, 1],
-            periph::clock::cf_ips() as f64,
+            ips as f64,
         ));
         for base in [0xfc04_8000, 0xfc04_c000, 0xfc05_0000] {
             board
@@ -643,6 +792,15 @@ impl Emulator {
         forced.insert(UART8_USR, 0x0d00_0000);
         forced.insert(DSPI0_SR, 0x1000_00f0);
         forced.insert(DSPI2_SR, 0x9000_0000);
+        // Peer CPU board: the engine tick MAIN runs every audio frame pushes words to DSPI1 (0xFC03C000, a serial link to the board's
+        // converter logic) and polls SR for the end of the queue (`FUN_4010222a`, bit 28). The transfer is not modelled: it is complete.
+        if device.peer == Some(device_profile::PeerModel::Coldfire) {
+            forced.insert(DSPI1_SR, 0x9000_0000);
+        }
+        // `[emulator] board_revision`: the PCB revision byte at FlexBus CS1 address 0.
+        if let Some(revision) = device.board_revision {
+            forced.insert(0, u32::from(revision) << 24);
+        }
         // USB ENDPTFLUSH: the controller clears the flush bits at once; the firmware's disconnect callback polls them without a bound (`FUN_4000436e`).
         forced.insert(0xfc0b_01b4, 0);
         // USB ENDPTPRIME: the controller clears a prime bit as soon as it has read the queue head and set ENDPTSTAT. Priming takes no time in this model
@@ -651,12 +809,36 @@ impl Emulator {
         board
             .install_forced_mmio(forced)
             .expect("install forced status hooks");
+        // TCF and EOQF are a master's flags: EOQF does not function in slave mode (RM p.1189), so a DSPI2 that the guest runs as a
+        // slave (MCR MSTR = 0) shows its own register. DSPI1 is not gated: MAIN's earliest boot code polls its EOQF before any MCR write,
+        // with the MCR state the board's boot stage leaves, which this model does not have.
+        board.install_forced_master_only(&[DSPI2_SR]);
         board.enable_oracle_sdram_faults();
+        // `[emulator] peer`: the second CPU's mailbox (window, image stream, doorbell, IRQ4).
+        if let Some(model) = device.peer {
+            board
+                .enable_peer(model == device_profile::PeerModel::Coldfire)
+                .map_err(|e| format!("peer window: {e:?}"))?;
+            // The audio frame is the half-way interrupt of the audio channel: INTC1, vector 120 + channel.
+            if let (Some(audio), Some(peer)) = (&device.peer_audio, board.peer_mut()) {
+                peer.frame_vector = 120 + u16::from(audio.dma_channel);
+                peer.set_frame_ticks(periph::clock::frame_ticks(
+                    ips,
+                    audio.sample_rate,
+                    audio.frame_samples,
+                ));
+            }
+        }
         map_image(&mut board, &main);
         board
             .map_zeroed_ram_page(STACK & !((PAGE as u32) - 1))
             .expect("map stack RAM");
-        let flash = flash_image(&main, flash_read, container)?;
+        let flash = flash_image(
+            &main,
+            flash_read,
+            container,
+            device.calibration_record.is_some(),
+        )?;
         let idle_spins = main
             .windows(2)
             .enumerate()
@@ -684,6 +866,7 @@ impl Emulator {
         cpu.sr = 0x2700;
         cpu.a[7] = STACK;
         let mut emulator = Self {
+            ips,
             main,
             cpu,
             bus,
@@ -704,6 +887,7 @@ impl Emulator {
             flash_writes: FlashWrites::default(),
             flash,
             fs_worker,
+            fs_flags,
             intro_done,
             intro_callback_return,
             display_start,
@@ -734,7 +918,7 @@ impl Emulator {
             frame_source: None,
             frame_revision: 0,
             emitted_revision: None,
-            panel_leds: Default::default(),
+            panel_leds: crate::panel_leds::PanelLeds::new(device.led_protocol),
             emitted_led_revision: 0,
             replay_restored_frame: false,
             delivery_counts: [0; 256],
@@ -768,6 +952,7 @@ impl Emulator {
             exec_ranges,
             probe_hits: BTreeMap::new(),
             spans: crate::spans::Spans::default(),
+            pc_probe: crate::pcprobe::PcProbe::default(),
             late_send: None,
             irq1_pending: false,
             deliver_exceptions: false,
@@ -785,13 +970,25 @@ impl Emulator {
             ram_clear_fast_forwarded_instructions: 0,
             flash_hle_calls: 0,
             dspi2_capture: None,
+            peer_cpu: (device.peer == Some(device_profile::PeerModel::Coldfire))
+                .then(|| Box::new(machine::peer_cpu::PeerCpu::new())),
+            peer_started: false,
+            peer_clock: 0,
+            peer_pin_edges: 0,
+            peer_wall_ns: 0,
+            peer_audio: device.peer_audio,
+            pcm: Default::default(),
+            pcm_frames: 0,
+            pcm_clock: 0,
             #[cfg(feature = "cf-profile")]
             prof: Default::default(),
+            #[cfg(feature = "cf-profile")]
+            prof_on: false,
         };
         emulator.rebuild_watch();
         // DIGI_WRITE_WATCH / DIGI_FLUSH_CHECK: off unless set (see watch.rs).
         match crate::watch::WatchConfig::from_env() {
-            Ok(cfg) => emulator.bus.guards.set_watch(cfg),
+            Ok(cfg) => emulator.set_write_watch(cfg),
             Err(e) => eprintln!("write-watch: {e}; not armed"),
         }
         emulator.mark(Mark::Entry, "before_instruction");
@@ -803,7 +1000,12 @@ impl Emulator {
         self.input_attempted_in_chunk = false;
         self.learn_count_spin();
         let mut iterations = 0;
+        #[cfg(feature = "cf-profile")]
+        let prof_on = self.prof_on;
         while iterations < budget && self.error.is_none() {
+            if self.peer_cpu.is_some() {
+                self.run_peer();
+            }
             if ACCELERATE_RAM_CLEAR
                 && self
                     .ram_clear
@@ -811,10 +1013,14 @@ impl Emulator {
                     .is_some_and(|clear| self.cpu.pc == clear.loop_pc)
             {
                 #[cfg(feature = "cf-profile")]
-                let t = crate::cputime::thread_cpu_ns();
+                let t = if prof_on {
+                    crate::cputime::thread_cpu_ns()
+                } else {
+                    0
+                };
                 let count = self.advance_ram_clear(budget - iterations);
                 #[cfg(feature = "cf-profile")]
-                if count != 0 {
+                if prof_on && count != 0 {
                     self.prof
                         .add(0, crate::cputime::thread_cpu_ns() - t, u64::from(count));
                 }
@@ -824,30 +1030,48 @@ impl Emulator {
                 }
             }
             #[cfg(feature = "cf-profile")]
-            let t0 = crate::cputime::thread_cpu_ns();
-            let fast = self.run_fast(budget - iterations);
+            let t0 = if prof_on {
+                crate::cputime::thread_cpu_ns()
+            } else {
+                0
+            };
+            let fast = self.run_fast(if self.peer_cpu.is_some() {
+                (budget - iterations).min(self.peer_slice_limit())
+            } else {
+                budget - iterations
+            });
             if fast != 0 {
                 #[cfg(feature = "cf-profile")]
-                self.prof
-                    .add(1, crate::cputime::thread_cpu_ns() - t0, u64::from(fast));
+                if prof_on {
+                    self.prof
+                        .add(1, crate::cputime::thread_cpu_ns() - t0, u64::from(fast));
+                }
                 iterations += fast;
                 continue;
             }
             let previous_pc = self.cpu.pc;
             #[cfg(feature = "cf-profile")]
-            let t1 = crate::cputime::thread_cpu_ns();
+            let t1 = if prof_on {
+                crate::cputime::thread_cpu_ns()
+            } else {
+                0
+            };
             self.step_once();
             #[cfg(feature = "cf-profile")]
-            {
+            if prof_on {
                 self.prof.add(2, crate::cputime::thread_cpu_ns() - t1, 1);
                 self.prof.sample(previous_pc, 1);
             }
             iterations += 1;
             #[cfg(feature = "cf-profile")]
-            let t2 = crate::cputime::thread_cpu_ns();
+            let t2 = if prof_on {
+                crate::cputime::thread_cpu_ns()
+            } else {
+                0
+            };
             let idle = self.advance_idle(previous_pc, budget - iterations);
             #[cfg(feature = "cf-profile")]
-            if idle != 0 {
+            if prof_on && idle != 0 {
                 self.prof
                     .add(3, crate::cputime::thread_cpu_ns() - t2, u64::from(idle));
                 self.prof.sample_idle(previous_pc, u64::from(idle));
@@ -922,6 +1146,217 @@ impl Emulator {
         )
     }
 
+    /// What the mailbox peer received and did: bytes taken from the image stream, the images (length and SHA-256), doorbell edges and
+    /// IRQ4 delivered. `None` on a board without a peer.
+    pub fn peer_report(&self) -> Option<PeerReport> {
+        let peer = self.bus.board.peer()?;
+        Some(PeerReport {
+            stream_bytes: peer.stream_bytes,
+            images: peer
+                .images
+                .iter()
+                .map(|image| (image.len(), digest(image)))
+                .collect(),
+            doorbell_edges: peer.doorbell_edges,
+            irq4_delivered: peer.irq4_delivered,
+            frames_delivered: peer.frames_delivered,
+            frame_resyncs: peer.frame_resyncs,
+            cpu: self
+                .peer_cpu
+                .as_ref()
+                .filter(|_| self.peer_started)
+                .map(|p| PeerCpuReport {
+                    icount: p.cpu.icount,
+                    pc: p.cpu.pc,
+                    frames_raised: p.frames_raised,
+                    frames_taken: p.frames_taken,
+                    isr_instructions: p.isr_instructions,
+                    isr_max: p.isr_max,
+                    pin_edges: self.peer_pin_edges,
+                    dma_bytes: p.mem.dma_bytes,
+                    faults: p.mem.faults.len(),
+                    wall_ns: self.peer_wall_ns,
+                    native_runs: p.native_report().0,
+                    native_insns: p.native_report().1,
+                    native_checked_insns: p.native_report().2,
+                    isr_profile: p
+                        .isr_profile
+                        .as_ref()
+                        .map(|h| {
+                            let mut v: Vec<_> = h.iter().collect();
+                            v.sort_by_key(|(_, n)| std::cmp::Reverse(**n));
+                            v.iter()
+                                .take(10)
+                                .map(|(a, n)| format!("{a:#x} {n}"))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    first_faults: p
+                        .mem
+                        .faults
+                        .iter()
+                        .take(6)
+                        .map(|f| {
+                            format!(
+                                "{:#x} {:#x}/{} {} {:#x}",
+                                f.pc,
+                                f.addr,
+                                f.size,
+                                if f.write { 'W' } else { 'R' },
+                                f.value
+                            )
+                        })
+                        .collect(),
+                }),
+        })
+    }
+
+    /// The peer CPU's private state, for tools (`panel_drive`'s `peerwin`).
+    pub fn peer_cpu(&self) -> Option<&machine::peer_cpu::PeerCpu> {
+        self.peer_cpu.as_deref().filter(|_| self.peer_started)
+    }
+
+    /// Whether this device has a second CPU that runs a program (`[emulator] peer = "coldfire"`) and no responder stands in for it yet.
+    pub fn has_peer_cpu(&self) -> bool {
+        self.peer_cpu.is_some()
+    }
+
+    /// Whether the mailbox responder stands in for the second CPU (`[emulator] peer = "mailbox-responder"`).
+    pub fn has_peer_responder(&self) -> bool {
+        self.peer_cpu.is_none() && self.bus.board.peer().is_some()
+    }
+
+    /// Replaces the peer CPU with the mailbox responder (`[emulator] peer = "mailbox-responder"`): no peer program, no peer audio,
+    /// the fast path for the UI. Call on a fresh runtime, before it runs or restores a state.
+    pub fn use_peer_responder(&mut self) {
+        self.peer_cpu = None;
+        self.peer_audio = None;
+        self.peer_started = false;
+        self.bus.board.use_peer_responder();
+    }
+
+    /// Whether this device's audio comes from its peer CPU (`[emulator.peer_audio]` with a running peer core).
+    pub fn has_peer_audio(&self) -> bool {
+        self.peer_audio.is_some() && self.peer_cpu.is_some()
+    }
+
+    /// Takes the audio captured since the last call: interleaved stereo, 48 kHz, -1..1. Empty on a device without `[emulator.peer_audio]`.
+    pub fn take_pcm(&mut self) -> Vec<f32> {
+        self.pcm.drain(..).collect()
+    }
+
+    /// Stereo frames captured so far (32 per audio frame).
+    pub fn pcm_frames(&self) -> u64 {
+        self.pcm_frames
+    }
+
+    /// Bytes of the peer CPU's private memory (SDRAM or SRAM), for tools.
+    pub fn peer_private(&self, addr: u32, len: usize) -> Option<Vec<u8>> {
+        let p = self.peer_cpu()?;
+        if addr >= 0xEC00_0000 {
+            return Some(p.mem.io_peek(addr, len));
+        }
+        let (base, mem) = if addr >= machine::peer_cpu::SRAM_BASE {
+            (machine::peer_cpu::SRAM_BASE, p.mem.sram())
+        } else {
+            (machine::peer_cpu::SDRAM_BASE, p.mem.sdram())
+        };
+        let o = addr.checked_sub(base)? as usize;
+        mem.get(o..o + len).map(<[u8]>::to_vec)
+    }
+
+    /// The window as the board holds it (bytes at `offset`).
+    pub fn peer_window(&self, offset: u32, len: u32) -> Vec<u8> {
+        (0..len)
+            .map(|i| self.bus.board.peer_window_load(offset + i, 1).unwrap_or(0) as u8)
+            .collect()
+    }
+
+    /// MAIN instructions to run before the next peer slice: `PEER_SLICE`, cut at the next frame or reply deadline, so the audio frame
+    /// starts at its own tick and not up to a slice late.
+    fn peer_slice_limit(&self) -> u32 {
+        match (self.oracle_ticks(), self.bus.board.peer()) {
+            (Ok(now), Some(m)) => peer_slice(now, m.next_deadline(now)),
+            _ => PEER_SLICE as u32,
+        }
+    }
+
+    /// Runs the peer CPU up to MAIN's current tick: first the doorbell edges MAIN made (the first one after the program arrived is what the
+    /// stage-1 loader waits for; later ones are DTIM0 capture events, the frame tick), then the instructions MAIN ran since the last slice.
+    /// The peer's output pin changes become IRQ4 for MAIN.
+    fn run_peer(&mut self) {
+        let Some(peer) = self.peer_cpu.as_mut() else {
+            return;
+        };
+        let Ok(now) = self
+            .cpu
+            .icount
+            .checked_add(self.softfloat.counts.calls())
+            .ok_or(())
+        else {
+            return;
+        };
+        let board = &mut self.bus.board;
+        if let Some(m) = board.peer_mut() {
+            m.frame_source(now);
+        }
+        if !board.peer().is_some_and(|m| m.has_edges())
+            && now.saturating_sub(self.peer_clock) < PEER_SLICE
+        {
+            return;
+        }
+        let edges = board.peer_mut().map_or(0, |m| m.take_edges());
+        for _ in 0..edges {
+            if self.peer_started {
+                capture_peer_audio(
+                    board,
+                    self.peer_audio.as_ref(),
+                    now,
+                    &mut self.pcm_clock,
+                    &mut self.pcm,
+                    &mut self.pcm_frames,
+                );
+                peer.frame_tick(board);
+            } else if let Some(program) = board.peer().and_then(|m| m.program()) {
+                if let Err(error) = peer.start(program) {
+                    self.set_error(format!("PeerCpuStart({error})"));
+                    return;
+                }
+                self.peer_started = true;
+                self.peer_clock = now;
+                // MAIN's frame handler now forces vector 191 (the engine tick) and nothing else delivers it.
+                if let Some(time) = board.time_mut() {
+                    time.set_forced_191(true);
+                }
+            }
+        }
+        if !self.peer_started {
+            self.peer_clock = now;
+            return;
+        }
+        let n = now.saturating_sub(self.peer_clock);
+        self.peer_clock = now;
+        #[cfg(not(target_arch = "wasm32"))]
+        let started = std::time::Instant::now();
+        let ran = if n != 0 { peer.run(board, n) } else { Ok(()) };
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.peer_wall_ns += started.elapsed().as_nanos() as u64;
+        }
+        if let Err(stop) = ran {
+            let pc = peer.cpu.pc;
+            self.set_error(format!("PeerCpuStopped({stop:?}, pc={pc:#x})"));
+            return;
+        }
+        let edges = peer.mem.take_pin_edges();
+        self.peer_pin_edges += u64::from(edges);
+        for _ in 0..edges {
+            if let Some(m) = board.peer_mut() {
+                m.peer_pin_edge(self.bus.current_icount);
+            }
+        }
+    }
+
     /// Export observations without stepping, reading guest memory, or consuming a frame.
     pub fn diagnostics(&self) -> DiagnosticReport {
         DiagnosticReport {
@@ -985,6 +1420,23 @@ impl Emulator {
     pub fn add_span(&mut self, name: &str, entry: u32, exit: u32) {
         self.spans.add(name, entry, exit);
         self.rebuild_watch();
+    }
+
+    /// Set (or, with no probes, remove) the PC probe: for each hit of a named PC, the instruction count, SR, SP, the
+    /// task word and chosen memory words (diagnostics; reads guest memory, changes no state). See `pcprobe.rs`.
+    pub fn set_pc_probe(&mut self, spec: &crate::pcprobe::PcProbeSpec) {
+        self.pc_probe.set(spec);
+        self.rebuild_watch();
+    }
+
+    /// The PC probe's counts and first hits.
+    pub fn pc_probe_report(&self) -> serde_json::Value {
+        self.pc_probe.report()
+    }
+
+    /// Forget the PC probe's hits and keep the probe.
+    pub fn clear_pc_probe(&mut self) {
+        self.pc_probe.clear();
     }
 
     /// Forget the passes recorded so far.
@@ -1285,6 +1737,9 @@ impl Emulator {
     /// as the `DIGI_WRITE_WATCH*` and `DIGI_FLUSH_CHECK` variables read at
     /// construction. The CACR the instruments assume is the CPU's current one.
     pub fn set_write_watch(&mut self, cfg: Option<crate::watch::WatchConfig>) {
+        self.bus
+            .board
+            .set_card_trace(cfg.as_ref().is_some_and(|c| c.card_trace));
         self.bus.guards.set_watch(cfg);
         let cacr = self.cpu.ctrl.cacr;
         if let Some(w) = self.bus.guards.watch_mut() {
@@ -1443,7 +1898,16 @@ impl Emulator {
         self.probe_hits.iter().map(|(&pc, &n)| (pc, n)).collect()
     }
 
-    /// The ColdFire path/PC profile (feature `cf-profile`).
+    /// Starts (`true`) or stops (`false`) the ColdFire profile and clears its
+    /// counters (feature `cf-profile`).
+    #[cfg(feature = "cf-profile")]
+    pub fn set_cf_profile(&mut self, on: bool) {
+        self.prof = Default::default();
+        self.prof_on = on;
+    }
+
+    /// The cumulative ColdFire path/PC profile since the last
+    /// `set_cf_profile` (feature `cf-profile`).
     #[cfg(feature = "cf-profile")]
     pub fn cf_profile(&self) -> serde_json::Value {
         self.prof.report()
@@ -1502,7 +1966,28 @@ impl Emulator {
         Ok(())
     }
 
+    /// The firmware's own predicate for starting the filesystem check is false: mounted, state 4 and checked set (a card whose
+    /// +Drive superblock is verified). Read from guest RAM; false when the contract has no check or a word cannot be read.
+    fn fs_check_not_needed(&self) -> bool {
+        let Some((mounted, state, checked)) = self.fs_flags else {
+            return false;
+        };
+        // `ram_peek` leaves no guest-access record, so a status poll does not change the guest state digest
+        let word = |addr: u32| {
+            let mut bytes = [0u8; 4];
+            self.bus
+                .board
+                .ram_peek(addr, &mut bytes)
+                .then(|| u32::from_be_bytes(bytes))
+        };
+        matches!(
+            (word(mounted), word(state), word(checked)),
+            (Some(m), Some(FS_STATE_DONE), Some(c)) if m != 0 && c != 0
+        )
+    }
+
     pub fn status(&mut self) -> Status {
+        let fs_not_needed = self.fs_check_not_needed();
         let main_frame = self.frames.latest_for(self.mainloop_tcb);
         let main_ui_reached = is_ready(
             self.intro_done_hits,
@@ -1520,6 +2005,7 @@ impl Emulator {
                 self.fs_last_complete,
                 main_frame,
                 self.fs_success_result,
+                fs_not_needed,
             );
         if ready {
             self.mark(Mark::Ready, "snapshot");
@@ -1545,7 +2031,10 @@ impl Emulator {
             frame_revision: self.frame_revision,
             frame_source: self.frame_source.clone(),
             main_ui_reached,
-            filesystem_verified: self.fs_worker.map(|_| self.fs_success_result).flatten(),
+            filesystem_verified: self.fs_worker.and_then(|_| {
+                self.fs_success_result
+                    .or((self.fs_starts == 0 && fs_not_needed).then_some(true))
+            }),
             input_ready: self.input_ready,
             input_pending: self.input_packets.len() + usize::from(self.rx_pending),
             input_irqs: self.input_irqs,
@@ -1770,6 +2259,13 @@ impl Emulator {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         };
+        // A running peer CPU has its own events: the audio frame and the replies. Idle time never skips past one.
+        let peer_deadline = self
+            .peer_cpu
+            .is_some()
+            .then(|| self.bus.board.peer().and_then(|m| m.next_deadline(now)))
+            .flatten();
+        let deadline = earliest(deadline, peer_deadline);
         // Instructions to skip. The counting loop has no yield pass (it never
         // had one while interpreted) and skips whole passes of two.
         let count = if counter.is_some() {
@@ -1856,14 +2352,17 @@ impl Emulator {
         pcs.extend(self.softfloat.entries());
         pcs.extend(self.probe_hits.keys().copied());
         pcs.extend(self.spans.pcs());
+        pcs.extend(self.pc_probe.pcs());
         if self.midi.usb.enabled {
             pcs.extend(
                 [
                     self.midi.usb.tx_fn,
                     self.midi.usb.ret_pc,
                     self.midi.usb.bulk_queue_fn,
+                    self.midi.usb.ctrl_send,
                 ]
                 .into_iter()
+                .chain(self.midi.usb.trace_pcs.iter().copied())
                 .filter(|&pc| pc != 0),
             );
         }
@@ -1956,6 +2455,16 @@ impl Emulator {
     /// `finish_step`, so the machine is bit-identical to the one-instruction
     /// loop. Returns the instructions run (0: use `step_once`).
     fn run_fast(&mut self, budget: u32) -> u32 {
+        // Two copies of the loop: the profiling one is chosen once per call, so the
+        // plain one has no profile test at all.
+        #[cfg(feature = "cf-profile")]
+        if self.prof_on {
+            return self.run_fast_loop::<true>(budget);
+        }
+        self.run_fast_loop::<false>(budget)
+    }
+
+    fn run_fast_loop<const PROF: bool>(&mut self, budget: u32) -> u32 {
         if budget == 0
             || self.error.is_some()
             || self.rx_pending
@@ -2011,6 +2520,8 @@ impl Emulator {
         let start_icount = self.cpu.icount;
         let mut n = 0;
         #[cfg(feature = "cf-profile")]
+        let prof_on = PROF;
+        #[cfg(feature = "cf-profile")]
         let (mut next_sample, mut last_n) = (0u32, 0u32);
         while n < budget {
             let pc = self.cpu.pc;
@@ -2020,11 +2531,13 @@ impl Emulator {
                     || (self.observed_outside_main && self.observed_pcs.binary_search(&pc).is_ok()))
             {
                 #[cfg(feature = "cf-profile")]
-                self.prof.exit(1, pc);
+                if prof_on {
+                    self.prof.exit(1, pc);
+                }
                 break;
             }
             #[cfg(feature = "cf-profile")]
-            if n >= next_sample {
+            if prof_on && n >= next_sample {
                 self.prof.sample(pc, u64::from((n - last_n).max(1)));
                 last_n = n;
                 next_sample = n + 64;
@@ -2036,7 +2549,9 @@ impl Emulator {
                 match self.at_watched(pc, budget - n, limit, calls) {
                     None => {
                         #[cfg(feature = "cf-profile")]
-                        self.prof.exit(2, pc);
+                        if prof_on {
+                            self.prof.exit(2, pc);
+                        }
                         break;
                     }
                     Some(0) => {}
@@ -2075,7 +2590,7 @@ impl Emulator {
                 || ((self.cpu.sr >> 8) & 7) < u16::from(level)
             {
                 #[cfg(feature = "cf-profile")]
-                {
+                if prof_on {
                     let reason = if result.is_err() {
                         4
                     } else if done >= limit {
@@ -2159,14 +2674,20 @@ impl Emulator {
             return 0;
         }
         #[cfg(feature = "cf-profile")]
-        let tf = crate::cputime::thread_cpu_ns();
+        let tf = if self.prof_on {
+            crate::cputime::thread_cpu_ns()
+        } else {
+            0
+        };
         let iterations = self.cpu.run_fused(&mut self.bus, lp, max);
         #[cfg(feature = "cf-profile")]
-        self.prof.fused_add(
-            head,
-            u64::from(iterations) * u64::from(per),
-            crate::cputime::thread_cpu_ns() - tf,
-        );
+        if self.prof_on {
+            self.prof.fused_add(
+                head,
+                u64::from(iterations) * u64::from(per),
+                crate::cputime::thread_cpu_ns() - tf,
+            );
+        }
         if iterations == 0 {
             return 0;
         }
@@ -2300,6 +2821,20 @@ impl Emulator {
                 return;
             }
         }
+        if self.bus.board.peer().is_some_and(|peer| peer.pending()) {
+            let now = self.bus.current_icount;
+            match service_peer(&mut self.bus, &mut self.cpu, now) {
+                Ok(true) => {
+                    self.drain_board();
+                    return;
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    self.set_error(error);
+                    return;
+                }
+            }
+        }
         if self.bus.board.dspi1_irq() || self.irq1_pending {
             match self.service_dspi1() {
                 Ok(true) => return,
@@ -2350,6 +2885,9 @@ impl Emulator {
                 self.set_error(format!("IdleYieldPoisoned({error:?})"));
                 return;
             }
+        }
+        if watched && self.midi.usb.enabled {
+            self.observe_usb_tx(pc);
         }
         self.bus.clear();
         self.bus.current_pc = pc;
@@ -2471,6 +3009,16 @@ impl Emulator {
         if !self.spans.is_empty() {
             self.spans.observe(pc, self.cpu.icount);
         }
+        if !self.pc_probe.is_empty() {
+            let board = &mut self.bus.board;
+            self.pc_probe.observe(
+                pc,
+                self.cpu.icount,
+                self.cpu.sr,
+                self.cpu.a[7],
+                &mut |addr| board.read32(addr).ok(),
+            );
+        }
         if let Some(hits) = self.probe_hits.get_mut(&pc) {
             *hits += 1;
             let ret = self.bus.board.read32(self.cpu.a[7]).unwrap_or(0);
@@ -2562,6 +3110,11 @@ impl Emulator {
                 CompletionEvent::Command { .. } => self.completion_kind_counts[2] += 1,
             }
         }
+        for op in self.bus.board.take_card_trace() {
+            self.bus
+                .guards
+                .note_card(op.cmd, op.arg, op.bytes, self.bus.current_icount);
+        }
         let ranges = self.bus.board.take_dma_written_ranges();
         let sources = self.bus.board.take_dma_sources();
         if !self.bus.guards.is_empty() {
@@ -2586,8 +3139,7 @@ impl Emulator {
         }
         let started = self.bus.board.take_midi_tx_started();
         if started != 0 {
-            let per_byte =
-                periph::clock::scale_instr(crate::midi::WIRE_PERIOD, periph::clock::cf_ips());
+            let per_byte = periph::clock::scale_instr(crate::midi::WIRE_PERIOD, self.ips);
             let from = self.midi.tx_due.unwrap_or(0).max(self.cpu.icount);
             self.midi.tx_due = Some(from + started * per_byte);
             self.midi.tx_dma += 1;
@@ -2805,13 +3357,27 @@ impl Emulator {
         std::mem::take(&mut self.midi.usb.out)
     }
 
+    /// True when the guest has registered the USB callbacks in this boot (the slots of its registration function hold them). An image
+    /// whose registration code is not the known shape is not gated.
+    fn usb_registered(&mut self) -> bool {
+        let Some((slot0, slot1)) = self.midi.usb.slots else {
+            return true;
+        };
+        let slot0 = self.bus.board.read32(slot0).unwrap_or(0);
+        let slot1 = self.bus.board.read32(slot1).unwrap_or(0);
+        crate::midi::usb_registered(slot0, slot1, self.midi.usb.rx_cb)
+    }
+
     /// Hand the next chunk to the USB receive callback: an interrupt frame is pushed as for a hardware interrupt,
     /// the chunk and the callback's arguments are built below it, and the PC goes to the callback. The callback returns
     /// to an `rte` of the firmware; `observe_usb` sees it, pops the arguments and restores d0, d1, a0, a1.
     fn service_usb(&mut self) -> Result<bool, String> {
         const LEVEL: u8 = USB_LEVEL;
-        if !self.midi.usb.enabled
-            || self.midi.usb.sys_error.is_some()
+        if !self.midi.usb.enabled || self.midi.usb.sys_error.is_some() {
+            return Ok(false);
+        }
+        self.midi.usb.unregistered = !self.usb_registered();
+        if self.midi.usb.unregistered
             || self.midi.usb.active.is_some()
             || self.midi.usb.queue.is_empty()
             || self.cpu.icount < self.midi.usb.next_ic
@@ -2880,6 +3446,14 @@ impl Emulator {
         }
         self.cpu.a[7] = sp;
         self.cpu.pc = self.midi.usb.rx_cb;
+        if self.midi.usb.trace {
+            eprintln!(
+                "usbtrace rx ic={} len={} hash={:016x}",
+                self.cpu.icount,
+                chunk.len(),
+                crate::midi::trace_hash(&chunk)
+            );
+        }
         self.midi.usb.queue.pop_front();
         self.midi.usb.in_bytes += chunk.len() as u64;
         self.midi.usb.calls += 1;
@@ -2896,12 +3470,27 @@ impl Emulator {
     fn enable_usb(&mut self) -> Result<(), String> {
         use crate::midi::{USB_PERIOD, resolve_usb};
         if !self.midi.usb.enabled {
-            let (rx, tx) = resolve_usb(&self.main, MAIN_LOAD)
+            let (rx, tx) = resolve_usb(&self.main)
                 .ok_or("this image has no USB MIDI callback this emulator knows")?;
             self.midi.usb.rx_cb = rx;
             self.midi.usb.tx_fn = tx;
-            self.midi.usb.period = USB_PERIOD;
+            self.midi.usb.slots = crate::midi::resolve_usb_slots(&self.main, MAIN_LOAD);
+            if self.midi.usb.slots.is_none() {
+                eprintln!(
+                    "usb: unknown registration code: USB MIDI delivery is not gated on the registration"
+                );
+            }
+            self.midi.usb.period = periph::clock::scale_instr(USB_PERIOD, self.ips);
             self.midi.usb.enabled = true;
+            self.midi.usb.trace =
+                std::env::var("DIGI_USB_TRACE").is_ok_and(|v| !v.is_empty() && v != "0");
+            if self.midi.usb.trace {
+                self.midi.usb.trace_pcs = std::env::var("DIGI_USB_TRACE_PCS")
+                    .unwrap_or_default()
+                    .split(',')
+                    .filter_map(|a| u32::from_str_radix(a.trim().trim_start_matches("0x"), 16).ok())
+                    .collect();
+            }
             self.rebuild_watch();
         }
         Ok(())
@@ -2920,13 +3509,12 @@ impl Emulator {
         connect: Option<u32>,
         zlp: Option<bool>,
     ) -> Result<usize, String> {
-        use crate::midi::{QUEUE_TD_ENTRY, UsbItem, resolve_queue_td};
+        use crate::midi::{UsbItem, resolve_queue_td};
         self.enable_usb()?;
         if self.midi.usb.bulk_queue_fn == 0 {
-            if !resolve_queue_td(&self.main, MAIN_LOAD) {
-                return Err("this image has no USB queue function this emulator knows".into());
-            }
-            self.midi.usb.bulk_queue_fn = QUEUE_TD_ENTRY;
+            let queue_td = resolve_queue_td(&self.main)
+                .ok_or("this image has no USB queue function this emulator knows")?;
+            self.midi.usb.bulk_queue_fn = queue_td;
             self.rebuild_watch();
         }
         self.midi.usb.period = period.unwrap_or(BULK_PERIOD);
@@ -2956,9 +3544,110 @@ impl Emulator {
         Ok(self.midi.usb.queue.len())
     }
 
+    /// `usb.ctrl`: one control request on EP0. The 8 setup bytes go to `setup_addr`, then the guest function `call` (the setup handler, no arguments)
+    /// runs at interrupt level; the emulator runs until it has returned (at most 200 M instructions). Each entry to `send` (the guest's EP0 send
+    /// function: length at (4,SP), pointer at (8,SP)) is recorded with `min(length, 0x1000)` bytes, and the function runs on. Returns the entries in
+    /// order and whether a 32-bit write set a stall bit of ENDPTCTRL0 meanwhile. The capture of `send` is armed only during the call; on an error
+    /// the queued call is dropped.
+    pub fn usb_ctrl(
+        &mut self,
+        setup: [u8; 8],
+        setup_addr: u32,
+        call: u32,
+        send: u32,
+    ) -> Result<(Vec<(u32, Vec<u8>)>, bool), String> {
+        use crate::midi::UsbItem;
+        self.enable_usb()?;
+        if self.midi.usb.sys_error.is_some() {
+            return Err("the USB controller is wedged (system error)".into());
+        }
+        let result = self.usb_ctrl_run(setup, setup_addr, call, send);
+        self.midi.usb.ctrl_send = 0;
+        self.rebuild_watch();
+        if result.is_err() {
+            // `active` stays: a call already running in the guest cannot be cut off safely
+            self.midi
+                .usb
+                .queue
+                .retain(|i| !matches!(i, UsbItem::Call(pc, _) if *pc == call));
+            self.midi.usb.ctrl_sent.clear();
+        }
+        result
+    }
+
+    fn usb_ctrl_run(
+        &mut self,
+        setup: [u8; 8],
+        setup_addr: u32,
+        call: u32,
+        send: u32,
+    ) -> Result<(Vec<(u32, Vec<u8>)>, bool), String> {
+        use crate::midi::UsbItem;
+        self.midi.usb.ctrl_send = send;
+        self.midi.usb.ctrl_sent.clear();
+        self.rebuild_watch();
+        self.bus.board.usb_ep0_setup();
+        self.poke_bytes(setup_addr, &setup)?;
+        // a bus event: ahead of the queued input, as the `connect` call of `usb.bulk.in`
+        self.midi.usb.queue.push_front(UsbItem::Call(call, vec![]));
+        self.midi.usb.next_ic = self.cpu.icount;
+        let mut left: u64 = 200_000_000;
+        loop {
+            let snapshot = self.step_chunk(100_000);
+            if let Some(error) = snapshot.status.error {
+                return Err(error);
+            }
+            let queued = self
+                .midi
+                .usb
+                .queue
+                .iter()
+                .any(|i| matches!(i, UsbItem::Call(pc, _) if *pc == call));
+            if !queued && self.midi.usb.active.is_none() {
+                break;
+            }
+            left = left.saturating_sub(100_000);
+            if left == 0 {
+                return Err("usb.ctrl: the setup handler did not return".into());
+            }
+        }
+        let stalled = self.bus.board.usb_ep0_stall_take();
+        Ok((std::mem::take(&mut self.midi.usb.ctrl_sent), stalled))
+    }
+
     /// Start the capture of EP2 IN without queueing input.
     pub fn usb_bulk_watch(&mut self) -> Result<(), String> {
         self.usb_bulk_in(&[], None, None, None).map(|_| ())
+    }
+
+    /// The USB controller's PHY events since the last call (ULPI viewport accesses, USBCMD.RS changes) and the PHY register file.
+    /// Set or clear USBCMD.RS as a write to the register (the PHY log sees the change): a controller that something else started or stopped.
+    pub fn set_usb_run(&mut self, on: bool) {
+        const USBCMD: u32 = 0xfc0b_0140;
+        let old = self.bus.board.read32(USBCMD).unwrap_or(0);
+        let new = if on { old | 1 } else { old & !1 };
+        let _ = self.bus.board.write32(USBCMD, new);
+    }
+
+    /// VBUS present or absent at the USB controller (OTGSC.BSV).
+    pub fn set_usb_vbus(&mut self, present: bool) {
+        self.bus.board.set_usb_vbus(present);
+    }
+
+    /// Each event is `(kind, a, b)`: `("w", reg, value)` a ULPI viewport write, `("r", reg, value)` a read, `("rs", 0 or 1, 0)` a change of USBCMD.RS, `("rst", 1, 0)` a controller reset (USBCMD.RST written 1).
+    pub fn take_usb_phy(&mut self) -> (Vec<(&'static str, u8, u8)>, Vec<u8>) {
+        use machine::UsbPhyEvent;
+        let (events, regs) = self.bus.board.usb_phy_take();
+        let events = events
+            .into_iter()
+            .map(|e| match e {
+                UsbPhyEvent::PhyWrite { reg, value } => ("w", reg, value),
+                UsbPhyEvent::PhyRead { reg, value } => ("r", reg, value),
+                UsbPhyEvent::RunStop(on) => ("rs", u8::from(on), 0),
+                UsbPhyEvent::Reset => ("rst", 1, 0),
+            })
+            .collect();
+        (events, regs)
     }
 
     /// What the guest queued on EP2 IN since the last call.
@@ -3286,7 +3975,8 @@ impl Emulator {
         self.midi.usb.queue.clear();
     }
 
-    /// At the transmit function: record its (length, buffer) arguments. At the callback's return: unwind.
+    /// The guest queues a dTD on the bulk endpoint (the vendor interface's reply is captured now, its completion follows as an interrupt), and
+    /// the callback's return: unwind. Both run where the PC is first seen, with the other marks.
     fn observe_usb(&mut self, pc: u32) {
         if pc != 0 && pc == self.midi.usb.bulk_queue_fn {
             // the guest queues a dTD (index, dTD): on EP2 IN (index 6) it is the vendor bulk interface's reply; capture the bytes now (the controller
@@ -3351,16 +4041,6 @@ impl Emulator {
                     .insert(at, crate::midi::UsbItem::BulkTxDone(dtd));
             }
         }
-        if pc == self.midi.usb.tx_fn {
-            let sp = self.cpu.a[7];
-            let len = self.bus.board.read32(sp.wrapping_add(4)).unwrap_or(0);
-            let buf = self.bus.board.read32(sp.wrapping_add(8)).unwrap_or(0);
-            if (1..=0x10000).contains(&len)
-                && let Ok(bytes) = self.peek_bytes(buf, len as usize)
-            {
-                self.midi.usb.out.extend_from_slice(&bytes);
-            }
-        }
         if pc == self.midi.usb.ret_pc
             && let Some(call) = &self.midi.usb.active
             && self.cpu.a[7] == call.sp_after_rts
@@ -3368,6 +4048,54 @@ impl Emulator {
             self.cpu.a[7] = call.frame_sp;
             [self.cpu.d[0], self.cpu.d[1], self.cpu.a[0], self.cpu.a[1]] = call.saved;
             self.midi.usb.active = None;
+        }
+    }
+
+    /// The guest is about to execute the instruction at `pc`: at the transmit function record its (length, buffer) arguments (and log the
+    /// trace's addresses). This runs after the step's interrupt deliveries, so an arrival that an interrupt takes over does not count:
+    /// seen at the top of the step, a send whose first instruction the peer's frame interrupt preempted was recorded twice, once on arrival
+    /// and once when the task resumed (finding 139).
+    fn observe_usb_tx(&mut self, pc: u32) {
+        if self.midi.usb.trace && self.midi.usb.trace_pcs.contains(&pc) {
+            let sp = self.cpu.a[7];
+            let mut top = |k: u32| self.bus.board.read32(sp.wrapping_add(4 * k)).unwrap_or(0);
+            eprintln!(
+                "usbtrace pc={pc:#x} ic={} sp={sp:#x} top={:x},{:x},{:x} d0={:#x} a0={:#x}",
+                self.cpu.icount,
+                top(0),
+                top(1),
+                top(2),
+                self.cpu.d[0],
+                self.cpu.a[0]
+            );
+        }
+        if pc != 0 && pc == self.midi.usb.ctrl_send {
+            // the guest answers a control request: (len, ptr) at (4,SP) and (8,SP); the function returns at once above 0x1000
+            let sp = self.cpu.a[7];
+            let len = self.bus.board.read32(sp.wrapping_add(4)).unwrap_or(0);
+            let ptr = self.bus.board.read32(sp.wrapping_add(8)).unwrap_or(0);
+            let bytes = self
+                .peek_bytes(ptr, len.min(0x1000) as usize)
+                .unwrap_or_default();
+            self.midi.usb.ctrl_sent.push((len, bytes));
+        }
+        if pc == self.midi.usb.tx_fn {
+            let sp = self.cpu.a[7];
+            let len = self.bus.board.read32(sp.wrapping_add(4)).unwrap_or(0);
+            let buf = self.bus.board.read32(sp.wrapping_add(8)).unwrap_or(0);
+            if (1..=0x10000).contains(&len)
+                && let Ok(bytes) = self.peek_bytes(buf, len as usize)
+            {
+                if self.midi.usb.trace {
+                    let ret = self.bus.board.read32(sp).unwrap_or(0);
+                    eprintln!(
+                        "usbtrace tx ic={} len={len} hash={:016x} ret={ret:#x} sp={sp:#x}",
+                        self.cpu.icount,
+                        crate::midi::trace_hash(&bytes)
+                    );
+                }
+                self.midi.usb.out.extend_from_slice(&bytes);
+            }
         }
     }
 
@@ -3728,11 +4456,7 @@ fn supported_firmware(registry: &device_profile::Registry) -> String {
 }
 
 fn verified_task_create(main: &[u8]) -> Result<u32, String> {
-    let task_create = 0x4000_12c8;
-    main.get((task_create - MAIN_LOAD) as usize..)
-        .is_some_and(|bytes| bytes.starts_with(&[0x20, 0x2f, 0, 0x0c, 0x72, 0xfc, 0xc2, 0xaf]))
-        .then_some(task_create)
-        .ok_or("task_create prefix verification failed".into())
+    resolve_task_create(main)
 }
 
 fn resolve_intro_callback_return(main: &[u8]) -> Result<u32, String> {
@@ -3783,11 +4507,9 @@ fn resolve_intro_marks(main: &[u8]) -> Result<(u32, u32), String> {
 fn resolve_uart(main: &[u8]) -> Result<(u32, u32, u32, u32, u32, u32), String> {
     let wait_sig = hex("24394094cd90d48022794094cd8828394094cd9493c43239fc0454743639fc04");
     let uart_wait = unique(main, &wait_sig, &data_mask(&wait_sig, None))?;
-    let init = 0x4000_243e;
+    let init = resolve_uart_init(main)?;
     let at = (init - MAIN_LOAD) as usize;
-    let prefix = hex("2f02740f41f9ec09404b1210202f000843f9ec07000042b9");
-    if main.get(at..at + prefix.len()) != Some(prefix.as_slice())
-        || main.get(at + 0x16..at + 0x18) != Some(&[0x42, 0xb9])
+    if main.get(at + 0x16..at + 0x18) != Some(&[0x42, 0xb9])
         || main
             .get(at + 0x19a..)
             .is_none_or(|bytes| !bytes.starts_with(&[0x20, 0x3c]))
@@ -3820,7 +4542,9 @@ fn resolve_uart(main: &[u8]) -> Result<(u32, u32, u32, u32, u32, u32), String> {
     }
     let rx_prefix = hex("46fc27004feffff048d70303702213c0fc04401c701a13c0fc04c01c46fc2300");
     let rx_isr = unique(main, &rx_prefix, &vec![false; rx_prefix.len()])?;
-    let vector_store = hex("243c40001f1a720323c240000268");
+    let mut vector_store = vec![0x24, 0x3c];
+    vector_store.extend_from_slice(&rx_isr.to_be_bytes());
+    vector_store.extend_from_slice(&hex("720323c240000268"));
     if main.get(at + 0x136..at + 0x136 + vector_store.len()) != Some(vector_store.as_slice()) {
         return Err("UART RX vector store verification failed".into());
     }
@@ -3856,7 +4580,14 @@ fn resolve_context_switch(main: &[u8]) -> Result<(u32, u32), String> {
     ))
 }
 
-fn flash_image(main: &[u8], flash_read: u32, container: &[u8]) -> Result<Vec<u8>, String> {
+/// The model's NOR: the OS container at 0x80000, and with `calibration` the synthetic calibration record at 0x300000
+/// (`[emulator] calibration_record`; synthetic emulator data, see `nor_records`). The rest reads as zero.
+fn flash_image(
+    main: &[u8],
+    flash_read: u32,
+    container: &[u8],
+    calibration: bool,
+) -> Result<Vec<u8>, String> {
     let at = (flash_read - MAIN_LOAD) as usize;
     if main.get(at..at + FLASH_READ_SIG.len()) != Some(FLASH_READ_SIG) {
         return Err("flash_read signature changed after resolution".into());
@@ -3867,6 +4598,14 @@ fn flash_image(main: &[u8], flash_read: u32, container: &[u8]) -> Result<Vec<u8>
         .ok_or("ELE3 container does not fit flash")?;
     let mut flash = vec![0; FLASH_SIZE];
     flash[FLASH_SLOT..end].copy_from_slice(container);
+    if calibration {
+        use crate::nor_records::{CALIBRATION_OFFSET, synthetic_calibration};
+        let record = synthetic_calibration();
+        if end > CALIBRATION_OFFSET {
+            return Err("ELE3 container overlaps the calibration record".into());
+        }
+        flash[CALIBRATION_OFFSET..CALIBRATION_OFFSET + record.len()].copy_from_slice(&record);
+    }
     Ok(flash)
 }
 
@@ -3942,20 +4681,32 @@ fn decode_intro_bitmap(board: &mut Board, bmp: u32) -> Option<Vec<u8>> {
     Some(raw)
 }
 
+/// MAIN instructions to run before the peer's next event: `PEER_SLICE`, cut at `deadline` (a tick after `now`; none without a peer).
+fn peer_slice(now: u64, deadline: Option<u64>) -> u32 {
+    deadline.map_or(PEER_SLICE, |at| at.saturating_sub(now).min(PEER_SLICE)) as u32
+}
+
+/// The earlier of two optional deadlines.
+fn earliest(a: Option<u64>, b: Option<u64>) -> Option<u64> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
 fn idle_advance_limit(remaining: u32, passes: u64, now: u64, deadline: Option<u64>) -> u32 {
     let before_yield = 19_999 - passes % 20_000;
     let before_timer = deadline.map_or(u64::MAX, |due| due.saturating_sub(now).saturating_sub(1));
     u64::from(remaining).min(before_yield).min(before_timer) as u32
 }
 
-/// Whether DMA timer 0's counter runs at the bus clock (finding 07). On by default on DN2, where
-/// the pinned PCM holds with it. Off by default on other devices, where it is not checked.
-/// `DIGI_DTCN0=bus` turns it on, `DIGI_DTCN0=off` turns it off.
-fn dtcn0_on(device: &str, env: Option<&str>) -> Result<bool, String> {
+/// The DMA timer counters that run at the bus clock: the device's mask (`[emulator] free_running_dtcn`),
+/// with channel 0 forced by `DIGI_DTCN0=bus` or cleared by `DIGI_DTCN0=off`.
+fn dtcn_mask(device: u8, env: Option<&str>) -> Result<u8, String> {
     match env {
-        None => Ok(device == "dn2"),
-        Some("bus") => Ok(true),
-        Some("off") => Ok(false),
+        None => Ok(device),
+        Some("bus") => Ok(device | 1),
+        Some("off") => Ok(device & !1),
         Some(other) => Err(format!("DIGI_DTCN0={other}: use bus or off")),
     }
 }
@@ -3969,7 +4720,13 @@ fn dtcn0_on(device: &str, env: Option<&str>) -> Result<bool, String> {
 /// the same optional lanes enabled (SSI diagnostic), before any execution.
 /// Telemetry marks, bus trace vectors and the DSPI capture recorder are not
 /// state and start empty after a restore.
+///
+/// A snapshot taken at the base rate ([`periph::clock::BASE_IPS`]) has the magic `DT2SNP01`. One taken at another rate (a device that
+/// sets its own `[emulator] instructions_per_second`, or `DIGI_CF_IPS`) has `SNAPSHOT_MAGIC_RATE` and the rate (u64) after it; its
+/// deadlines are counted at that rate, and a restore at a different rate is refused. A base-rate snapshot restores at any rate
+/// (the deadlines are rescaled while it loads).
 const SNAPSHOT_MAGIC: &[u8; 8] = b"DT2SNP01";
+const SNAPSHOT_MAGIC_RATE: &[u8; 8] = b"DT2SNP02";
 
 fn snap_frame(w: &mut periph::snap::Writer, f: &Frame) {
     w.u32(f.owner_tcb);
@@ -4047,11 +4804,9 @@ impl Emulator {
         if self.error.is_some() {
             return Err("cannot snapshot a faulted emulator".into());
         }
-        if periph::clock::cf_ips() != periph::clock::BASE_IPS {
-            // Snapshots hold deadlines at the base rate; load_state rescales from it.
-            return Err(
-                "save_state needs DIGI_CF_IPS unset (snapshots are taken at 132 MHz)".into(),
-            );
+        if self.peer_started {
+            // the peer CPU's memory, registers and frame state are not in the snapshot: a restore would have no running peer
+            return Err("save_state: a peer CPU is running and its state is not saved".into());
         }
         if self.irq1_pending {
             return Err("a DSPI1 peer interrupt is pending".into());
@@ -4064,7 +4819,13 @@ impl Emulator {
             return Err("CPU holds state the snapshot does not carry".into());
         }
         let mut w = Writer::new();
-        w.raw(SNAPSHOT_MAGIC);
+        let ips = self.ips;
+        if ips == periph::clock::BASE_IPS {
+            w.raw(SNAPSHOT_MAGIC);
+        } else {
+            w.raw(SNAPSHOT_MAGIC_RATE);
+            w.u64(ips);
+        }
         w.bytes(digest(&self.main).as_bytes());
         w.bytes(self.device.as_bytes());
         w.bytes(self.version.as_bytes());
@@ -4101,6 +4862,10 @@ impl Emulator {
         w.u8(c.last_exception.unwrap_or(0));
         w.bool(c.last_exception.is_some());
         self.bus.board.snap_save(&mut w)?;
+        if self.panel_leds.is_stateful() {
+            w.tag("LEDS");
+            self.panel_leds.snap_save(&mut w);
+        }
         w.tag("BUS_");
         w.u32(self.bus.current_pc);
         w.u64(self.bus.current_icount);
@@ -4224,10 +4989,26 @@ impl Emulator {
             return Err("load_state needs an emulator that has not executed".into());
         }
         let mut r = Reader::new(data);
-        if r.raw(8)? != SNAPSHOT_MAGIC {
+        let ips = self.ips;
+        // the rate the snapshot's deadlines are counted at
+        let magic = r.raw(8)?;
+        let saved_ips = if magic == SNAPSHOT_MAGIC {
+            periph::clock::BASE_IPS
+        } else if magic == SNAPSHOT_MAGIC_RATE {
+            let saved = r.u64()?;
+            if saved != ips {
+                return Err(format!(
+                    "snapshot was taken at {saved} instructions per second and this emulator runs at {ips}"
+                ));
+            }
+            saved
+        } else {
             return Err("not a DT2SNP01 snapshot".into());
+        };
+        if saved_ips != ips {
+            self.snapshot_time_base();
         }
-        self.snapshot_time_base();
+        self.midi.usb.reset_boot();
         let main_sha = r.bytes()?;
         let device = r.bytes()?;
         let version = r.bytes()?;
@@ -4272,6 +5053,10 @@ impl Emulator {
         c.last_exception = r.bool()?.then_some(exc);
         c.last_unimplemented = None;
         self.bus.board.snap_load(&mut r)?;
+        if self.panel_leds.is_stateful() {
+            r.tag("LEDS")?;
+            self.panel_leds.snap_load(&mut r)?;
+        }
         r.tag("BUS_")?;
         self.bus.current_pc = r.u32()?;
         self.bus.current_icount = r.u64()?;
@@ -4416,7 +5201,7 @@ impl Emulator {
         }
         self.rebuild_watch();
         self.replay_restored_frame = true;
-        self.rescale_to_cf_ips();
+        self.rescale_to_cf_ips(saved_ips);
         Ok(())
     }
 
@@ -4424,7 +5209,7 @@ impl Emulator {
     /// the clocks run at that base so the SSI check and the deadlines agree.
     fn snapshot_time_base(&mut self) {
         let base = periph::clock::BASE_IPS;
-        if periph::clock::cf_ips() == base {
+        if self.ips == base {
             return;
         }
         if let Some(time) = self.bus.board.time_mut() {
@@ -4437,9 +5222,9 @@ impl Emulator {
 
     /// After a load: move every deadline from the snapshot's base rate to `DIGI_CF_IPS`,
     /// keeping its emulated time.
-    fn rescale_to_cf_ips(&mut self) {
-        let ips = periph::clock::cf_ips();
-        if ips == periph::clock::BASE_IPS {
+    fn rescale_to_cf_ips(&mut self, saved_ips: u64) {
+        let ips = self.ips;
+        if ips == saved_ips {
             return;
         }
         let now = self
@@ -4464,6 +5249,11 @@ impl Emulator {
     /// two runs that reach the same guest state by different paths (stepping one instruction at a time, the batched loop, the idle skip)
     /// have the same digest. The oracle for a change to those paths (`state.digest {"arch": true}`).
     pub fn state_digest_arch(&mut self) -> Result<String, String> {
+        Ok(digest(&self.save_state_arch()?))
+    }
+
+    /// `save_state` with the three counters of `state_digest_arch` zeroed for the call.
+    fn save_state_arch(&mut self) -> Result<Vec<u8>, String> {
         let saved = (
             self.interpreted_instructions,
             self.idle_fast_forwarded_instructions,
@@ -4474,13 +5264,123 @@ impl Emulator {
             self.idle_fast_forwarded_instructions,
             self.ram_clear_fast_forwarded_instructions,
         ) = (0, 0, 0);
-        let digest = self.state_digest();
+        let bytes = self.save_state();
         (
             self.interpreted_instructions,
             self.idle_fast_forwarded_instructions,
             self.ram_clear_fast_forwarded_instructions,
         ) = saved;
-        digest
+        bytes
+    }
+
+    /// The digest of the ColdFire side for an A/B of two builds (`coupled-run` `state_sha256`): the `save_state` bytes without the
+    /// three instruction-path counters (see `state_digest_arch`), then, in this order, state that the snapshot does not carry and
+    /// the guest changes: the flash image and `flash_writes`, the MIDI DIN port and the USB port (flags, callbacks, queues with
+    /// their contents, the active call, counters, the EP2 buffers, the controller error), and the pending and active host-called
+    /// guest functions (`calls`, `call_active`). Left out on purpose: instrumentation (spans, probe hits, `pc_probe`, traces,
+    /// telemetry). Fails like `save_state`. The snapshot format is not changed.
+    pub fn cf_state_digest(&mut self) -> Result<String, String> {
+        use periph::snap::Writer;
+        let mut bytes = self.save_state_arch()?;
+        let mut w = Writer::new();
+        w.tag("CFX_");
+        w.bytes(digest(&self.flash).as_bytes());
+        w.u64(self.flash_writes.erases);
+        w.u64(self.flash_writes.programs);
+        w.u64(self.flash_writes.bytes);
+        let m = &self.midi;
+        w.tag("MIDI");
+        w.bytes(&m.queue.iter().copied().collect::<Vec<_>>());
+        w.bool(m.pending);
+        for v in [
+            m.next_ic, m.period, m.rx_bytes, m.rx_irqs, m.tx_bytes, m.tx_dma, m.tx_irqs,
+        ] {
+            w.u64(v);
+        }
+        w.opt_u64(m.tx_due);
+        let u = &m.usb;
+        w.tag("USB_");
+        w.bool(u.enabled);
+        for v in [u.rx_cb, u.tx_fn, u.ret_pc] {
+            w.u32(v);
+        }
+        w.bool(u.slots.is_some());
+        let (s0, s1) = u.slots.unwrap_or((0, 0));
+        w.u32(s0);
+        w.u32(s1);
+        w.bool(u.unregistered);
+        w.u64(u.queue.len() as u64);
+        for item in &u.queue {
+            match item {
+                crate::midi::UsbItem::Midi(b) => {
+                    w.u8(0);
+                    w.bytes(b);
+                }
+                crate::midi::UsbItem::Bulk(b, zlp) => {
+                    w.u8(1);
+                    w.bytes(b);
+                    w.bool(*zlp);
+                }
+                crate::midi::UsbItem::BulkTxDone(td) => {
+                    w.u8(2);
+                    w.u32(*td);
+                }
+                crate::midi::UsbItem::Call(f, args) => {
+                    w.u8(3);
+                    w.u32(*f);
+                    w.u64(args.len() as u64);
+                    for a in args {
+                        w.u32(*a);
+                    }
+                }
+            }
+        }
+        w.u64(u.next_ic);
+        w.u64(u.period);
+        w.bool(u.active.is_some());
+        if let Some(c) = &u.active {
+            w.u32(c.sp_after_rts);
+            w.u32(c.frame_sp);
+            for v in c.saved {
+                w.u32(v);
+            }
+        }
+        w.bytes(&u.out);
+        w.u64(u.in_bytes);
+        w.u64(u.calls);
+        w.u32(u.bulk_queue_fn);
+        w.bytes(&u.bulk_out);
+        w.u64(u.bulk_in_bytes);
+        w.u64(u.bulk_out_bytes);
+        w.u64(u.bulk_naks);
+        w.u64(u.bulk_out_zlps);
+        w.bool(u.sys_error.is_some());
+        w.bytes(u.sys_error.as_deref().unwrap_or("").as_bytes());
+        w.tag("CALL");
+        w.u64(self.calls.len() as u64);
+        for c in &self.calls {
+            w.u32(c.at);
+            w.u32(c.func);
+            w.u64(c.args.len() as u64);
+            for a in &c.args {
+                w.u32(*a);
+            }
+            w.u64(c.data.len() as u64);
+            for (addr, data) in &c.data {
+                w.u32(*addr);
+                w.bytes(data);
+            }
+        }
+        w.bool(self.call_active.is_some());
+        if let Some(c) = &self.call_active {
+            w.u32(c.at);
+            w.u32(c.sp_after);
+            for v in c.d.iter().chain(&c.a) {
+                w.u32(*v);
+            }
+        }
+        bytes.extend_from_slice(&w.buf);
+        Ok(digest(&bytes))
     }
 }
 
@@ -4497,6 +5397,90 @@ fn resolve_fused_loops(main: &[u8]) -> Vec<(u32, Loop, Vec<u8>)> {
 
 #[cfg(test)]
 mod tests {
+    use machine::SemaphoreAddresses;
+
+    /// MAIN's output ring as `[emulator.peer_audio]` describes it: the TCD of the audio channel names the ring, the second half is read, the
+    /// words are 24-bit signed in 32-bit words, left and right come from the named words, and an edge soon after the last read adds nothing.
+    #[test]
+    fn peer_audio_reads_the_second_half_of_the_ring_the_tcd_names() {
+        let mut board = Board::new(
+            Card::new(CardIdentity::Mlc4G).unwrap(),
+            SemaphoreAddresses {
+                dma_sem: None,
+                data_sem: None,
+                cmd_sem: None,
+                status: None,
+            },
+            CompletionPolicy::Device,
+        );
+        board.map_ram_page(0x8000_0000).unwrap();
+        let tcd = 0xfc04_5000 + 54 * 0x20;
+        board.write32(tcd, 0x8000_0000).unwrap(); // SADDR
+        board.write32(tcd + 8, 0x20).unwrap(); // NBYTES: 8 words a frame
+        board.write16(tcd + 0x1c, 0x0040).unwrap(); // BITER: 64 frames, 32 a half
+        // Frame f of the second half (0x80000400 + f * 0x20): word 5 = f, word 3 = -f (24-bit, sign-extended in 32 bits).
+        for f in 0..32u32 {
+            let at = 0x8000_0400 + f * 0x20;
+            board.write32(at + 5 * 4, f).unwrap();
+            board
+                .write32(
+                    at + 3 * 4,
+                    (-(f as i32)) as u32 & 0x00ff_ffff | 0xff00_0000 * u32::from(f != 0),
+                )
+                .unwrap();
+        }
+        // The first half must not be read.
+        board.write32(0x8000_0000 + 5 * 4, 0x7f_ffff).unwrap();
+        let audio = device_profile::PeerAudio {
+            dma_channel: 54,
+            slots: [5, 3],
+            bits: 24,
+            sample_rate: 48_000,
+            frame_samples: 32,
+        };
+        let (mut clock, mut pcm, mut frames) = (0u64, std::collections::VecDeque::new(), 0u64);
+        capture_peer_audio(
+            &mut board,
+            Some(&audio),
+            1000,
+            &mut clock,
+            &mut pcm,
+            &mut frames,
+        );
+        assert_eq!(frames, 32);
+        assert_eq!(pcm.len(), 64);
+        let scale = 1.0 / (1u32 << 23) as f32;
+        assert_eq!(pcm[2 * 5], 5.0 * scale, "left of frame 5");
+        assert_eq!(pcm[2 * 5 + 1], -5.0 * scale, "right of frame 5");
+        capture_peer_audio(
+            &mut board,
+            Some(&audio),
+            1000 + periph::peer::FRAME_TICKS / 4,
+            &mut clock,
+            &mut pcm,
+            &mut frames,
+        );
+        assert_eq!(frames, 32, "an edge within half a frame is the same frame");
+        capture_peer_audio(
+            &mut board,
+            Some(&audio),
+            1000 + periph::peer::FRAME_TICKS,
+            &mut clock,
+            &mut pcm,
+            &mut frames,
+        );
+        assert_eq!(frames, 64);
+        capture_peer_audio(
+            &mut board,
+            None,
+            9_999_999,
+            &mut clock,
+            &mut pcm,
+            &mut frames,
+        );
+        assert_eq!(frames, 64, "no peer_audio, no capture");
+    }
+
     use super::*;
 
     #[test]
@@ -4563,12 +5547,23 @@ mod tests {
     }
 
     #[test]
-    fn dtcn0_runs_by_default_on_dn2_only() {
-        assert_eq!(dtcn0_on("dn2", None), Ok(true));
-        assert_eq!(dtcn0_on("dt2", None), Ok(false));
-        assert_eq!(dtcn0_on("dn2", Some("off")), Ok(false));
-        assert_eq!(dtcn0_on("dt2", Some("bus")), Ok(true));
-        assert!(dtcn0_on("dn2", Some("on")).is_err());
+    fn dtcn_channels_come_from_the_device_and_dtcn0_env_overrides_channel_0() {
+        let registry = device_profile::Registry::embedded().unwrap();
+        let mask = |short: &str| {
+            registry
+                .devices()
+                .iter()
+                .find(|d| d.short == short)
+                .unwrap()
+                .free_running_dtcn_mask()
+        };
+        assert_eq!(dtcn_mask(mask("dn2"), None), Ok(0b0001));
+        assert_eq!(dtcn_mask(mask("dt2"), None), Ok(0b0001));
+        assert_eq!(dtcn_mask(mask("st"), None), Ok(0b0100));
+        assert_eq!(dtcn_mask(mask("dn2"), Some("off")), Ok(0));
+        assert_eq!(dtcn_mask(mask("dt2"), Some("bus")), Ok(1));
+        assert_eq!(dtcn_mask(mask("st"), Some("bus")), Ok(0b0101));
+        assert!(dtcn_mask(0, Some("on")).is_err());
     }
 
     #[test]
@@ -4656,18 +5651,23 @@ mod tests {
         assert_eq!(runtime.delivery_counts[timer_vector as usize], 1);
     }
 
-    /// Every signature-resolved anchor of the boot path resolves on the
-    /// current firmware of both products, relinked builds included.
+    /// Every signature-resolved anchor of the boot path resolves on every listed firmware image present in firmware/ that
+    /// the emulator runs, relinked builds included.
     #[test]
     fn boot_anchors_resolve_on_every_supported_firmware() {
-        for file in ["Digitakt_II_OS1.17.syx", "Digitone_II_OS1.12.syx"] {
+        for (_, file, release) in listed_images() {
+            if release.boot.is_none() {
+                continue;
+            }
             let Ok(syx) = std::fs::read(format!("../../../firmware/{file}")) else {
+                eprintln!("skipped {file}: image not in firmware/");
                 continue;
             };
             let emu = Emulator::new_with_policy(&syx, None, ExecutionPolicy::SoftfloatAbiV1)
                 .unwrap_or_else(|e| panic!("{file}: {e}"));
-            assert!(
-                emu.softfloat.enabled,
+            // the shortcuts are on exactly for the releases whose device file verifies them
+            assert_eq!(
+                emu.softfloat.enabled, release.softfloat_abi,
                 "{file}: softfloat {:?}",
                 emu.softfloat.reason
             );
@@ -4677,9 +5677,341 @@ mod tests {
         }
     }
 
+    /// Two emulators of different devices in one process keep their own instruction rates: the USB frame period, the DMA timer counters
+    /// and the rate itself follow each emulator, in any order of creation and use (the rate is no process-wide state).
+    #[test]
+    fn emulators_of_two_devices_keep_their_own_rate() {
+        // one device with its own rate, one on the base rate (from the registry)
+        let firmware_of = |own_rate: bool| {
+            let registry = device_profile::Registry::embedded().unwrap();
+            let device = registry
+                .devices()
+                .iter()
+                .find(|d| d.instructions_per_second.is_some() == own_rate)?;
+            let file = device
+                .firmwares
+                .iter()
+                .rev()
+                .find_map(|f| f.filename.clone())?;
+            std::fs::read(format!("../../../firmware/{file}")).ok()
+        };
+        let (Some(fast_syx), Some(base_syx)) = (firmware_of(true), firmware_of(false)) else {
+            return;
+        };
+        let mut fast = Emulator::new(&fast_syx, None).unwrap();
+        let mut base = Emulator::new(&base_syx, None).unwrap();
+        // started in the opposite order, then used alternately
+        fast.enable_usb().unwrap();
+        base.enable_usb().unwrap();
+        let (want_fast, want_base) = if std::env::var_os("DIGI_CF_IPS").is_some() {
+            (base.cf_ips(), base.cf_ips())
+        } else {
+            (
+                device_profile::Registry::embedded()
+                    .unwrap()
+                    .devices()
+                    .iter()
+                    .find_map(|d| d.instructions_per_second)
+                    .unwrap(),
+                periph::clock::BASE_IPS,
+            )
+        };
+        for (emu, want) in [(&mut fast, want_fast), (&mut base, want_base)] {
+            assert_eq!(emu.cf_ips(), want);
+            assert_eq!(
+                emu.midi.usb.period,
+                periph::clock::scale_instr(crate::midi::USB_PERIOD, want)
+            );
+            // 1 ms of emulated time is 132,000 bus ticks at any instruction rate
+            emu.bus.board.enable_dtcn_channels(0b0001);
+            emu.bus.board.set_clock(want / 1000);
+            assert_eq!(emu.bus.board.read32(0xfc07_000c), Ok(132_000));
+        }
+    }
+
+    /// The filesystem-check flag words resolved from the image are the port anchors of the same image.
+    #[test]
+    fn fs_check_flags_equal_the_port_anchors() {
+        let Some(main) = main_of("Digitakt_II_OS1.17.syx") else {
+            eprintln!("skipped: Digitakt_II_OS1.17.syx not in firmware/");
+            return;
+        };
+        let port = std::fs::read_to_string("../../../ports/dt2-1.17.toml").unwrap();
+        let anchor = |name: &str| -> u32 {
+            let at = port
+                .find(&format!("name = \"cf.storage.value.{name}\""))
+                .unwrap_or_else(|| panic!("anchor {name}"));
+            let line = port[at..]
+                .lines()
+                .find(|l| l.starts_with("addr = "))
+                .unwrap();
+            u32::from_str_radix(line.trim_start_matches("addr = 0x"), 16).unwrap()
+        };
+        assert_eq!(
+            resolve_fs_check_flags(&main).unwrap(),
+            (
+                anchor("fs_mounted"),
+                anchor("fs_state"),
+                anchor("fs_checked")
+            )
+        );
+    }
+
+    #[test]
+    fn fs_check_flags_resolver_rejects_a_missing_predicate() {
+        assert!(resolve_fs_check_flags(&[0; 256]).is_err());
+    }
+
+    #[test]
+    fn fs_check_not_needed_makes_the_strict_contract_ready_without_a_check() {
+        use device_profile::ReadinessContract::MainPanelFsCheckV1;
+        let frame = Frame {
+            owner_tcb: 1,
+            ptr: 2,
+            icount: 20,
+            hash: String::new(),
+            lit_bytes: 1,
+            raw: vec![],
+        };
+        assert!(readiness_contract_ready(
+            MainPanelFsCheckV1,
+            0,
+            0,
+            None,
+            Some(&frame),
+            None,
+            true
+        ));
+        // a check that started must complete, whatever the flags say
+        assert!(!readiness_contract_ready(
+            MainPanelFsCheckV1,
+            1,
+            0,
+            None,
+            Some(&frame),
+            None,
+            true
+        ));
+        assert!(!readiness_contract_ready(
+            MainPanelFsCheckV1,
+            0,
+            0,
+            None,
+            Some(&frame),
+            None,
+            false
+        ));
+    }
+
+    fn main_of(file: &str) -> Option<Vec<u8>> {
+        let syx = std::fs::read(format!("../../../firmware/{file}")).ok()?;
+        let firmware = parse(&syx).unwrap();
+        firmware
+            .sections
+            .into_iter()
+            .find(|s| s.id == 3)
+            .map(|s| s.bytes)
+    }
+
+    /// The firmware files the device files list.
+    fn listed_firmware_files() -> Vec<String> {
+        listed_firmware()
+            .into_iter()
+            .map(|(_, file)| file)
+            .collect()
+    }
+
+    /// The firmware files the device files list, with the device that lists each.
+    fn listed_firmware() -> Vec<(device_profile::DeviceProfile, String)> {
+        listed_images()
+            .into_iter()
+            .map(|(device, file, _)| (device, file))
+            .collect()
+    }
+
+    /// Listed firmware files with their device and release; the emulator runs a release with a boot profile.
+    fn listed_images() -> Vec<(
+        device_profile::DeviceProfile,
+        String,
+        device_profile::FirmwareProfile,
+    )> {
+        let registry = device_profile::Registry::load().unwrap();
+        registry
+            .devices()
+            .iter()
+            .flat_map(|d| {
+                d.firmwares.iter().filter_map(|f| {
+                    let file = f.filename.clone()?;
+                    Some((d.clone(), file, f.clone()))
+                })
+            })
+            .collect()
+    }
+
+    /// The listed firmware files the emulator runs, of the devices with a SHARC DSP.
+    fn dsp_firmware_files() -> Vec<String> {
+        listed_images()
+            .into_iter()
+            .filter(|(d, _, f)| {
+                f.boot.is_some() && d.capabilities.as_ref().is_some_and(|c| c.dsp == "sharc")
+            })
+            .map(|(_, file, _)| file)
+            .collect()
+    }
+
+    /// Every boot address the emulator finds by signature resolves on every listed image present in firmware/: exactly one
+    /// match each (the resolvers refuse an ambiguous signature), on an instruction boundary inside the loaded image, and no two
+    /// resolvers find the same function.
+    #[test]
+    fn boot_addresses_resolve_by_signature_on_every_image() {
+        use crate::midi::{resolve_queue_td, resolve_usb_reg, resolve_usb_tx};
+        for file in listed_firmware_files() {
+            let Some(main) = main_of(&file) else {
+                eprintln!("skipped {file}: image not in firmware/");
+                continue;
+            };
+            let found = [
+                ("task_create", resolve_task_create(&main).ok()),
+                ("uart8_init", resolve_uart_init(&main).ok()),
+                ("usb queue_td", resolve_queue_td(&main)),
+                ("usb tx", resolve_usb_tx(&main)),
+                ("usb register", resolve_usb_reg(&main)),
+            ];
+            let image_end = MAIN_LOAD + main.len() as u32;
+            let mut seen = Vec::new();
+            for (name, at) in found {
+                let Some(at) = at else {
+                    panic!("{file}: {name} does not resolve");
+                };
+                assert!(
+                    (MAIN_LOAD..image_end).contains(&at) && at % 2 == 0,
+                    "{file}: {name} at {at:#x} is not an instruction address in the image"
+                );
+                assert!(
+                    !seen.contains(&at),
+                    "{file}: {name} at {at:#x} is also another resolver's match"
+                );
+                seen.push(at);
+            }
+        }
+    }
+
+    /// The USB registration slots resolve on every firmware image the device files list (those present in firmware/), and they are
+    /// two different words in the .bss above the loaded image (the boot clears them).
+    #[test]
+    fn usb_slots_resolve_on_every_image() {
+        use crate::midi::resolve_usb_slots;
+        for file in listed_firmware_files() {
+            let Some(main) = main_of(&file) else {
+                eprintln!("skipped {file}: image not in firmware/");
+                continue;
+            };
+            let Some((slot0, slot1)) = resolve_usb_slots(&main, MAIN_LOAD) else {
+                panic!("{file}: slots do not resolve");
+            };
+            let image_end = MAIN_LOAD + main.len() as u32;
+            assert_ne!(slot0, slot1, "{file}: both slots are one word");
+            assert!(
+                slot0 >= image_end
+                    && slot1 >= image_end
+                    && slot0 < 0x4800_0000
+                    && slot1 < 0x4800_0000,
+                "{file}: slots {slot0:#x} {slot1:#x} are not in RAM above the image (ends at {image_end:#x})"
+            );
+        }
+    }
+
+    /// Every boot signature resolves on the bytes of every listed MAIN without a profile; only a device without a path
+    /// filesystem has no filesystem worker.
+    #[test]
+    fn boot_signatures_resolve_on_every_listed_main() {
+        for (device, file) in listed_firmware() {
+            let Some(main) = main_of(&file) else {
+                eprintln!("skipped {file}: image not in firmware/");
+                continue;
+            };
+            let has_path_fs = device.card.as_ref().is_some_and(|c| c.path_fs.is_some());
+            boot_signatures_resolve(&file, &main, has_path_fs);
+        }
+    }
+
+    fn boot_signatures_resolve(file: &str, main: &[u8], has_path_fs: bool) {
+        let main = main.to_vec();
+        let mut failed: Vec<String> = Vec::new();
+        let mut check = |name: &str, ok: bool| {
+            if !ok {
+                failed.push(name.to_owned());
+            }
+        };
+        check("task_create", resolve_task_create(&main).is_ok());
+        check(
+            "mainloop",
+            unique_signature_data(&main, MAINLOOP_SIG, Some(15)).is_some(),
+        );
+        let panel_diff = unique(&main, PANEL_DIFF_SIG, &data_mask(PANEL_DIFF_SIG, None));
+        check("panel_diff", panel_diff.is_ok());
+        check(
+            "panel operands",
+            panel_diff
+                .as_ref()
+                .is_ok_and(|p| operand_pair(&main, *p).is_ok()),
+        );
+        check(
+            "job_pump",
+            unique_signature(&main, JOB_PUMP_SIG, None).is_some(),
+        );
+        check(
+            "flash_read",
+            unique(&main, FLASH_READ_SIG, &vec![false; FLASH_READ_SIG.len()]).is_ok(),
+        );
+        check(
+            "flash_erase",
+            unique(&main, FLASH_ERASE_SIG, &data_mask(FLASH_ERASE_SIG, None)).is_ok(),
+        );
+        check(
+            "flash_program",
+            unique(
+                &main,
+                FLASH_PROGRAM_SIG,
+                &data_mask(FLASH_PROGRAM_SIG, None),
+            )
+            .is_ok(),
+        );
+        check("fs_worker", resolve_fs_worker(&main).is_ok());
+        check("fs_flags", resolve_fs_check_flags(&main).is_ok());
+        check("sd_semaphores", resolve_sd_semaphores(&main).is_ok());
+        check("intro_marks", resolve_intro_marks(&main).is_ok());
+        check(
+            "intro_callback_return",
+            resolve_intro_callback_return(&main).is_ok(),
+        );
+        let display = hex("701041f9fc08c000245f13c1fc050050722313c0fc05001d");
+        check(
+            "display_start",
+            unique(&main, &display, &data_mask(&display, None)).is_ok(),
+        );
+        check("uart", resolve_uart(&main).is_ok());
+        check(
+            "set_pixel",
+            unique(
+                &main,
+                &hex(SET_PIXEL_SIG),
+                &vec![false; SET_PIXEL_SIG.len() / 2],
+            )
+            .is_ok(),
+        );
+        check("context_switch", resolve_context_switch(&main).is_ok());
+        let want: Vec<String> = if has_path_fs {
+            Vec::new()
+        } else {
+            vec!["fs_worker".to_owned(), "fs_flags".to_owned()]
+        };
+        assert_eq!(failed, want, "{file}");
+    }
+
     #[test]
     fn ram_clear_batches_match_interpreter_across_chunks_pages_and_final_flags() {
-        for file in ["Digitakt_II_OS1.17.syx", "Digitone_II_OS1.12.syx"] {
+        for file in dsp_firmware_files() {
             let Ok(syx) = std::fs::read(format!("../../../firmware/{file}")) else {
                 continue;
             };
@@ -4800,6 +6132,108 @@ mod tests {
             assert_eq!(emu.cpu, before);
         }
         assert_eq!(emu.ram_clear_fast_forwarded_instructions, 0);
+    }
+
+    /// The firmware of the device whose second CPU runs a program (`[emulator] peer = "coldfire"`), when it is in `firmware/`.
+    fn peer_cpu_firmware() -> Option<Vec<u8>> {
+        let registry = device_profile::Registry::embedded().unwrap();
+        let device = registry
+            .devices()
+            .iter()
+            .find(|d| d.peer == Some(device_profile::PeerModel::Coldfire))?;
+        let file = device
+            .firmwares
+            .iter()
+            .rev()
+            .find_map(|f| f.filename.clone())?;
+        std::fs::read(format!("../../../firmware/{file}")).ok()
+    }
+
+    /// Boots a peer CPU device until its peer CPU runs, plays a note, then runs `total` more ticks in chunks of `chunk`.
+    /// Returns the MAIN tick, the peer CPU's state and the PCM captured.
+    fn peer_cpu_device_after_chunks(syx: &[u8], chunk: u32, total: u32) -> (u64, String, Vec<f32>) {
+        let mut emu = Emulator::new(syx, None).unwrap();
+        emu.enable_ssi_diagnostic(96_000).unwrap();
+        while !emu.peer_started {
+            emu.step_chunk(250_000);
+            assert!(emu.error.is_none(), "{:?}", emu.error);
+        }
+        // past the main UI, then trig 1 and PLAY, as the headless proof does
+        for _ in 0..2800 {
+            emu.step_chunk(250_000);
+        }
+        for code in [1, 37] {
+            emu.button(code, true).unwrap();
+            for _ in 0..40 {
+                emu.step_chunk(250_000);
+            }
+            emu.button(code, false).unwrap();
+            for _ in 0..40 {
+                emu.step_chunk(250_000);
+            }
+        }
+        emu.take_pcm();
+        for _ in 0..total / chunk {
+            emu.step_chunk(chunk);
+        }
+        assert!(emu.error.is_none(), "{:?}", emu.error);
+        let peer = emu.peer_cpu().unwrap();
+        let state = format!("raised {} taken {}", peer.frames_raised, peer.frames_taken);
+        (emu.cpu.icount, state, emu.take_pcm())
+    }
+
+    /// The host's chunking (how many ticks one `step_chunk` call runs) must not change what the peer CPU does or the PCM.
+    /// Boots a device: slow in a debug build, so it runs on request: `cargo test --release -p elektron-native-boot --lib -- --ignored`.
+    #[test]
+    #[ignore = "boots a peer CPU device until its peer runs"]
+    fn the_peer_frames_do_not_depend_on_the_chunk_size() {
+        let Some(syx) = peer_cpu_firmware() else {
+            return;
+        };
+        let a = peer_cpu_device_after_chunks(&syx, 5000, 1_000_000);
+        let b = peer_cpu_device_after_chunks(&syx, 1000, 1_000_000);
+        assert_eq!(a.0, b.0, "MAIN ticks");
+        assert_eq!(a.1, b.1, "peer frames");
+        assert!(!a.2.is_empty(), "the run produced PCM");
+        assert_eq!(a.2.len(), b.2.len(), "PCM length");
+        assert_eq!(a.2, b.2, "PCM");
+    }
+
+    #[test]
+    fn a_snapshot_at_the_device_rate_restores_only_at_that_rate() {
+        let Some(syx) = peer_cpu_firmware() else {
+            return;
+        };
+        let mut emu = Emulator::new(&syx, None).unwrap();
+        let ips = emu.cf_ips(); // the device's, set by the constructor
+        assert_ne!(ips, periph::clock::BASE_IPS, "the device has its own rate");
+        let state = emu.save_state().unwrap();
+        assert_eq!(&state[..8], b"DT2SNP02");
+        assert_eq!(u64::from_le_bytes(state[8..16].try_into().unwrap()), ips);
+        Emulator::new(&syx, None)
+            .unwrap()
+            .load_state(&state)
+            .expect("the same rate restores");
+        let mut other = state.clone();
+        other[8..16].copy_from_slice(&(ips + 1).to_le_bytes());
+        let e = Emulator::new(&syx, None)
+            .unwrap()
+            .load_state(&other)
+            .unwrap_err();
+        assert!(e.contains("instructions per second"), "{e}");
+    }
+
+    #[test]
+    fn save_state_is_refused_while_a_peer_cpu_runs() {
+        let Some(syx) = peer_cpu_firmware() else {
+            return;
+        };
+        let mut emu = Emulator::new(&syx, None).unwrap();
+        assert!(emu.has_peer_cpu());
+        emu.save_state().expect("before the peer starts");
+        emu.peer_started = true;
+        let e = emu.save_state().unwrap_err();
+        assert!(e.contains("peer CPU is running"), "{e}");
     }
 
     #[test]
@@ -5054,6 +6488,54 @@ mod tests {
         assert!(plain.accesses.is_empty());
     }
 
+    /// A send is recorded when its first instruction executes, not when the PC arrives: an interrupt that takes the step over (the peer's
+    /// frame, the USB hand-over) makes the task resume at the same PC later, and the arrival used to be seen twice (finding 139).
+    #[test]
+    fn a_transmit_call_that_an_interrupt_preempts_is_recorded_once() {
+        // a device with a peer CPU: its constructor sets the clock rate the other tests of that device read
+        let Some(syx) = peer_cpu_firmware() else {
+            return;
+        };
+        let mut emu = Emulator::new(&syx, None).unwrap();
+        let base = 0x47e8_b000u32;
+        emu.bus.board.map_zeroed_ram_page(base & !0xf_ffff).unwrap();
+        let mut put = |at: u32, word: u32| emu.bus.board.write_guest(at, 4, word).unwrap();
+        put(base, 0x60fe_60fe); // the transmit function: bra.s *
+        put(base + 0x100, 0xf07d_f700); // the message
+        put(base + 0x800, base + 0x10); // the call frame: return address, length, buffer
+        put(base + 0x804, 3);
+        put(base + 0x808, base + 0x100);
+        put(base + 0x400 + 4 * u32::from(crate::midi::RX_VECTOR), base);
+        emu.cpu.ctrl.vbr = base + 0x400;
+        emu.midi.usb.enabled = true;
+        emu.midi.usb.tx_fn = base;
+        emu.midi.usb.rx_cb = base;
+        emu.midi.usb.ret_pc = base + 0x10;
+        emu.midi
+            .usb
+            .queue
+            .push_back(crate::midi::UsbItem::Midi(vec![0xf0, 0xf7]));
+        emu.rebuild_watch();
+        let arrive = |emu: &mut Emulator| {
+            emu.cpu.pc = base;
+            emu.cpu.sr = 0x2000;
+            emu.cpu.a[7] = base + 0x800;
+        };
+        arrive(&mut emu);
+        emu.step_once();
+        assert!(
+            emu.midi.usb.active.is_some(),
+            "the USB interrupt took the step"
+        );
+        assert!(emu.take_usb_out().is_empty(), "nothing executed yet");
+        // the task resumes at the same PC
+        emu.midi.usb.active = None;
+        arrive(&mut emu);
+        emu.step_once();
+        assert_eq!(emu.error, None);
+        assert_eq!(emu.take_usb_out(), [0xf0, 0x7d, 0xf7]);
+    }
+
     #[test]
     fn idle_advance_stops_before_each_observable_boundary() {
         assert_eq!(idle_advance_limit(250_000, 1, 100, None), 19_998);
@@ -5062,6 +6544,42 @@ mod tests {
         assert_eq!(idle_advance_limit(20, 1, 100, Some(101)), 0);
         assert_eq!(idle_advance_limit(20, 1, 100, Some(99)), 0);
         assert_eq!(idle_advance_limit(3, 1, 100, None), 3);
+    }
+
+    /// The run loop's deadline handling for a peer CPU, without firmware: the MAIN slice stops at the peer's deadline and the idle
+    /// fast-forward never jumps past it; with no peer both limits are the ones MAIN already had.
+    #[test]
+    fn the_peer_deadline_cuts_the_main_slice_and_the_idle_fast_forward() {
+        let now = 1_000_000;
+        let mut peer = periph::peer::MailboxPeer::new();
+        peer.cpu_mode = true;
+        peer.frame_source(0);
+        peer.delivered(periph::peer::PeerIrq::Frame);
+        // the next frame is due at FRAME_TICKS: far away, so the slice is the full PEER_SLICE
+        let far = peer.next_deadline(0).unwrap();
+        assert_eq!(peer_slice(0, Some(far)), PEER_SLICE as u32);
+        // a deadline 100 ticks ahead cuts the slice there, and the idle skip stops one instruction before it
+        let due = now + 100;
+        assert_eq!(peer_slice(now, Some(due)), 100);
+        let skip = idle_advance_limit(250_000, 1, now, earliest(None, Some(due)));
+        assert_eq!(u64::from(skip), 99);
+        assert!(now + u64::from(skip) < due);
+        // a timer deadline that is earlier still wins; a later one does not
+        assert_eq!(earliest(Some(now + 10), Some(due)), Some(now + 10));
+        assert_eq!(earliest(Some(now + 500), Some(due)), Some(due));
+        // a deadline that has passed (MAIN has not taken its interrupt) does not stall the slice
+        assert_eq!(peer_slice(now, Some(now - 5)), 0);
+        // no peer: inert
+        assert_eq!(peer_slice(now, None), PEER_SLICE as u32);
+        assert_eq!(earliest(None, None), None);
+        assert_eq!(
+            idle_advance_limit(250_000, 1, now, earliest(None, None)),
+            19_998
+        );
+        assert_eq!(
+            idle_advance_limit(250_000, 1, now, earliest(Some(now + 50), None)),
+            49
+        );
     }
 
     /// Code in DDR (outside MAIN), written at run time and rewritten by the
@@ -5326,11 +6844,7 @@ mod tests {
 
     #[test]
     fn known_fixture_constructs_without_running_guest_code() {
-        for name in [
-            "Digitakt_II_OS1.17.syx",
-            "Digitone_II_OS1.12.syx",
-            "Digitone_II_OS1.11.syx",
-        ] {
+        for name in dsp_firmware_files() {
             let path = format!("../../../firmware/{name}");
             let Ok(syx) = std::fs::read(&path) else {
                 eprintln!("SKIP unavailable fixture {path}");

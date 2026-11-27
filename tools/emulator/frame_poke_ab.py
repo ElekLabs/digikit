@@ -5,7 +5,7 @@
         --scenario sf-del-ref --scenario sf-rev-ref --poke 0x6f8=0x7f00 --poke 0x6f8=0
 
 Each scenario runs unpatched and once per --poke (OFF=VAL[/TRACKS], see DSP_FRAME_POKE in
-packages/emulator/boot/src/sharc_peer.rs: the big-endian 16-bit word at byte OFF of every frame sent to
+packages/emulator/sharc-peer/src/peer.rs: the big-endian 16-bit word at byte OFF of every frame sent to
 the DSP). A poke whose PCM hash equals the unpatched one for every scenario is evidence, for
 those scenarios only, that the word is not read (or has no effect). A scenario must exercise
 the stage that would read the word (finding 04, frame map).
@@ -21,6 +21,7 @@ from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools.emulator import coupled, digi_env  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 
 
 def run(
@@ -46,7 +47,7 @@ def run(
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("device", choices=["dt2", "dn2"])
+    p.add_argument("device", choices=device_files.shorts())
     p.add_argument("--file", type=pathlib.Path, required=True)
     p.add_argument("--scenario", action="append", required=True)
     p.add_argument("--poke", action="append", required=True)

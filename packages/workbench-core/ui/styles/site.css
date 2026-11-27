@@ -1,0 +1,328 @@
+@import './themes/digikit.css';
+@import './themes/violet-slate.css';
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+}
+body {
+  min-width: 320px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--t-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-stretch: 118%;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+p {
+  margin: 0;
+}
+a {
+  color: var(--action);
+}
+a:hover {
+  color: var(--link-hover);
+}
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+.wrap {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.eyebrow {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* Site navigation */
+.sitenav {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  flex-shrink: 0;
+  background: var(--site-header-fill);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.sitenav .wrap {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  height: 62px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+}
+.brand:hover {
+  color: var(--ink);
+}
+.brand-mark {
+  display: grid;
+  grid-template-columns: repeat(2, 5px);
+  gap: 2px;
+}
+.brand-mark i {
+  width: 5px;
+  height: 5px;
+  background: var(--ink-3);
+  border-radius: 1px;
+}
+.brand-mark i:first-child {
+  background: var(--action);
+  box-shadow: 0 0 8px var(--action);
+}
+.nav-links {
+  display: flex;
+  gap: 26px;
+}
+.nav-links a {
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 14.5px;
+  font-weight: 500;
+  padding-block: 20px;
+  border-bottom: 2px solid transparent;
+}
+.nav-links a:hover {
+  color: var(--ink);
+}
+.nav-links a[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: var(--action);
+}
+.nav-source {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 14px;
+}
+.nav-source:hover {
+  color: var(--ink);
+}
+.nav-source svg {
+  width: 16px;
+  height: 16px;
+}
+.sitefoot {
+  border-top: 1px solid var(--line);
+  padding: 20px 0 28px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+}
+.sitefoot a {
+  color: var(--ink-2);
+}
+@media (max-width: 560px) {
+  .sitenav .wrap {
+    gap: 12px;
+  }
+  .nav-links {
+    gap: 12px;
+  }
+  .nav-source span {
+    display: none;
+  }
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 46px;
+  padding-inline: 20px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line-2);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.1s,
+    box-shadow 0.15s;
+}
+.btn:hover {
+  color: var(--ink);
+  background: var(--panel-3);
+  border-color: var(--button-hover-border);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.btn.primary {
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--action-ink);
+}
+.btn.primary:hover {
+  background: var(--action-hover);
+  border-color: var(--action-hover);
+  color: var(--action-ink);
+  box-shadow: 0 0 0 5px var(--action-soft);
+}
+.btn.quiet {
+  background: transparent;
+}
+.btn.sm {
+  height: 36px;
+  padding-inline: 13px;
+  font-size: 13.5px;
+  gap: 7px;
+}
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  background: var(--panel-2);
+  border-color: var(--line);
+  color: var(--ink-3);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Small device-styled markers: a trig key with its underline, lit in amber when done or chosen. */
+.trigkey {
+  width: 52px;
+  height: 60px;
+  border-radius: 8px;
+  background: linear-gradient(var(--key-top), var(--key-bottom));
+  box-shadow:
+    0 3px 0 var(--key-shadow),
+    0 0 0 1px var(--key-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--key-label);
+  flex-shrink: 0;
+}
+.trigkey i {
+  width: 16px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--key-underline);
+}
+.trigkey.small {
+  width: 30px;
+  height: 34px;
+  border-radius: 6px;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow:
+    0 2px 0 var(--key-shadow),
+    0 0 0 1px var(--key-border);
+}
+.trigkey.small i {
+  width: 10px;
+  height: 2px;
+}
+.trigkey.lit {
+  color: var(--action);
+  text-shadow: 0 0 10px var(--key-glow);
+}
+.trigkey.lit i {
+  background: var(--action);
+  box-shadow: 0 0 8px var(--action);
+}
+
+.ver {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--panel-3);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A page that fills the window instead of scrolling (the emulator). */
+body.fill {
+  height: 100dvh;
+}
+
+/* The .syx file drawing in the drop zones (SyxFile.tsx). */
+.syx-file {
+  width: 56px;
+  height: 66px;
+}
+.syx-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  fill: var(--action-ink);
+}

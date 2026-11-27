@@ -1,0 +1,51 @@
+/* The split pane (SplitPane.tsx). `--split` is the first pane's share of the width; both panes keep --pane-min. Tokens from the site. */
+.split {
+  --pane-min: 240px;
+  --handle: 11px;
+  display: grid;
+  grid-template-columns:
+    minmax(
+      var(--pane-min),
+      min(calc((100% - var(--handle)) * var(--split)), calc(100% - var(--handle) - var(--pane-min)))
+    )
+    var(--handle) minmax(var(--pane-min), 1fr);
+  /* the split fills the rest of its column-flex parent; each pane scrolls on its own, the divider runs the full height */
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+.split > * {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* the divider: a 1 px line in a wider grab area that runs the full height of the panes */
+.split-handle {
+  align-self: stretch;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+}
+.split-handle::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
+  background: var(--line-2);
+  transition: background-color 0.12s ease;
+}
+.split-handle:hover::before,
+.split.dragging .split-handle::before {
+  width: 2px;
+  margin-left: -1px;
+  background: var(--action);
+}
+.split-handle:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: -2px;
+}
+.split.dragging {
+  cursor: col-resize;
+}

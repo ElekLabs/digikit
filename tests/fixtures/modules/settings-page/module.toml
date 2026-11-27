@@ -1,0 +1,17 @@
+[module]
+id = "test/settings-page"
+version = "0.1.0"
+name = "Settings page"
+category = "test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: a module whose SETTINGS page comes from a field table (<dk/settings/page.h>): a toggle, a value row and an enum edited through the stock choice popup; it builds no menu of its own"
+requires = ["core/ui"]
+conflicts = []
+
+# C, built by `patchkit build`. Loaded by the digikit runtime from the card store (`patchkit pack test/settings-page`).
+[[object]]
+path = "build/settings-page.dko.json"
+sources = ["src/settings_page.c"]
+place = "cf.expansion"

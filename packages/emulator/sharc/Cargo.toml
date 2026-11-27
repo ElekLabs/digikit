@@ -14,13 +14,22 @@ description = "Native SHARC+ core generated from tools/sharc_dev/sharc_core (too
 # for the examples that drive it; nothing links it into the library.
 [dependencies]
 sharc-rt = { path = "../sharc-rt" }
+dynlib = { path = "../dynlib" }
 sharc-stats = { path = "../sharc-stats" }
+sharc-gen = { path = "../sharc-gen", optional = true }
+
+[dev-dependencies]
+# Tests and examples run the engine on the linked generated core.
 sharc-gen = { path = "../sharc-gen" }
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
 sharc-fast-cl = { path = "../sharc-fast-cl" }
 
 [features]
+default = []
+# The C ABI (`sharc_native_create`, ...) creates engines on the linked sharc-gen core. The engine itself
+# takes its core as a value (`Engine::new(mem, core)`) and needs no generated core to build.
+c-abi = ["dep:sharc-gen"]
 # Per-entry dispatch timing for coupled-run diagnostic builds.
 region-profile = []
 # SHARC_FAST_DUMP: capture the fast tier's kernels and real calls (the wasm gate).
@@ -34,7 +43,9 @@ crate-type = ["cdylib", "rlib"]
 [[bin]]
 name = "sharc-check"
 path = "src/bin/sharc_check.rs"
+required-features = ["c-abi"]
 
 [[bin]]
 name = "sharc-frames"
 path = "src/bin/sharc_frames.rs"
+required-features = ["c-abi"]

@@ -1,0 +1,45 @@
+[package]
+name = "sharc-peer"
+license.workspace = true
+repository.workspace = true
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+description = "The SHARC+ side of a coupled emulation: the DSPI2 peer, DSP engine glue, DSP patches, cold boot and core selection"
+
+[lib]
+name = "sharc_peer"
+
+[features]
+default = []
+# The SharcPeer, the engine glue and the threaded worker. The browser core builds with `sharc` alone.
+sharc = ["dep:sharc-native"]
+# The native host: core selection and loading from a core library (`dsp_core`), the fast tier's Cranelift backend,
+# the cold boot to ready (`cold`). It holds no generated core.
+host = ["sharc", "dep:sharc-fast-cl"]
+# Opt-in PCM playback in the examples (packages/emulator/live through the boot crate).
+play = ["elektron-native-boot/play"]
+
+[dependencies]
+device-profile = { path = "../device-profile" }
+emmc-card = { path = "../card" }
+elektron-native-boot = { path = "../boot" }
+periph = { path = "../periph", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sharc-native = { path = "../sharc", optional = true }
+sharc-fast-cl = { path = "../sharc-fast-cl", optional = true }
+
+[dev-dependencies]
+# Unit tests and examples run on the linked generated core (SHARC_GEN_DIR); a host build links none.
+sharc-gen = { path = "../sharc-gen" }
+
+[[example]]
+name = "sharc_live"
+required-features = ["host"]
+
+[[example]]
+name = "dsp_cold"
+required-features = ["host"]

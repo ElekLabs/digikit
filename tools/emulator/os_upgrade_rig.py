@@ -9,7 +9,7 @@ until the flash write ends in the soft reset.
 Every run is bounded by `--limit` (guest instructions in total). It starts one private `digi-emud` and stops only that
 PID. Example:
 
-    uv run python -m tools.emulator.os_upgrade_rig dt2 --binary BIN --ready out/ready-pk-dt2-117 \
+    uv run python -m tools.emulator.os_upgrade_rig dt2 --binary BIN --ready out/snapshots/dt2-audio-ready-cold-2026-10-20 \
         --syx firmware/Digitakt_II_OS1.17.syx --out out/runs/os-upgrade --yes --limit 12000000000
 
 With `--patchkit BIN` the rig does not send the stream itself: after the panel steps it runs `patchkit flash STOCK --emulator SOCKET`, which sends
@@ -17,8 +17,8 @@ the patched image through the shared sender, compares the emulated flash with th
 then opens OS UPGRADE again on the patched image and runs `patchkit flash --restore` (the stock file back).
 
 With `--exec CMD` the rig runs CMD instead (arguments split like a shell, `{socket}` replaced by the control socket, `DIGI_FW_EMU_SOCKET` set), for
-example the Firmware page's own flash logic headless: the Vitest file apps/web/tests/firmware-emulator.test.ts, which reads the socket from
-`DIGI_FW_EMU_SOCKET` (`pnpm --filter @digi/web exec vitest run --root . --config ../../vitest.host.config.ts --project web-transfer FILE`).
+example the Firmware page's own flash logic headless: the Vitest file apps/web/tests/firmware-emulator.wasm.test.ts, which reads the socket from
+`DIGI_FW_EMU_SOCKET` (`pnpm --filter @digi/web exec vitest run --root . --config ../../vitest.host.config.ts --project web-wasm FILE`).
 `--exec-restore CMD` then opens OS UPGRADE again and runs that.
 
 With `--rpc` the rig does not open the menu: it sends OsUpgradeStart, Write chunks and End over midi.usb.in at the main screen (finding 75, "The RPC route"),
@@ -42,6 +42,7 @@ import time
 import zlib
 
 from tools.control.digi_client import Emu
+from tools.firmware import device as device_files
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 YES, NO, DOWN = 10, 12, 14
@@ -343,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    p.add_argument("device", choices=["dt2", "dn2"])
+    p.add_argument("device", choices=device_files.shorts())
     p.add_argument(
         "--binary", required=True, help="digi-emud binary (an immutable copy)"
     )

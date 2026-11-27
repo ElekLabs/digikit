@@ -3,20 +3,18 @@ id = "test/ui-demo"
 version = "0.1.0"
 name = "UI demo"
 category = "test"
-type = "framework"
+type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "Test fixture: SETTINGS > DIGIKIT opens a menu with one row of each kind, a text page, a list with check marks and a side panel, an empty list, and rows that open a confirm, a choice and a toast, all through core/ui"
+summary = "Test fixture: a content module that adds the SETTINGS row UI DEMO (dk_ui_settings_row); it opens a menu with one row of each kind, a text page, a list with check marks and a side panel, an empty list, and rows that open a confirm, a choice and a toast, all through core/ui"
 requires = ["core/ui"]
-conflicts = ["core/digikit-menu"]
-ports = ["dt2-1.17", "dn2-1.12"]
+conflicts = []
 
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# Adds the DIGIKIT row through core/ui's SETTINGS hook (dk_app_settings_rows), like core/digikit-menu (it conflicts: one DIGIKIT row).
-# The row opens the demo menu.
+# C, built by `patchkit build`. Loaded by the digikit runtime from the card store (`patchkit pack test/ui-demo`). The row opens the demo menu.
 [[object]]
 path = "build/ui-demo.dko.json"
 sources = ["src/ui_demo.c"]

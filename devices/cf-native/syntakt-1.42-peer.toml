@@ -1,0 +1,14 @@
+# Native kernels for the peer CPU program of one firmware image (docs/findings/136-syntakt-peer-cpu.md, docs/plans/syntakt.md P4).
+# Input of `cfaot` (packages/emulator/coldfire/src/bin/cfaot.rs): the section is named by its SHA-256 (the tool refuses another
+# image); the kernels check their own code hash at run time, so a build with kernels for this image runs nothing for another.
+#
+#   cargo run -p coldfire --bin cfaot -- devices/cf-native/syntakt-1.42-peer.toml \
+#       out/sections/st-1.42/section_7_BLOB.bin out/native/cf-native/syntakt-1.42-peer
+#   CF_NATIVE_DIR=out/native/cf-native/syntakt-1.42-peer cargo build ...
+#
+# Section 7 of Syntakt_OS1.42.syx, the peer CPU program (loaded at 0x40000400).
+image_sha256 = "daf6451cf9587c0b628e901b7bb6b25f4e2633d448c534c0c181dd35ec783bc2"
+base = 0x40000400
+
+# 0x4000290e: the voice oscillator (wavetable interpolation, EMAC), 18 call sites; 24 percent of the frame handler's instructions.
+functions = [0x4000290e]

@@ -15,14 +15,14 @@ firmware.
 
 ## Decision summary
 
-1. Firmware facts live in one place: `devices/fw/<subsystem>.toml`, one file per firmware subsystem. Module manifests
+1. Firmware facts live in one place: `ports/fw/<subsystem>.toml`, one file per firmware subsystem. Module manifests
    no longer hold `[[anchor_rule]]`.
 2. Each entry is one declaration: a function, a data object, a value, a site list, a hook site or a struct. It has a
    name, the devices it exists on, a rule per device (or one shared rule), a type, a mark and a short description (`doc`, required).
    `users` lists the modules that use it (provenance only; the linker does not read it).
 3. Names follow `<cpu>.<subsystem>.<kind>.<name>` with a fixed subsystem list. A renamed declaration lists its former
    names in `was`: they are for reading older docs and findings, never resolve, and must not be a current name.
-4. `port_resolve.py` reads `devices/fw/` and writes `devices/ports/<dev>-<os>.toml` as today. Rule kinds and matching do
+4. `port_resolve.py` reads `ports/fw/` and writes `ports/<dev>-<os>.toml` as today. Rule kinds and matching do
    not change in this step.
 5. Step 5 generates bindings (Rust, C, assembly) from the same files. Content modules never see these declarations;
    only `core/*` adapters do.
@@ -30,7 +30,7 @@ firmware.
 ## File layout
 
 ```text
-devices/fw/
+ports/fw/
   subsystems.toml     the fixed subsystem list, with one line of meaning each
   view.toml           ViewController, View, push, close, invalidate
   draw.toml           text, fill, blit, scroll bar, screen bitmap
@@ -83,7 +83,7 @@ mark = "D"
 ### A function with a rule per device
 
 ```toml
-# devices/fw/dsp/fx.toml
+# ports/fw/dsp/fx.toml
 [[fn]]
 name = "dsp.fx.fn.entry"
 doc = "Effect chain entry in the frame orchestrator."
@@ -96,7 +96,7 @@ mark = "D"
 ### A site and the hook that uses it
 
 ```toml
-# devices/fw/menu.toml
+# ports/fw/menu.toml
 [[site]]
 name = "cf.menu.site.settings_list.tail"
 doc = "End of the SETTINGS item list rebuild."
@@ -156,14 +156,14 @@ Ranges like `d0-d1` are allowed. There is no `preserves` key.
 `handler = { sig, args }` is for ColdFire hooks in mode `before` or `retarget`. `sig` uses the sig grammar above. Each
 arg is a register from `regs.in` or `sp+N` (the entry stack; N is a multiple of 4 and at least 4). `patchkit gen` writes:
 
-- a GAS macro `dk_fw_<sub>_<name>_hook handler, next` in `modules/core/fw/inc/dk_fw_<sub>.inc`. It saves the
+- a GAS macro `dk_fw_<sub>_<name>_hook handler, next` in `ports/bindings/inc/dk_fw_<sub>.inc`. It saves the
   caller-saved d0-d1/a0-a1 that are not in `clobbers`, pushes the args, calls the handler, pops, restores and jumps to
   `next`;
 - a C typedef `dk_fw_<sub>_<name>_hook` in the header;
 - a Rust type `<Name>Hook` in the `dkfw` crate.
 
 Five stubs use the macros: `dk_hook` (core/ui), `dkrt_loop_hook` and `dkrt_boot_hook` (core/runtime),
-`health_block_hook` (core/health) and `dl_frame_hook` (core/dsp-link). `pk_build` adds `modules/core/fw/inc` to the
+`health_block_hook` (core/health) and `dl_frame_hook` (core/dsp-link). `pk_build` adds `ports/bindings/inc` to the
 ColdFire include path.
 
 `port_resolve.py` writes a `[[hook]]` record (name, site, offset when non-zero, mode) into each port file for every
@@ -179,7 +179,7 @@ Contracts are mark D, read from the stubs. SHARC device values stay [O] (finding
 ### A struct with one per-device difference
 
 ```toml
-# devices/fw/menu.toml
+# ports/fw/menu.toml
 [[struct]]
 name = "cf.menu.struct.MenuItem"
 size = 0x54
@@ -200,7 +200,7 @@ mark = "D"
 `sig` uses a small C-like grammar that the generator can parse:
 
 - scalar types `u8 u16 u32 i8 i16 i32 bool void`, pointers `T *`, `const`, and `...` for printf-style functions;
-- struct names declared in any `devices/fw/` file (`MenuItem`, `ViewController`), written without the prefix;
+- struct names declared in any `ports/fw/` file (`MenuItem`, `ViewController`), written without the prefix;
 - opaque firmware library types: `std_string`, `std_function`, `shared_ptr_View` (layouts in `string.toml`);
 - one calling convention per CPU: ColdFire is gcc m68k cdecl (arguments on the stack, result in d0, d0-d1/a0-a1
   clobbered); SHARC entries without `sig` are not callable from C and only have a register contract in their hook.
@@ -212,9 +212,11 @@ A `sig` may return a pointer: our m68k-elf gcc and the Rust backend read it from
 A `site` with `bind = "static"` also becomes a static (like a `data` entry), for a module that takes only its address.
 No other `bind` value exists, and `bind` is allowed on a `site` only.
 
+An `fn`, `site`, `data`, `value` or `sites` entry with `codegen = false` is a fact for tests and tools: its rule resolves into the port files and is checked like any other, but `patchkit gen` writes no extern, static or function for it and no `reference.json` entry. Use it for an address that only device tests read (`users = ["tests/regression"]`), or that only a core module's `[object.externs]` names (its C or assembly declares the symbol itself), so that adding it does not change the inputs of the other core modules.
+
 A `[[struct]]` field has `name`, `off` and a `type`: a scalar, `ptr` (a 32-bit pointer on the device) or the short name
 of another struct (its size). The generator sorts fields by `off`, fills gaps with padding and refuses overlaps and
-fields past `size`. `patchkit gen` writes the ColdFire bindings under `modules/core/fw/`: the Rust crate
+fields past `size`. `patchkit gen` writes the ColdFire bindings under `ports/bindings/`: the Rust crate
 `dkfw` (`rs/src/lib.rs`), C headers (`include/dk_fw_<subsystem>.h`) and GAS includes (`inc/dk_fw_<subsystem>.inc`). The
 bindings are their own core piece, not part of `core/runtime`: the runtime, `core/health` and `core/dsp-link` call
 firmware functions too, and the planned `adapters/*` modules will depend on them in the same way.
@@ -235,7 +237,7 @@ name.
 
 ## Resolution and proof
 
-- `port_resolve.py` reads `devices/fw/**/*.toml` instead of the manifests' `[[anchor_rule]]`. A declaration without a
+- `port_resolve.py` reads `ports/fw/**/*.toml` instead of the manifests' `[[anchor_rule]]`. A declaration without a
   rule for a device does not exist on that device, as with today's `devices` filter.
 - The `rule` field in a port anchor (today `"<module>:<kind>"`) becomes `"<subsystem file>:<kind>"`.
 - Proof for the move, in two commits:
@@ -251,7 +253,7 @@ name.
 
 ## Reference
 
-`patchkit gen` also writes `modules/core/fw/reference.json`. It holds every declaration with its doc, the rule per
+`patchkit gen` also writes `ports/bindings/reference.json`. It holds every declaration with its doc, the rule per
 device, the resolved address per port, the binding names, the hook contract and the struct layout. `patchkit gen --check`
 fails when the file is out of date. `mise run fw:reference` renders it as a searchable page, by default
 `out/reference/fw.html`. Open an entry with `#<entry name>` or a subsystem with `#<cpu>.<subsystem>`.
@@ -264,7 +266,7 @@ fails when the file is out of date. `mise run fw:reference` renders it as a sear
 
 ## Decisions (Em, 2026-10-27)
 
-1. One file per subsystem; SHARC subsystems in `devices/fw/dsp/`.
+1. One file per subsystem; SHARC subsystems in `ports/fw/dsp/`.
 2. Former names are kept in `was`; step 5 moved the users to the new names when generated bindings replaced
    `[object.externs]`.
 3. `catalog declare ADDR NAME` writes a declaration stub from the review decision and the suggested rule.

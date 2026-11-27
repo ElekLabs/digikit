@@ -1,0 +1,1 @@
+Test fixture of the `shortcuts` service: `init` makes one `dk_shortcut_add` call (hold [TRK], press [YES]); `on` logs the selected track (`dk_selected_track`) and `off` logs 0, both at error level. The call list of `services/shortcuts/tests/contract.rs` mirrors the call, and the device test of the service uses the logs.

@@ -21,6 +21,7 @@ from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools.emulator import coupled, digi_env, fxcheck  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 
 TX = {"dt2": (0x80005348, 0x802), "dn2": (0x80005E60, 0xA80)}
 
@@ -56,7 +57,7 @@ def diff(a: bytes, b: bytes) -> list[tuple[int, int, int]]:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("device", choices=["dt2", "dn2"])
+    p.add_argument("device", choices=device_files.shorts())
     p.add_argument("ref")
     p.add_argument("names", nargs="+")
     p.add_argument("--file", type=pathlib.Path, required=True)

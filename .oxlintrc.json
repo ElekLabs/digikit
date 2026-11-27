@@ -25,6 +25,147 @@
   },
   "overrides": [
     {
+      "files": ["apps/desktop/ui/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@tauri-apps/api/core",
+                "message": "Call the Tauri commands through the Host (packages/workbench-core/src/host/host.ts); only host/tauri-host.ts imports invoke."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/apps/web/**", "**/web/src/**", "@digi/web"],
+                "message": "The apps do not import each other: shared code lives in packages/workbench-core."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/**/*.{ts,tsx,mjs}"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/apps/desktop/**", "**/desktop/ui/**", "@digi/desktop"],
+                "message": "The apps do not import each other: shared code lives in packages/workbench-core."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/**/*.{ts,tsx,mjs}",
+        "{modules,runtime,services}/**/*.{ts,tsx,mjs}",
+        "tests/regression/**/*.{ts,tsx,mjs}",
+        "tools/**/*.{ts,mjs}"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/apps/**", "@digi/web", "@digi/desktop"],
+                "message": "Code below the apps imports no app (apps/ is the top layer)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/desktop/ui/src/host/tauri-host.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/web/src/**/*.{ts,tsx}",
+        "apps/desktop/ui/**/*.{ts,tsx}",
+        "packages/workbench-core/{src,ui}/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "localStorage",
+            "message": "Take a KeyValue (packages/workbench-core/src/storage.ts); only storage.ts reads localStorage."
+          },
+          {
+            "name": "indexedDB",
+            "message": "Take a BlobStore (packages/workbench-core/src/blob-store.ts); only blob-store.ts opens IndexedDB."
+          },
+          {
+            "name": "Worker",
+            "message": "Take a WorkerFactory (packages/workbench-core/src/workers.ts); only the platform worker factories construct workers."
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/workbench-core/src/storage.ts",
+        "packages/workbench-core/src/blob-store.ts",
+        "apps/web/src/browser-workers.ts",
+        "apps/desktop/ui/src/workers.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-globals": "off"
+      }
+    },
+    {
+      "files": [
+        "{modules,runtime,services}/**/tests/**/*.ts",
+        "tests/fixtures/**/tests/**/*.ts",
+        "tests/regression/runtime/flows/**/*.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "node:timers",
+                "message": "Wait in emulated time: rt.ui / rt.listen / pollUntil (docs/plans/test-architecture.md T2 step 3)"
+              },
+              {
+                "name": "node:timers/promises",
+                "message": "Wait in emulated time: rt.ui / rt.listen / pollUntil (docs/plans/test-architecture.md T2 step 3)"
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/apps/**", "@digi/web", "@digi/desktop"],
+                "message": "Code below the apps imports no app (apps/ is the top layer)."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "setTimeout",
+            "message": "Wait in emulated time: rt.ui / rt.listen / pollUntil (docs/plans/test-architecture.md T2 step 3)"
+          },
+          {
+            "name": "setInterval",
+            "message": "Wait in emulated time: rt.ui / rt.listen / pollUntil (docs/plans/test-architecture.md T2 step 3)"
+          }
+        ]
+      }
+    },
+    {
       "files": ["**/*.tsx"],
       "rules": {
         "eslint/no-unassigned-vars": "off"

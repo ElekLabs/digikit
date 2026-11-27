@@ -21,6 +21,10 @@
    "owner": "rust:packages/emulator",
    "purpose": "Selects the emulated card identity (a test sets small for a 1 MiB blank card)"
   },
+  "DIGI_CARD_TRACE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "1 logs one record per card command (CMD8, CMD12, CMD18, CMD23, CMD25) into the write-watch JSONL (tools/devtools/card_phases.py reads it)"
+  },
   "DIGI_CATALOG_CARD": {
    "owner": "ts:tools/nx",
    "purpose": "Path to a prebuilt DT2 card image for the file-catalog device proof"
@@ -41,9 +45,17 @@
    "owner": "rust:packages/emulator",
    "purpose": "Output directory: a cf-mix build of coupled-run writes one executed-instruction JSON per scenario"
   },
+  "DIGI_CF_NATIVE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Native ColdFire kernels in a build with CF_NATIVE_DIR: 0 turns them off, check compares each kernel run with the interpreter (a difference stops the CPU), anything else runs them (default)"
+  },
   "DIGI_CF_STATES": {
    "owner": "python:tools/patchkit",
    "purpose": "0 disables the cached ColdFire boot-state snapshots in the patchkit boot harness (flag)"
+  },
+  "DIGI_CLOCK_STUCK_MS": {
+   "owner": "ts:packages/test-support",
+   "purpose": "Wall milliseconds an emulated clock may stand still in a wait before the wait fails (default 60000)"
   },
   "DIGI_COLD_RELAX_FS": {
    "owner": "rust:packages/emulator",
@@ -57,13 +69,21 @@
    "owner": "python:tests/modules",
    "purpose": "Comma-separated module ids (author/name) that the conformance tests select"
   },
+  "DIGI_CONFORM_REPORTS": {
+   "owner": "ts:packages/sharc-rig-kit",
+   "purpose": "Directory of the conformance reports of the SHARC-only rig (default dist/conformance-rig of the worktree)"
+  },
+  "DIGI_CONFORM_ROOT": {
+   "owner": "ts:packages/sharc-rig-kit",
+   "purpose": "Single module root scanned by a scoped merge conformance rig target"
+  },
   "DIGI_COUPLED_DSP_EXPORT": {
    "owner": "rust:packages/emulator",
    "purpose": "Output file path: the pinned coupled ready workload test writes the DSP export there"
   },
   "DIGI_COUPLED_FEATURES": {
    "owner": "python:tools/devtools",
-   "purpose": "Cargo features of the coupled-run build (default coupled-audio)"
+   "purpose": "Cargo features of the coupled-run build (default sharc,play)"
   },
   "DIGI_COUPLED_FIXTURES": {
    "owner": "rust:apps/desktop",
@@ -81,10 +101,6 @@
    "owner": "ts:tools/nx",
    "purpose": "Absolute path to the digi-emud daemon for the DSP DDR monitor device test"
   },
-  "DIGI_DDR_PROOF_CF_STATE": {
-   "owner": "python:modules/core/adapters/dsp-ddr-proof/tests",
-   "purpose": "Optional ColdFire state snapshot path for the DDR proof CF tests"
-  },
   "DIGI_DESKTOP_TRIG1_HOLD": {
    "owner": "rust:packages/emulator",
    "purpose": "Instructions that Trig 1 is held in the desktop Trig 1 capture test (default 40000000)"
@@ -100,6 +116,10 @@
   "DIGI_DESKTOP_TRIG1_REQUIRE_NONZERO": {
    "owner": "rust:packages/emulator",
    "purpose": "1 makes the desktop Trig 1 capture test fail on silent PCM; 0 or unset allows it"
+  },
+  "DIGI_DEVICE": {
+   "owner": "ts:tests/regression",
+   "purpose": "dt2 or dn2 runs a device test file for that device only (unset: both); Nx sets it for the --dt2 and --dn2 halves"
   },
   "DIGI_DEVICES_DIR": {
    "owner": "rust:packages/emulator",
@@ -157,6 +177,10 @@
    "owner": "python:tests/patchkit",
    "purpose": "Path to the DT2 digi-emud daemon binary; overrides DIGI_EMUD for DT2"
   },
+  "DIGI_EMUD_STORE": {
+   "owner": "python:tools/devtools",
+   "purpose": "Directory of the daemon store instead of <git common dir>/emud-cache (tests only)"
+  },
   "DIGI_EMU_CF_SNAPSHOT": {
    "owner": "python:tools/devtools",
    "purpose": "Path of the ColdFire ready snapshot (default READY/digi-audio-m5.snap)"
@@ -169,17 +193,9 @@
    "owner": "python:tools/devtools",
    "purpose": "Path of the DSP ready state (default READY/digi-audio-m5.snap.dsp)"
   },
-  "DIGI_DEVICE": {
-   "owner": "ts:tests/regression",
-   "purpose": "dt2 or dn2 runs a device test file for that device only (unset: both); Nx sets it for the --dt2 and --dn2 halves"
-  },
   "DIGI_EMU_FAST": {
    "owner": "python:tests/emulator",
    "purpose": "0 turns off the SHARC fast regions (no region list is added)"
-  },
-  "DIGI_EMU_PANEL": {
-   "owner": "python:tools/emulator",
-   "purpose": "1 forces a rebuild of the desktop panel (otherwise rebuilt only when its sources change)"
   },
   "DIGI_EMU_PCM_F32LE": {
    "owner": "rust:packages/emulator",
@@ -188,6 +204,10 @@
   "DIGI_EMU_PCM_SECONDS": {
    "owner": "rust:packages/emulator",
    "purpose": "Seconds of PCM to capture for DIGI_EMU_PCM_F32LE (unset means unlimited)"
+  },
+  "DIGI_EMU_PEER_AUDIO": {
+   "owner": "rust:packages/emulator",
+   "purpose": "1 plays the audio a device's MAIN mixes from its peer CPU ([emulator.peer_audio] in devices/*.toml); 0 or unset leaves it off. The workbench launcher sets 1 unless --cf-only."
   },
   "DIGI_EMU_PGO": {
    "owner": "python:tests/emulator",
@@ -203,7 +223,11 @@
   },
   "DIGI_EMU_READY_DIR": {
    "owner": "python:tools/devtools",
-   "purpose": "Directory of the DN2 ready inputs (overrides ready_dir in tools/emulator/ready_inputs.json)"
+   "purpose": "Directory of the DN2 ready inputs (overrides `[acceptance] ready_dir` of devices/digitone-ii.toml)"
+  },
+  "DIGI_EMU_RESERVE": {
+   "owner": "ts:tools/nx",
+   "purpose": "Cores that stay idle for the rest of the machine when emu-slot admits an emulator (default: the efficiency cores, else a quarter of the cores, at least 2)."
   },
   "DIGI_EMU_SECOND_CORE": {
    "owner": "python:tests/emulator",
@@ -212,6 +236,10 @@
   "DIGI_EMU_SINK_WAV": {
    "owner": "rust:packages/emulator",
    "purpose": "Output WAV path: the audio that the output device actually played, as float WAV"
+  },
+  "DIGI_EMU_SLOTS": {
+   "owner": "ts:tools/nx",
+   "purpose": "Fixed number of machine-wide emulator slots, with no idle-core check (default: the ceiling from cores and RAM)."
   },
   "DIGI_EMU_SYX": {
    "owner": "rust:packages/emulator",
@@ -293,10 +321,6 @@
    "owner": "ts:tools/nx",
    "purpose": "Absolute path to the private provenance JSON of the boot fixture for the LP0 sample transfer test."
   },
-  "DIGI_LP0_CF_CALL": {
-   "owner": "python:modules/core/adapters/dsp-lp0-proof/tests",
-   "purpose": "Path to the ColdFire call runner used by the LP0 proof test (default pk_cfcall.EXAMPLE)."
-  },
   "DIGI_LP0_CLOSE": {
    "owner": "ts:tools/nx",
    "purpose": "Set to 1 to run the optional native held stock audio CLOSE case of the LP0 sample transfer test."
@@ -341,6 +365,10 @@
    "owner": "ts:tools/nx",
    "purpose": "Path to the patchkit binary used by the patched DSP startup and stereo proof device tests."
   },
+  "DIGI_PEER_PROFILE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Set to 1 to add a profile of the peer CPU's frame handler to the panel_drive peer report."
+  },
   "DIGI_PGO_DETAIL": {
    "owner": "rust:apps/desktop",
    "purpose": "Detail text of the PGO profile state, set by native_emu.py for the child and read by the desktop app."
@@ -381,6 +409,22 @@
    "owner": "rust:packages/emulator",
    "purpose": "Hex guest ranges LO-HI or LO+LEN; logs CPU loads from them with the PC and per-byte load counts (read-watch instrument)."
   },
+  "DIGI_REMOTE_AUDIO_INPUT": {
+   "owner": "rust:apps/desktop",
+   "purpose": "Exact stereo input name or ID for the opt-in desktop USB audio monitor test"
+  },
+  "DIGI_REMOTE_AUDIO_OUTPUT": {
+   "owner": "rust:apps/desktop",
+   "purpose": "Expected default output device name for the desktop USB audio monitor test"
+  },
+  "DIGI_REMOTE_AUDIO_REQUIRE_SIGNAL": {
+   "owner": "rust:apps/desktop",
+   "purpose": "1 requires a nonzero signal on both monitored channels during the hardware test"
+  },
+  "DIGI_REMOTE_AUDIO_SECONDS": {
+   "owner": "rust:apps/desktop",
+   "purpose": "Duration in seconds of each playback check in the desktop USB audio monitor test"
+  },
   "DIGI_RENDER_CACHE": {
    "owner": "python:tests/devtools",
    "purpose": "Set to 0 to turn off the render cache of tools/devtools/render_cache.py."
@@ -401,13 +445,49 @@
    "owner": "python:tests/emulator",
    "purpose": "Set to 1 to make a stale or missing PGO profile a fatal error in native_pgo.py."
   },
+  "DIGI_REQUIRE_TOOLCHAINS": {
+   "owner": "rust:packages/patchkit",
+   "purpose": "1 makes a patchkit test fail when the m68k toolchain (out/tools/m68k-elf) is missing, instead of skipping; the patchkit rust-tests Nx target sets it"
+  },
+  "DIGI_RIG_ROOT": {
+   "owner": "ts:packages/sharc-rig-kit",
+   "purpose": "Root of the checkout whose module sources the rig kit reads (read-only); default: this checkout."
+  },
   "DIGI_RUNTIME_MODULES": {
    "owner": "ts:tests/regression",
    "purpose": "Directory of the built runtime modules installed by device tests (default dist/modules)."
   },
+  "DIGI_SHARC_CORE_LIB_DN2": {
+   "owner": "rust:packages/emulator/sharc-peer",
+   "purpose": "Path of the DN2 core library (sharc-core-lib) that the host loads instead of its static core; verify_build writes it to dist/daemons.json"
+  },
+  "DIGI_SHARC_CORE_LIB_DT2": {
+   "owner": "rust:packages/emulator/sharc-peer",
+   "purpose": "Path of the DT2 core library (sharc-core-lib) that the host loads instead of its static core; verify_build writes it to dist/daemons.json"
+  },
+  "DIGI_SHARC_CORE_STORE": {
+   "owner": "python:tools/devtools",
+   "purpose": "Directory of the core library store instead of <git common dir>/sharc-core-cache (tests only)"
+  },
+  "DIGI_SHARC_PGO_INSTRUMENT_STORE": {
+   "owner": "python:tools/devtools",
+   "purpose": "Directory of the instrumented core library store of PGO training instead of <git common dir>/sharc-core-pgo-instrument (tests only)"
+  },
+  "DIGI_SHARC_RIG": {
+   "owner": "ts:packages/sharc-rig-kit",
+   "purpose": "Path to the sharc-rig binary (default dist/bin/sharc-rig)"
+  },
   "DIGI_SNAPSHOT_DIR": {
    "owner": "rust:packages/emulator",
-   "purpose": "Directory of the daemon's boot snapshots (default: <run dir>/patched, private to the run dir); device tests set one store per daemon build and device."
+   "purpose": "Directory of the daemon's boot snapshots (default: <run dir>/patched, private to the run dir); device tests set <git dir>/snap-cache/<daemon key>/<device>, shared by all worktrees."
+  },
+  "DIGI_SNAP_CAP_GIB": {
+   "owner": "ts:packages/test-support",
+   "purpose": "Cap in GiB of the shared boot-snapshot store <git dir>/snap-cache instead of SNAPSHOT_CAP_GIB_DEFAULT in packages/test-support/src/emulator-config.ts (20)"
+  },
+  "DIGI_SNAP_STORE": {
+   "owner": "ts:tests/regression",
+   "purpose": "Directory of the shared boot-snapshot store instead of <git dir>/snap-cache (tests only)"
   },
   "DIGI_SPIKE_LOG": {
    "owner": "rust:packages/emulator",
@@ -440,6 +520,18 @@
   "DIGI_STORAGE_FAULT_ISR_SYX": {
    "owner": "rust:packages/patchkit",
    "purpose": "Path to the stock DT2 image for the storage fault ISR patchkit Rust test."
+  },
+  "DIGI_SYMBOL_DB_OUT": {
+   "owner": "rust:apps/desktop",
+   "purpose": "Directory containing cfdb and sharcdb for the opt-in desktop symbol source test"
+  },
+  "DIGI_USB_TRACE": {
+   "owner": "rust:packages/emulator",
+   "purpose": "Any non-empty value except 0: log every USB MIDI hand-over to the guest callback and every call of its transmit function (instruction count, length, payload hash, caller) to stderr"
+  },
+  "DIGI_USB_TRACE_PCS": {
+   "owner": "rust:packages/emulator",
+   "purpose": "With DIGI_USB_TRACE: comma-separated hex addresses whose execution the trace also logs (instruction count, SP, stack top, d0, a0)"
   },
   "DIGI_WRITE_WATCH": {
    "owner": "rust:packages/emulator",
@@ -649,9 +741,17 @@
    "owner": "rust:packages/emulator",
    "purpose": "Directory of the generated SHARC core (first core); read by sharc-gen build.rs."
   },
-  "SHARC_GEN_DIR_2": {
-   "owner": "rust:packages/emulator",
-   "purpose": "Directory of the generated SHARC core for the second core (sharc-gen-2)."
+  "SHARC_GEN_DIR_DN2": {
+   "owner": "python:tools/emulator",
+   "purpose": "Directory of the generated SHARC core of the Digitone II; wins over SHARC_GEN_DIR for DN2."
+  },
+  "SHARC_GEN_DIR_DT2": {
+   "owner": "python:tools/emulator",
+   "purpose": "Directory of the generated SHARC core of the Digitakt II; wins over SHARC_GEN_DIR for DT2."
+  },
+  "SHARC_GEN_ENV_SUFFIX": {
+   "owner": "rust:packages/emulator/sharc-gen",
+   "purpose": "Build-time: the suffix of the region-list variables of the core (set by its build script)"
   },
   "SHARC_IRQ_PROBE": {
    "owner": "rust:packages/emulator",
@@ -765,6 +865,22 @@
    "owner": "rust:packages/emulator",
    "purpose": "Comma list of 32-bit word indexes of the reply record to count; others are ignored."
   },
+  "SHARC_RT_FLAGS": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (build flags) that the core library header carries"
+  },
+  "SHARC_RT_RUSTC": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (rustc version) that the core library header carries"
+  },
+  "SHARC_RT_SRC_SHA256": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (source hash) that the core library header carries"
+  },
+  "SHARC_RT_TARGET": {
+   "owner": "rust:packages/emulator/sharc-rt",
+   "purpose": "Build-time value from sharc-rt/build.rs (target triple) that the core library header carries"
+  },
   "SHARC_TIER_TIME": {
    "owner": "rust:packages/emulator",
    "purpose": "Set to 1 to report host time per SHARC tier and per thread in audio.report (dsp_tiers.tier_time); also turns link timing on."
@@ -788,18 +904,6 @@
   "SHARC_WWATCH_OUT": {
    "owner": "rust:packages/emulator",
    "purpose": "Output path of the SHARC_WWATCH CSV (default wwatch.csv in the diagnostics dir)."
-  },
-  "DIGI_EMU_RESERVE": {
-   "owner": "ts:tools/nx",
-   "purpose": "Cores that stay idle for the rest of the machine when emu-slot admits an emulator (default: the efficiency cores, else a quarter of the cores, at least 2)."
-  },
-  "DIGI_EMU_SLOTS": {
-   "owner": "ts:tools/nx",
-   "purpose": "Fixed number of machine-wide emulator slots, with no idle-core check (default: the ceiling from cores and RAM)."
-  },
-  "DIGI_TRANSFER_DIR": {
-   "owner": "python:tools/device",
-   "purpose": "Folder for the packed .dkm files and the failed-pack record of dktransfer (default out/patch/transfer); a test run sets one inside its run directory."
   }
  },
  "prefixes": {
@@ -810,6 +914,7 @@
  "not_env": {
   "DIGI_X": "Placeholder name in tests/devtools/test_render_cache.py.",
   "SHARC_DIR": "Not an environment variable: Python constant for out/sharcdb in tools/coldfire/fw.py:42, patched in tests.",
-  "SHARC_VISA": "unclear: see tests/coldfire/test_ghidraq.py:226 (a Ghidra address space name, not an environment variable)"
+  "SHARC_VISA": "unclear: see tests/coldfire/test_ghidraq.py:226 (a Ghidra address space name, not an environment variable)",
+  "DIGI_SHARC_CORE_DN2": "Placeholder key of a pinned daemons.json in tests/devtools/test_core_store.py."
  }
 }

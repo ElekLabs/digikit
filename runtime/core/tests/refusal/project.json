@@ -1,0 +1,23 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-refusal-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": ["core/runtime-package", "sdk", "core/services/lfo", "dkrt-svc-lfo"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "refusal.device.test.ts"
+        ],
+        "firmwareOnly": "one real boot with a good, a failed (wrong file hash), a refused (second owner of a key) and an absent (selected, not on the card) module: the real card backend answers \"absent\" (E_NOT_FOUND), not E_READ; the firmware leaves the same state, code and detail in DKRT_BOOT (guest memory) and the LOADS reply, and MODULES lists only the ACTIVE one; the codes themselves are host tests",
+        "modules": [
+          "test/lfo-shape",
+          "core/services/lfo"
+        ],
+        "plusdrive": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+schema = "dk.steps/1"
+name = "heavy-hold"
+description = "The most the stock engine is asked: every audio track holds a note with the longest amp release, and the delay, reverb and chorus sends are open. `retrigger_ms` (0: off) presses the key again every that many ms during the capture."
+
+[args]
+tracks = "all"
+key = 60
+velocity = 100
+release = 127
+send = 100
+retrigger_ms = 0
+
+[[step]]
+action = "midi.cc"
+track = "{tracks}"
+param = "amp_release"
+value = "{release}"
+
+[[step]]
+action = "midi.cc"
+track = "{tracks}"
+param = "send_delay"
+value = "{send}"
+
+[[step]]
+action = "midi.cc"
+track = "{tracks}"
+param = "send_reverb"
+value = "{send}"
+
+[[step]]
+action = "midi.cc"
+track = "{tracks}"
+param = "send_chorus"
+value = "{send}"
+
+[[step]]
+action = "midi.note"
+track = "{tracks}"
+key = "{key}"
+velocity = "{velocity}"
+retrigger_ms = "{retrigger_ms}"

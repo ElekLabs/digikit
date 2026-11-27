@@ -1,0 +1,17 @@
+schema = "dk.calprofile/1"
+name = "modules"
+# Cases come from the calibration.toml of each module (machines tb303, pluck, analog, shot, bd and the freqshift effect), each with only that module loaded.
+# A machine case puts the module's machine on track 1 with SETUP (the debug module) and puts a stock machine back afterwards (module_teardown).
+# The effect case checks its default route and the reported dispatch row.
+description = "The stock case, then one case per calibration module. Each is loaded alone and plays on track 1. Checks the kernel factors against real modules."
+warmup_s = 2
+capture_s = 5
+repeats = 3
+discover = "modules"
+teardown = { steps = "release-notes", args = { tracks = "1" } }
+module_teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "stock"
+steps = "hold-note"
+args = { tracks = "1" }

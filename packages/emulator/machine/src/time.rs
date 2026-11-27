@@ -103,6 +103,9 @@ pub struct Time {
     /// `DIGI_INTC_FORCE=0` turns it off at construction for A/B; on wasm32 it
     /// is always on. `restore_timer_component` does not touch it.
     force_irq: bool,
+    /// Deliver the guest-forced INTC1 source 63 (vector 191) here too. Off while the SSI model delivers it; on for a board without SSI
+    /// pacing, where the audio frame handler forces it to run the engine tick (finding 136).
+    forced_191: bool,
 }
 
 impl Time {
@@ -138,6 +141,7 @@ impl Time {
             service_not_before: None,
             blocked: None,
             force_irq: Self::default_force_irq(),
+            forced_191: false,
         }
     }
 
@@ -152,6 +156,13 @@ impl Time {
         }
     }
 
+    /// Deliver a guest-forced vector 191 (see `forced_191`).
+    pub fn set_forced_191(&mut self, on: bool) {
+        self.forced_191 = on;
+        self.service_not_before = None;
+        self.blocked = None;
+    }
+
     /// Software-forced INTC delivery (see `force_irq`).
     pub fn set_force_irq(&mut self, on: bool) {
         self.force_irq = on;
@@ -161,7 +172,8 @@ impl Time {
 
     fn forced_candidate(&self) -> Option<(u16, u8)> {
         if self.force_irq {
-            self.intc.forced_candidate(SSI_VECTOR191)
+            self.intc
+                .forced_candidate(if self.forced_191 { 0 } else { SSI_VECTOR191 })
         } else {
             None
         }
@@ -272,6 +284,12 @@ impl Time {
     /// CPU IPL is checked separately by the isolated machine delivery path.
     pub fn esdhc_interrupt_level(&self) -> Option<u8> {
         self.intc.level_for_vector(223)
+    }
+
+    /// The ICR level of an interrupt vector's source (1-7), or `None` when the level is 0 or the source is masked. The CPU IPL is checked
+    /// by the caller.
+    pub fn interrupt_level(&self, vector: u16) -> Option<u8> {
+        self.intc.level_for_vector(vector)
     }
 
     /// Eligibility of INTC2 source 0 (eDMA channels 56..63).
@@ -482,7 +500,9 @@ impl Time {
         if next == f64::INFINITY {
             return Some((u64::MAX, level)); // no timer is armed
         }
-        (next >= 0.0 && next < 9.0e15).then(|| (next.ceil() as u64, level))
+        (0.0..9.0e15)
+            .contains(&next)
+            .then(|| (next.ceil() as u64, level))
     }
 
     /// `service_with(done, _)` is known to change nothing.

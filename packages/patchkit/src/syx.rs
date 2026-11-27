@@ -40,10 +40,16 @@ const SEALS: [(&str, &[u8], &str); 2] = [
     ),
 ];
 
+/// Whether `SEALS` holds a key for the device (checked against `[capabilities] seal` by `devdata`).
+pub(crate) fn has_seal(short: &str) -> bool {
+    SEALS.iter().any(|s| s.0 == short)
+}
+
 impl Device {
     pub fn from_id(id: u8) -> Result<Device> {
         let d = devdata::by_syx_id(id).ok_or_else(|| err!("unknown device id {id:#04x}"))?;
-        if !SEALS.iter().any(|s| s.0 == d.short) {
+        // a device without a seal (`[capabilities] seal = "none"`) has no key to derive
+        if d.identity.capabilities.seal == "hmac" && !has_seal(&d.short) {
             return Err(err!(
                 "device {} has no container seal key (add it to SEALS in packages/patchkit/src/syx.rs)",
                 d.short
@@ -57,6 +63,49 @@ impl Device {
     /// The device byte of the SysEx framing.
     pub fn syx_id(self) -> u8 {
         self.0.syx_id
+    }
+    /// Whether the container ends in an HMAC trailer (`[capabilities] seal`). Without one the container has no trailer slot at all
+    /// (finding 70: it ends at its last section's end rounded up to 16) and no check reads one.
+    pub fn sealed(self) -> bool {
+        self.0.identity.capabilities.seal == "hmac"
+    }
+    /// The section roles of the device file (`[container]`).
+    pub fn container(self) -> &'static devdata::Container {
+        &self.0.identity.container
+    }
+    /// The container section that holds the MAIN OS (`[container] main`).
+    pub fn main_section(self) -> u32 {
+        self.0.identity.container.main
+    }
+    /// The container section that holds the SHARC+ boot stream (`[container] dsp`); `None` on a device without a DSP.
+    pub fn dsp_section(self) -> Option<u32> {
+        self.0.identity.container.dsp
+    }
+    /// Whether patchkit must never change section `id` (`[container] readonly`).
+    pub fn is_readonly(self, id: u32) -> bool {
+        self.0.identity.container.readonly.contains(&id)
+    }
+    /// The sections patchkit never changes, in the file's order.
+    pub fn readonly_sections(self) -> &'static [u32] {
+        &self.0.identity.container.readonly
+    }
+    /// Whether a module may store section `id` packed although its content never changes (`[container] repack`).
+    pub fn is_repackable(self, id: u32) -> bool {
+        let c = &self.0.identity.container;
+        c.repack.iter().any(|role| c.role_section(role) == Some(id))
+    }
+    /// The section of a role (`[container]`: `main`, `dsp`, `cf2`, `fpga`), if the device has one.
+    pub fn role_section(self, role: &str) -> Option<u32> {
+        self.0.identity.container.role_section(role)
+    }
+    /// The roles whose sections a module may store packed (`[container] repack`).
+    pub fn repack_roles(self) -> &'static [String] {
+        &self.0.identity.container.repack
+    }
+    /// Where the bootstrap unpacks MAIN to (`[patch] main_dest`), where it stages the packed MAIN first (`main_stage`) and the least in-place margin an
+    /// image may have there (`main_margin_min`).
+    pub fn main_unpack(self) -> (u64, u64, u64) {
+        (self.0.main_dest, self.0.main_stage, self.0.main_margin_min)
     }
     /// Limits of an image with no port: container, stored DSP, depacked DSP, staged MAIN (`[patch]` of the device file).
     pub fn limits(self) -> (usize, usize, usize, usize) {
@@ -117,16 +166,28 @@ pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
     h.finalize().into()
 }
 
-/// The 32-byte trailer for a container whose last 32 bytes are the (ignored) trailer slot.
-pub fn trailer(container: &[u8], device: Device) -> [u8; 32] {
-    hmac_sha256(&derive_key(device), &container[..container.len() - 32])
+/// The 32-byte trailer for a container whose last 32 bytes are the (ignored) trailer slot; `None` on a device without a seal (its
+/// container has no slot).
+pub fn trailer(container: &[u8], device: Device) -> Option<[u8; 32]> {
+    device
+        .sealed()
+        .then(|| hmac_sha256(&derive_key(device), &container[..container.len() - 32]))
 }
 
-/// Container bytes ending in a 32-byte slot -> the same with the HMAC filled in.
+/// Whether the container's last 32 bytes are the device's HMAC. A device without a seal has none to check: always true.
+pub fn trailer_matches(container: &[u8], device: Device) -> bool {
+    match trailer(container, device) {
+        Some(t) => t[..] == container[container.len() - 32..],
+        None => true,
+    }
+}
+
+/// Container bytes ending in a 32-byte slot -> the same with the HMAC filled in. A device without a seal has no slot: unchanged.
 pub fn seal(mut container: Vec<u8>, device: Device) -> Vec<u8> {
-    let t = trailer(&container, device);
-    let n = container.len();
-    container[n - 32..].copy_from_slice(&t);
+    if let Some(t) = trailer(&container, device) {
+        let n = container.len();
+        container[n - 32..].copy_from_slice(&t);
+    }
     container
 }
 
@@ -150,7 +211,13 @@ pub fn packet_checksum(body: &[u8], k: u8) -> u8 {
 /// The 8-in-7 packing lives in `dkupload` (the module upload protocol uses the same one).
 pub use dkupload::encode_8in7;
 
-/// `[(id, dest, stored)]` -> container bytes with a zeroed 32-byte trailer slot.
+/// The bytes of the HMAC trailer slot at the end of a container: 32 on a sealed device, none otherwise (the stock container of a
+/// device without a seal ends at its last section's end rounded up to 16, finding 70).
+pub fn trailer_len(device: Device) -> usize {
+    if device.sealed() { 32 } else { 0 }
+}
+
+/// `[(id, dest, stored)]` -> container bytes with a zeroed 32-byte trailer slot (sealed device) or none (device without a seal).
 ///
 /// `first_offset` is where the first payload starts (0x80 in `tools/firmware/build.py`; the stock images use 0x90, and
 /// patchkit keeps the source image's value so that an unchanged image is rebuilt byte for byte).
@@ -158,6 +225,7 @@ pub fn build_container(
     header: &[u8],
     entries: &[(u32, u32, &[u8])],
     first_offset: usize,
+    device: Device,
 ) -> Result<Vec<u8>> {
     if header.len() != COUNT_OFF {
         return Err(err!("container header must be {COUNT_OFF} bytes"));
@@ -192,7 +260,7 @@ pub fn build_container(
     out.extend_from_slice(&body);
     let pad = (16 - out.len() % 16) % 16;
     out.extend(std::iter::repeat_n(0u8, pad));
-    out.extend_from_slice(&[0u8; 32]);
+    out.extend(std::iter::repeat_n(0u8, trailer_len(device)));
     Ok(out)
 }
 

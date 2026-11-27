@@ -1,0 +1,14 @@
+[package]
+name = "dynlib"
+license.workspace = true
+repository.workspace = true
+version = "0.0.1"
+edition = "2024"
+publish = false
+description = "Open a shared library and look up its symbols (dlopen/dlsym, LoadLibraryW/GetProcAddress); no crate dependencies"
+
+[dependencies]
+
+[lib]
+name = "dynlib"
+crate-type = ["rlib"]

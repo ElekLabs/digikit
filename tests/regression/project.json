@@ -5,6 +5,7 @@
     "control-client",
     "@digi/test-support",
     "@digi/dk-session",
+    "@digi/sharc-rig-kit",
     "digi-control",
     "digi-coupled",
     "dkui-host"
@@ -20,13 +21,49 @@
     ]
   },
   "targets": {
-    "typecheck": { "cache": false },
+    "typecheck": {
+      "cache": false,
+      "inputs": [
+        "default",
+        {
+          "input": "production",
+          "projects": ["control-client", "@digi/test-support", "@digi/dk-session", "@digi/dkbs", "@digi/sharc-rig-kit"]
+        },
+        "jsToolchain"
+      ]
+    },
     "test-device": {
       "executor": "nx:run-commands",
       "cache": false,
       "dependsOn": [
         "patchkit:cli",
         "patchkit:device-bytes",
+        "patchkit:device-images",
+        "core/runtime:test-assembly",
+        "core/runtime:package",
+        { "target": "build-objects", "projects": ["tag:acceptance-image"] },
+        "digi-control:daemons",
+        "digikit/probe:pack",
+        "digikit/remote:pack",
+        "test/dsp-facts:pack",
+        "test/sharc-probe:pack",
+        "test/step-beacon:pack"
+      ],
+      "outputs": [],
+      "options": {
+        "command": "pnpm --filter @digi/regression test:runtime emulator/",
+        "cwd": "."
+      }
+    },
+    "test-device-all": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": [
+        "patchkit:cli",
+        "patchkit:device-bytes",
+        "patchkit:device-images",
+        "core/runtime:test-assembly",
+        "core/runtime:package",
         { "target": "build-objects", "projects": ["tag:acceptance-image"] },
         "digi-control:daemons",
         "digikit/probe:pack",
@@ -44,12 +81,16 @@
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
+      "dependsOn": ["plusdrive-format:cli"],
       "inputs": [
         "hostTests",
         "^hostTests",
         "{workspaceRoot}/config/emulator.json",
         "{workspaceRoot}/devices/*.toml",
-        "{workspaceRoot}/modules/core/runtime/vectors/**/*",
+        "{workspaceRoot}/runtime/core/vectors/**/*",
+        "{workspaceRoot}/runtime/core/tests/lfo/lfo-fit.ts",
+        "{workspaceRoot}/packages/workbench-core/src/node/card-image.ts",
+        "{workspaceRoot}/packages/workbench-core/src/runtime/system-package.ts",
         {
           "runtime": "shasum -a 256 dist/plusdrive/plusdrive 2>/dev/null || echo no-plusdrive"
         }
@@ -70,7 +111,17 @@
       },
       {
         "files": ["emulator/sharc-semantics.test.ts"],
-        "modules": ["digikit/probe", "digikit/remote", "test/dsp-facts", "test/sharc-probe", "test/step-beacon"]
+        "modules": ["digikit/probe", "digikit/remote", "test/dsp-facts", "test/sharc-probe", "test/step-beacon"],
+        "incidental": [
+          {
+            "module": "digikit/probe",
+            "reason": "loaded as a module that logs in its init; the probe itself is not exercised"
+          },
+          {
+            "module": "digikit/remote",
+            "reason": "loaded as a module that registers early; the remote module itself is not exercised"
+          }
+        ]
       }
     ]
   }

@@ -1,0 +1,85 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-transfer-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime",
+    "core/runtime-storage"
+  ],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "upload.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "modules": [],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "upload-depth.device.test.ts"
+        ],
+        "modules": [],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "upload-faults.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "test/sine",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "transfer-live.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "digikit/debug",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
+        "sources": [
+          "tools/devtools/wb.mjs",
+          "tools/devtools/wb_transfer.mjs",
+          "packages/devices/src/node.ts",
+          "packages/devices/src/parse.ts",
+          "packages/workbench-core/src/modules/dktransfer.ts",
+          "packages/workbench-core/src/node/node-host.ts",
+          "packages/workbench-core/src/node/stock-image.ts"
+        ]
+      }
+    ],
+    "mergeTests": [
+      "upload-depth.device.test.ts"
+    ]
+  }
+}

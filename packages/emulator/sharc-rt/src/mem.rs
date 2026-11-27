@@ -904,6 +904,16 @@ impl Mem {
     }
 }
 
+/// Size, alignment and the offsets of selected fields of `Mem`, for the core library header
+/// (`header::LAYOUT`): the fields are private, so the offsets are taken here.
+pub const LAYOUT: [u64; 5] = [
+    std::mem::size_of::<Mem>() as u64,
+    std::mem::align_of::<Mem>() as u64,
+    std::mem::offset_of!(Mem, pages) as u64,
+    std::mem::offset_of!(Mem, eff) as u64,
+    std::mem::offset_of!(Mem, ddr_monitor_gen) as u64,
+];
+
 #[cfg(test)]
 mod word_path_tests {
     use super::*;

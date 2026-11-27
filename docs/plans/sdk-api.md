@@ -105,7 +105,7 @@ firmware: VerticalMenuView, MenuItem, ConfirmWindow, MultiChoiceWindow, Toast, p
 - [x] Proof: `.dkm` files of pluck, sine, dyn-dsp-hang, dyn-guard-nan (dn2) and every effect are
       byte-identical on dt2 and dn2; patched images of bd, analog, pd and patched-pluck (dt2) are
       byte-identical. Changed on purpose: patched-pluck on dn2 (no position), dyn-dn2 and twin-dn2
-      (sine DSP), dyn-params (4 params), dyn-guard-nan on dt2 (param on both devices).
+      (sine DSP), dyn-dn2 (4 params, both devices), dyn-guard-nan on dt2 (param on both devices).
 - [x] Emulator re-checks (1eb92a86 + fixes): every RECHECK value confirmed but equiv-dn2-set
       `voices = 2`; scenarios equiv-dn2-set, memaudit-dn2, equiv-mixed, roundtrip-dt2 (3) and
       roundtrip-dn2 pass; the smoke cells of patched-pluck and machine-clone pass. Found and fixed: a
@@ -136,12 +136,12 @@ firmware: VerticalMenuView, MenuItem, ConfirmWindow, MultiChoiceWindow, Toast, p
       intermediate step):
   - SETTINGS > DIGIKIT stays a vertical menu: ABOUT, HEALTH, MEMORY, MODULES. Glyphs later.
   - MODULES is a list like PRESET MANAGER: a title bar; rows of name, kind and size; a check mark
-    for "load at next restart" (YES toggles it); RIGHT opens a side panel with LOAD / UNLOAD,
-    ROUTE... (effects only: a choice of SEND or MASTER) and INFO (size, DSP %, CPU %, fit).
+    for "load at next restart" (YES toggles it); RIGHT opens a side panel with LOAD / UNLOAD
+    and INFO (size, DSP %, CPU %, fit).
     The empty text is "NO MODULES ON CARD".
   - NO with changes pending asks "APPLY & RESTART?": YES applies, NO discards.
   - A module that does not fit gives a toast "NO FIT: NAME".
-  - The FX ROUTES screen is removed; the fx-routes scenario uses ROUTE....
+  - The FX ROUTES screen and the ROUTE... row are removed: the fx service adds SETTINGS > FX ROUTING (E1).
 - [x] Proof: host tests; no firmware-heap growth after the menu, a list and a dialog open and close
       50 times; new golden frames approved by Em from screenshots on dt2 and dn2.
 
@@ -303,7 +303,7 @@ Fault instrumentation follow-ups (the base is in finding 77): only when a real b
 - [x] A live log panel in the workbench (docs/plans/workbench-device-log.md).
 - [ ] The same log panel on the site.
 - [ ] A "trace" tag for traced `.dkm` files on the site's Transfer page.
-- [ ] Module-source tags for the callbacks that `core/ui` and `core/params` make.
+- [ ] Module-source tags for the callbacks that `core/ui` and `core/rows` make.
 - [ ] A gdb bridge to the emulator's ColdFire, and the crash record as an m68k core file.
 - [ ] Host-side names for the runtime stack addresses of a panic record: patchkit `cf-link --json` emits the symbols and `text_ranges` (`packages/patchkit/src/build_cli.rs:212-216`); the patch plan of the image also has a symbol per runtime function. Look up the address minus 2: a call to a function that does not return is often the last instruction, so its return address is the first byte of the next function.
 - [ ] `api->fatal(code)` for C modules through the same fatal path as the runtime panic.

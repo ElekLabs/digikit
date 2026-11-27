@@ -1,7 +1,7 @@
 //! `.dkm`: a module file the digikit runtime loads from the card store at run time (docs/design/digikit-dkm.md).
 //!
 //! `pack` turns a ColdFire `.dko` object into the file; `Dkm::parse` reads and checks one; `Dkm::image` is the reference
-//! loader (copy, relocate) that the runtime's own Rust loader (modules/core/runtime) must agree with. All integers are big
+//! loader (copy, relocate) that the runtime's own Rust loader (runtime/core) must agree with. All integers are big
 //! endian. The file holds no firmware address: absolute references are `base + offset` (kind 0) or a named import (kind 1).
 
 use crate::dko::Dko;
@@ -9,18 +9,18 @@ use crate::error::*;
 use crate::link;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: u32 = 0x444b_4d46; // "DKMF"
-pub const FORMAT: u32 = 1;
-pub const HEADER: usize = 0xa0;
-/// The header of a module that exports `dkm_menu`: the menu address (image offset) follows the 0xa0 bytes.
-pub const HEADER_MENU: usize = 0xa4;
-/// The header of a module with the entry point `dk_module` (docs/plans/sdk.md section 5): the `menu` address and the `tick` address follow the 0xa0
-/// bytes; [`NONE`] marks a missing one. The runtime calls `init`, `fini`, `tick` and `menu` of such a module with a `dk_module_ctx`, not the Api table.
-pub const HEADER_TICK: usize = 0xa8;
-pub const NONE: u32 = 0xffff_ffff;
-pub const SLOTS: u32 = 8;
-pub const NAME_LEN: usize = 32;
-pub const IMPORT_LEN: usize = 32;
+// The layout numbers are `[format]` of sdk/sdk.toml, through `dkneeds` (the runtime reads the same constants).
+pub const MAGIC: u32 = dkneeds::MAGIC;
+pub const FORMAT: u32 = dkneeds::FORMAT;
+/// The header size. The entry points are the `dk_module` record of the module (docs/plans/sdk.md section 5): `init`, `fini`, `menu` and `tick` are image
+/// offsets in the header, [`NONE`] for a missing one. The runtime calls them with a `dk_module_ctx`.
+pub const HEADER: usize = dkneeds::HEADER as usize;
+pub const NONE: u32 = dkneeds::NONE;
+pub const NAME_LEN: usize = dkneeds::NAME_LEN as usize;
+pub const IMPORT_LEN: usize = dkneeds::CF_IMPORT_LEN as usize;
+const CF_RELOC_LEN: usize = dkneeds::CF_RELOC_LEN as usize;
+const CF_RELOC_OFFSET: usize = dkneeds::CF_RELOC_OFFSET as usize;
+const CF_RELOC_KIND: usize = dkneeds::CF_RELOC_KIND as usize;
 /// Largest module file the v0 runtime stages (its staging buffer): `[limits.max] stage_bytes` of sdk/sdk.toml.
 pub fn max_file() -> usize {
     crate::sdkgen::limits_max().stage_bytes as usize
@@ -54,54 +54,78 @@ pub fn needs_json(f: &[u8]) -> Result<serde_json::Value> {
     Ok(serde_json::Value::Object(o))
 }
 
-// header field offsets
-pub const H_SIZE: usize = 0x08;
-pub const H_HDRSIZE: usize = 0x0c;
-pub const H_SHA: usize = 0x10;
-pub const H_RUNTIME: usize = 0x30;
-pub const H_VERSION: usize = 0x34;
-/// 0x38..0x40: contract versions built against, (major, minor) of api, machine, fx, service; major 0 = not implemented.
-pub const H_CONTRACT: usize = 0x38;
-pub const H_NAME: usize = 0x40;
-pub const H_IMAGE_OFF: usize = 0x60;
-pub const H_IMAGE_SIZE: usize = 0x64;
-pub const H_BSS: usize = 0x68;
-pub const H_ALIGN: usize = 0x6c;
-pub const H_RELOC_OFF: usize = 0x70;
-pub const H_RELOC_N: usize = 0x74;
-pub const H_IMPORT_OFF: usize = 0x78;
-pub const H_IMPORT_N: usize = 0x7c;
-pub const H_INIT: usize = 0x80;
-pub const H_FINI: usize = 0x84;
-pub const H_SLOT_OFF: usize = 0x88;
-pub const H_SLOT_N: usize = 0x8c;
-pub const H_REG_OFF: usize = 0x90;
-pub const H_REG_SIZE: usize = 0x94;
-pub const H_DSP_OFF: usize = 0x98;
-pub const H_DSP_SIZE: usize = 0x9c;
-pub const H_MENU: usize = 0xa0; // only when the header size is HEADER_MENU or HEADER_TICK
-pub const H_TICK: usize = 0xa4; // only when the header size is HEADER_TICK
-/// Bit 31 of the word at [`H_RUNTIME`]: the module was built with `DK_TRACE`. The word is informational for the loader (it does not refuse
-/// on it), so a runtime that does not know the bit loads the file as before; a version never reaches this bit.
-pub const FLAG_TRACE: u32 = 1 << 31;
-/// The runtime version that loads a DSP section (`dkrt_sdk::RUNTIME_VERSION` is at least this).
-pub const RUNTIME_DSP: u32 = 5; // DSP sections of version 2 (voices with knob ranges, finding 51); a runtime 2 to 4 loads version 1 only
+/// The keys of the header table of a file (the bytes at `H_REG_OFF`, `H_REG_SIZE`): no hash check, as `needs` has none (the card's files are read the same way).
+fn keys_of(f: &[u8]) -> Result<dkneeds::keys::Keys<'_>> {
+    if f.len() < dkneeds::HEADER as usize || get(f, dkneeds::H_MAGIC as usize) != MAGIC {
+        return Err(err!("not a .dkm file (magic)"));
+    }
+    let off = get(f, dkneeds::H_REG_OFF as usize) as usize;
+    let size = get(f, dkneeds::H_REG_SIZE as usize) as usize;
+    let table = off
+        .checked_add(size)
+        .and_then(|end| f.get(off..end))
+        .ok_or_else(|| err!("the header table is outside the file"))?;
+    dkneeds::keys::Keys::parse(table).map_err(|e| err!("header table: {e:?}"))
+}
 
-/// The newest minor of the machine contract that has no stereo machines (1.1: `track` appended to `voice_in`).
-pub const MACHINE_MONO_MINOR: u8 = 1;
-pub const MACHINE_STEREO_MINOR: u8 = 2;
-pub const MACHINE_LATCHED_MINOR: u8 = 3;
-pub const MACHINE_NATIVE_PAGE_MINOR: u8 = 4;
-pub const MACHINE_NATIVE_PAGES_MINOR: u8 = 5;
-/// A machine whose desc carries `DK_MACHINE_GATE` reads `gate` in `dk_voice_in` (1.6).
-pub const MACHINE_GATE_MINOR: u8 = 6;
-/// The newest minor of the Api contract before the per-track sample table (1.5). A module declares 1.5 only when its DSP section holds a
-/// track table (`DK_SAMPLE_TRACKS`); every other module declares 1.4, so a runtime of Api 1.4 still accepts it.
-pub const API_PRE_TRACKS_MINOR: u8 = 4;
-/// The Api minor of the per-track sample table (1.5).
-pub const API_TRACKS_MINOR: u8 = 5;
-/// The Api minor that added the entry point `dk_module` and the service imports (1.11): a module that defines `dk_module` declares at least this.
-pub const API_ENTRY_MINOR: u8 = 11;
+/// The key rules of a file against another, as JSON, for the workbench before an upload: `repeat` is the first (kind, key) that `new` provides twice (the planner
+/// refuses it with `E_PLAN_KEY`); with `other` not empty, `shared` is the first (kind, key) that both files provide (two modules of one selection: `E_PLAN_KEY` at
+/// the next boot) and `missing` the first that `other` provides and `new` does not (`other` is the old version of the same module: a reload refuses a file that
+/// lacks it, `E_RELOAD_KEYS`). Each is `null` or `{kind, key}`.
+pub fn keys_check_json(new: &[u8], other: &[u8]) -> Result<serde_json::Value> {
+    use serde_json::{Value, json};
+    let pair = |p: Option<(u32, u32)>| {
+        p.map_or(Value::Null, |(kind, key)| json!({"kind": kind, "key": key}))
+    };
+    let a = keys_of(new)?;
+    let (shared, missing) = if other.is_empty() {
+        (None, None)
+    } else {
+        let b = keys_of(other)?;
+        (a.first_shared_key(&b), b.first_missing_key(&a))
+    };
+    Ok(json!({"repeat": pair(a.first_repeat()), "shared": pair(shared), "missing": pair(missing)}))
+}
+
+// header field offsets
+pub const H_MAGIC: usize = dkneeds::H_MAGIC as usize;
+pub const H_FORMAT: usize = dkneeds::H_FORMAT as usize;
+pub const H_SIZE: usize = dkneeds::H_SIZE as usize;
+pub const H_HDRSIZE: usize = dkneeds::H_HDRSIZE as usize;
+pub const H_SHA: usize = dkneeds::H_SHA as usize;
+pub const H_RUNTIME: usize = dkneeds::H_RUNTIME as usize;
+pub const H_VERSION: usize = dkneeds::H_VERSION as usize;
+/// 0x38: the role of the file, [`ROLE_MODULE`] or [`ROLE_SERVICE`].
+pub const H_ROLE: usize = dkneeds::H_ROLE as usize;
+/// 0x3c..0x40: the ABI fingerprint of the object's `dk_svc_abi` data symbol (a service file built with `dkrt-svc-rt`); 0 when the object defines none, so a
+/// module is byte-identical to the format before the word was used.
+pub const H_SVC_ABI: usize = dkneeds::H_SVC_ABI as usize;
+/// A content module (a `.dkm`).
+pub const ROLE_MODULE: u32 = 0;
+/// A service provider (a `.dks`): its table has `PROVIDES` and `EXPORTS`.
+pub const ROLE_SERVICE: u32 = 1;
+/// A port file (`patchkit port build`): device and firmware facts for the services, from committed data only (docs/plans/port-file.md). It provides the service `port`.
+pub const ROLE_PORT: u32 = 2;
+pub const H_NAME: usize = dkneeds::H_NAME as usize;
+pub const H_IMAGE_OFF: usize = dkneeds::H_IMAGE_OFF as usize;
+pub const H_IMAGE_SIZE: usize = dkneeds::H_IMAGE_SIZE as usize;
+pub const H_BSS: usize = dkneeds::H_BSS as usize;
+pub const H_ALIGN: usize = dkneeds::H_ALIGN as usize;
+pub const H_RELOC_OFF: usize = dkneeds::H_RELOC_OFF as usize;
+pub const H_RELOC_N: usize = dkneeds::H_RELOC_N as usize;
+pub const H_IMPORT_OFF: usize = dkneeds::H_IMPORT_OFF as usize;
+pub const H_IMPORT_N: usize = dkneeds::H_IMPORT_N as usize;
+pub const H_INIT: usize = dkneeds::H_INIT as usize;
+pub const H_FINI: usize = dkneeds::H_FINI as usize;
+pub const H_MENU: usize = dkneeds::H_MENU as usize;
+pub const H_TICK: usize = dkneeds::H_TICK as usize;
+pub const H_REG_OFF: usize = dkneeds::H_REG_OFF as usize;
+pub const H_REG_SIZE: usize = dkneeds::H_REG_SIZE as usize;
+pub const H_DSP_OFF: usize = dkneeds::H_DSP_OFF as usize;
+pub const H_DSP_SIZE: usize = dkneeds::H_DSP_SIZE as usize;
+/// Bit 31 of the word at [`H_RUNTIME`]: the module was built with `DK_TRACE`. The word at [`H_RUNTIME`] is the runtime version the module needs
+/// (the loader's rule: same major and minor, a patch at most the runtime's); a version never reaches this bit.
+pub const FLAG_TRACE: u32 = 1 << 31;
 /// The names of the fields of the `dk_module` record, in order (`sdk/include/dk/core/module.h`): the function offsets the packer reads from it.
 const MODULE_FIELDS: [&str; 4] = ["init", "fini", "tick", "menu"];
 
@@ -144,8 +168,8 @@ fn module_record(image: &[u8], relocs: &[(u32, u32)], at: u32) -> Result<[Option
     Ok(v)
 }
 
-/// The Api minor a module with the entry point needs: the newest `since` of the service imports it links, and at least [`API_ENTRY_MINOR`].
-pub fn entry_api_minor<'a>(imports: impl IntoIterator<Item = &'a str>) -> u8 {
+/// The runtime version a module needs: the newest `since` of the service imports it links, packed major << 16 | minor << 8 | patch (0 when it links none).
+pub fn needed_runtime<'a>(imports: impl IntoIterator<Item = &'a str>) -> u32 {
     let table = crate::sdkgen::import_infos();
     imports
         .into_iter()
@@ -153,10 +177,170 @@ pub fn entry_api_minor<'a>(imports: impl IntoIterator<Item = &'a str>) -> u8 {
         .map(|i| i.since)
         .max()
         .unwrap_or(0)
-        .max(API_ENTRY_MINOR)
 }
 
-/// The services the imports name (`service` of `[[import]]`), each with the imports of it, sorted; an import of the Api table's time names none.
+/// The `NEEDS` of a module that links `imports`: one per service its imports name, the newest `since` among them, hard unless each of them has a
+/// stub for an absent provider. Sorted by service name hash.
+pub fn needs_of_imports<'a>(
+    imports: impl IntoIterator<Item = &'a str>,
+) -> Vec<dkneeds::keys::Need> {
+    let table = crate::sdkgen::import_infos();
+    let mut by: BTreeMap<u32, dkneeds::keys::Need> = BTreeMap::new();
+    for n in imports {
+        if let Some(i) = table.get(n) {
+            let h = dkneeds::keys::name_hash(&i.service);
+            let e = by.entry(h).or_insert(dkneeds::keys::Need {
+                service: h,
+                min_version: 0,
+                hard: false,
+            });
+            e.min_version = e.min_version.max(i.since);
+            e.hard |= !i.optional;
+        }
+    }
+    by.into_values().collect()
+}
+
+/// A hard NEED on the owning service of each record kind in `kinds` (the kinds of a module's `KEYS`, `[records.kinds] service`), only when that service has no
+/// `rust` row, so a `.dks` provides it. A service in the runtime image is always there: modules whose kinds it owns stay byte-identical until it moves out.
+/// The needs stay sorted by service name hash; a kind that is no record kind adds none.
+fn record_kind_needs(needs: &mut Vec<dkneeds::keys::Need>, kinds: &[u32]) {
+    let providers = crate::sdkgen::provider_services();
+    for kind in kinds {
+        let Some((_, _, service)) = dkneeds::KINDS.iter().find(|k| k.0 == *kind) else {
+            continue;
+        };
+        if !providers.contains(*service) {
+            continue;
+        }
+        let h = dkneeds::keys::name_hash(service);
+        match needs.iter_mut().find(|n| n.service == h) {
+            Some(n) => n.hard = true,
+            None => needs.push(dkneeds::keys::Need {
+                service: h,
+                min_version: 0,
+                hard: true,
+            }),
+        }
+    }
+    needs.sort_by_key(|n| n.service);
+}
+
+/// The `KINDS` of a service file: each record kind `service` owns (`[records.kinds]`) with `init` as the handler entry. The `service!` macro of `dkrt-svc-rt`
+/// declares every kind with the address of `init`, and the loader compares the declarations with this table.
+fn service_kinds(service: &str, init: u32) -> Vec<dkneeds::keys::KindDecl> {
+    dkneeds::KINDS
+        .iter()
+        .filter(|k| k.2 == service)
+        .map(|k| dkneeds::keys::KindDecl {
+            kind: k.0,
+            len: k.1,
+            entry: init,
+        })
+        .collect()
+}
+
+/// The header table to write: `reg` is the table the caller built (empty: a module that takes and keeps nothing) with the `NEEDS` entry replaced by
+/// the needs of `imports`.
+///
+/// `provides` and `exports` are added to the ones of `reg`; a table with any `PROVIDES` is written as version 2.
+fn table_with_needs(
+    reg: &[u8],
+    imports: &[&str],
+    provides: &[dkneeds::keys::Pair],
+    exports_add: &[dkneeds::keys::Pair],
+    hooks_add: &[dkneeds::keys::Pair],
+    slots_add: &[dkneeds::keys::Slot],
+    kinds_add: &[dkneeds::keys::KindDecl],
+    callback_order: Option<dkneeds::keys::Pair>,
+    local: &LocalImports,
+    registration_floor: u32,
+) -> Result<Vec<u8>> {
+    use dkneeds::keys::{KeyGroup, Keys, Pair, Table, write_table};
+    let keys = if reg.is_empty() {
+        None
+    } else {
+        Some(Keys::parse(reg).map_err(|e| err!("header table: {e:?}"))?)
+    };
+    let mut needs = needs_of_imports(imports.iter().copied());
+    // a service that names the firmware (an import `dk_fw_`, `dk_exit_`, `dk_tail_`, `dk_stock_`, `dk_ret_`) or takes a hook needs the port file of the firmware
+    if !hooks_add.is_empty()
+        || imports
+            .iter()
+            .any(|i| crate::fwnames::parse_import(i).is_some())
+    {
+        needs.push(dkneeds::keys::Need {
+            service: dkneeds::keys::name_hash(crate::portfile::PORT_SERVICE),
+            min_version: crate::portfile::PORT_VERSION,
+            hard: true,
+        });
+        needs.sort_by_key(|n| n.service);
+    }
+    if let Some(k) = &keys {
+        let kinds: Vec<u32> = k.key_groups().map(|g| g.0).collect();
+        record_kind_needs(&mut needs, &kinds);
+    }
+    needs.extend_from_slice(&local.needs);
+    if registration_floor != 0 {
+        let service = dkneeds::keys::name_hash("runtime");
+        match needs.iter_mut().find(|n| n.service == service) {
+            Some(n) => {
+                n.min_version = n.min_version.max(registration_floor);
+                n.hard = true;
+            }
+            None => needs.push(dkneeds::keys::Need {
+                service,
+                min_version: registration_floor,
+                hard: true,
+            }),
+        }
+    }
+    needs.sort_by_key(|n| n.service);
+    let (mut uses, mut kinds, mut slots, mut hooks, mut exports, mut resources) =
+        (vec![], vec![], vec![], vec![], vec![], vec![]);
+    let mut groups: Vec<(u32, Vec<u32>)> = vec![];
+    let mut provided: Vec<Pair> = vec![];
+    if let Some(k) = &keys {
+        provided.extend(k.provides().map(|(a, b)| Pair { a, b }));
+        uses.extend(k.uses());
+        kinds.extend(k.kinds());
+        slots.extend(k.slots());
+        hooks.extend(k.hooks());
+        exports.extend(k.exports());
+        resources.extend(k.resources());
+        for (kind, ks) in k.key_groups() {
+            groups.push((kind, ks.collect()));
+        }
+    }
+    exports.extend_from_slice(exports_add);
+    hooks.extend_from_slice(hooks_add);
+    slots.extend_from_slice(slots_add);
+    kinds.extend_from_slice(kinds_add);
+    provided.extend_from_slice(provides);
+    let key_groups: Vec<KeyGroup> = groups
+        .iter()
+        .map(|(kind, keys)| KeyGroup { kind: *kind, keys })
+        .collect();
+    let t = Table {
+        provides: &provided,
+        needs: &needs,
+        uses: &uses,
+        keys: &key_groups,
+        kinds: &kinds,
+        slots: &slots,
+        hooks: &hooks,
+        exports: &exports,
+        resources: &resources,
+        callback_order,
+        service_imports: &local.owners,
+        ..Table::default()
+    };
+    let mut out = vec![0u8; dkneeds::keys::table_size(&t)];
+    write_table(&t, &mut out).map_err(|e| err!("header table: {e:?}"))?;
+    Ok(out)
+}
+
+/// The services the imports name (`service` of `[[import]]`), each with the imports of it, sorted; a compiler helper names none.
 pub fn services_of<'a>(
     imports: impl IntoIterator<Item = &'a str>,
 ) -> BTreeMap<String, Vec<String>> {
@@ -170,32 +354,103 @@ pub fn services_of<'a>(
     v
 }
 
-/// The Api minor a module declares: the lowest that has everything it needs. 1.4 for a module that needs nothing newer; 1.5 when its DSP
-/// section holds a track table; the newest `since` of the entries its manifest lists in `uses_api` (`Options::api_minor`) when that is
-/// higher. Never above the Api of the SDK this packer was built with.
-pub fn api_minor(sdk_minor: u8, uses_tracks: bool, listed: u8) -> u8 {
-    let base = if uses_tracks {
-        API_TRACKS_MINOR
-    } else {
-        API_PRE_TRACKS_MINOR
-    };
-    base.max(listed).min(sdk_minor)
-}
-
 pub struct Options {
     pub name: String,
     /// major << 16 | minor << 8 | patch
     pub version: u32,
-    pub runtime_min: u32,
     /// A traced build (`patchkit pack --trace`, DK_TRACE defined): sets [`FLAG_TRACE`].
     pub trace: bool,
-    /// A stereo machine (`DK_MACHINE_STEREO`): the file declares machine contract 1.2. A mono machine declares 1.1, so a runtime of
-    /// machine contract 1.1 still accepts it.
+    /// A stereo machine (`DK_MACHINE_STEREO`); informational for tools.
     pub stereo: bool,
-    /// A machine that reads `gate` (`DK_MACHINE_GATE` in its desc): the file declares machine contract 1.6.
+    /// A machine that reads `gate` (`DK_MACHINE_GATE` in its desc); informational for tools.
     pub gate: bool,
-    /// The newest Api minor of the entries the manifest lists in `uses_api` (0: none); see [`api_minor`].
-    pub api_minor: u8,
+    /// A service provider (`role = "service"`): the file gets [`ROLE_SERVICE`] and a table with its `PROVIDES` and `EXPORTS`. `None`: a content module.
+    pub service: Option<Provided>,
+}
+
+/// The low 24 bits of a `HOOKS` entry of a service file: the handler's image offset. The top byte is the device mask of the hook.
+pub const HOOK_ENTRY_MASK: u32 = dkneeds::keys::HOOK_ENTRY_MASK;
+
+/// The device mask of a hook: bit `id - 1` for each device with runtime id `id` (`[digikit] id`, the mask of a `SLOTS` item without its shift); no device is mask 0, which means
+/// every device. The packer writes it in the top byte of the hook's `HOOKS` entry; the loader takes the items of its device and drops it.
+pub fn hook_device_mask(devices: &[String]) -> Result<u32> {
+    runtime_id_mask(crate::devdata::all(), devices, "hook")
+}
+
+/// The device mask of a `SLOTS` item, in place in the flags word: bit `id - 1` for each device with runtime id `id` (`[digikit] id`); no device is 0 (every device).
+pub fn slot_device_flags(devices: &[String]) -> Result<u32> {
+    Ok(runtime_id_mask(crate::devdata::all(), devices, "slot")?
+        << dkneeds::keys::SLOT_DEVICES_SHIFT)
+}
+
+/// Bit `id - 1` for each of `devices` (short names of `all`) by its runtime id; `what` names the item in the refusal.
+fn runtime_id_mask(
+    all: &[crate::devdata::DeviceInfo],
+    devices: &[String],
+    what: &str,
+) -> Result<u32> {
+    let mut mask = 0u32;
+    for d in devices {
+        let id = all
+            .iter()
+            .find(|x| x.short == *d)
+            .and_then(|x| x.digikit_id)
+            .ok_or_else(|| {
+                err!(
+                    "{what} device {d:?} is not a device the runtime runs on ({})",
+                    crate::devdata::short_list()
+                )
+            })?;
+        if !(1..=8).contains(&id) {
+            return Err(err!(
+                "{what} device {d:?}: the runtime id {id} is not 1 to 8"
+            ));
+        }
+        mask |= 1 << (id - 1);
+    }
+    Ok(mask)
+}
+
+/// What a service file provides: the service name (`[module] service`) and the functions it exports (`[[export]]`), each a global function of the object.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Provided {
+    pub service: String,
+    pub callback_order: Option<u32>,
+    pub exports: Vec<String>,
+    /// The hooks the service takes (`[[hook]]`): (hook name of the port, global function of the object that handles it, devices it is for; empty: every
+    /// device). The runtime installs a jump to the entry at the hook's site from the port file; the devices are the device mask in the top byte of the `HOOKS` entry
+    /// ([`hook_device_mask`]).
+    pub hooks: Vec<(String, String, Vec<String>)>,
+    /// The patches the service takes (`[[patch]]`): (patch name of the port, devices it is for; empty: every device). Each is a `HOOKS` item with the entry
+    /// `HOOK_ENTRY_PATCH` and the device mask in its top byte; the bytes come from the service's `init` (`dk_service_declare_patch`), not from the file.
+    pub patches: Vec<(String, Vec<String>)>,
+    /// The pointer slots the service fills (`[[fill]]`): (slot name of the image adapter, global function of the object whose address goes in the slot).
+    /// A `SLOTS` item of the table is the name hash and the entry offset. The third item lists the devices the fill is for (empty: every device); they are the device mask in the
+    /// flags of the item ([`slot_device_flags`]), and the loader skips an item for another device, so one file serves every device.
+    pub fills: Vec<(String, String, Vec<String>)>,
+    /// The DSP slots the service fills (`[[fill]] space = "dsp"`): its dispatch code in the file's DSP section. The packer sets `offset` from the DSP object.
+    pub dsp_fills: Vec<DspFill>,
+}
+
+/// A fill of a DSP slot (a word of core/dsp-link's slot block): the slot name of the image adapter and the global text symbol of the DSP object whose pc goes in it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DspFill {
+    pub slot: String,
+    pub entry: String,
+    /// The devices the fill is for (empty: every device), as for [`Provided::fills`].
+    pub devices: Vec<String>,
+    /// The byte offset of `entry` in the DSP image; `None` until the packer has linked the DSP object.
+    pub offset: Option<u32>,
+}
+
+impl Provided {
+    /// The service as packed for `device`: the DSP fills limited to other devices are left out (the DSP section is built from the object of this device; a ColdFire fill
+    /// keeps its device mask instead).
+    pub fn for_device(mut self, device: &str) -> Provided {
+        self.dsp_fills
+            .retain(|f| f.devices.is_empty() || f.devices.iter().any(|d| d == device));
+        self
+    }
 }
 
 /// "1.2.3" -> 0x010203
@@ -241,36 +496,16 @@ fn valid_name(n: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.' | b'/'))
 }
 
-/// Pack a ColdFire object. Exports by name: `dkm_init`, `dkm_fini`, `dkm_slot_<n>` (n < 8). Every other undefined symbol is
-/// an import resolved by the runtime's table at load time; only 32-bit absolute relocations may name one.
+/// Pack a ColdFire object. The entry points are the fields of its `dk_module` constant. Every undefined symbol is an import resolved by the
+/// runtime's table at load time; only 32-bit absolute relocations may name one.
 pub fn pack(obj: &Dko, o: &Options) -> Result<Vec<u8>> {
-    pack_with(Some(obj), &[], o)
+    pack_inner(Some(obj), false, &[], &[], o, max_file(), &[])
 }
 
-/// The image of a data-only module: `dkm_init` is `moveq #0,d0; rts`. The `register` records do the work.
+/// The image of a data-only module: `init` is `moveq #0,d0; rts`. The `register` records do the work.
 const STUB_IMAGE: [u8; 4] = [0x70, 0x00, 0x4e, 0x75];
 
-/// Do the `register` records hold a machine record? (A data-only machine module has no DSP section but is a machine.) Walks the records
-/// by their kind and length words; a malformed table is not one (the loader refuses it with E_FORMAT).
-fn has_machine_record(reg: &[u8]) -> bool {
-    let w = |at: usize| -> Option<usize> {
-        let b = reg.get(at..at + 4)?;
-        Some(u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize)
-    };
-    let mut at = crate::register::HEADER;
-    while let (Some(kind), Some(len)) = (w(at), w(at + 4)) {
-        if kind == crate::register::KIND_MACHINE as usize {
-            return true;
-        }
-        if len < 8 {
-            return false;
-        }
-        at += len;
-    }
-    false
-}
-
-/// The global symbols of a ColdFire object with their offsets in the loaded image (the offsets `pack` writes for `dkm_init` and the slots). The
+/// The global symbols of a ColdFire object with their offsets in the loaded image. The
 /// register records that name a function (the click callbacks) need them before the file is packed.
 pub fn image_symbols(obj: &Dko) -> Result<BTreeMap<String, u32>> {
     let defined: BTreeSet<&str> = obj
@@ -297,25 +532,132 @@ pub fn image_symbols(obj: &Dko) -> Result<BTreeMap<String, u32>> {
         .collect())
 }
 
-/// Pack an object (or none: a data-only module) with `register` records (see [`register`]).
-pub fn pack_with(obj: Option<&Dko>, reg: &[u8], o: &Options) -> Result<Vec<u8>> {
-    pack_full(obj, reg, &[], o)
-}
-
-/// Pack an object (or none), `register` records and a DSP section (see [`crate::dkmdsp`]; empty: none). A file with a DSP section
-/// needs a runtime of version [`RUNTIME_DSP`] or later.
-pub fn pack_full(obj: Option<&Dko>, reg: &[u8], dsp: &[u8], o: &Options) -> Result<Vec<u8>> {
-    pack_full_max(obj, reg, dsp, o, max_file())
-}
-
-/// [`pack_full`] with another file size limit: `dkm_synth` makes files over the staging buffer on purpose (the capacity tests of the
+/// [`pack_keys`] with another file size limit: `dkm_synth` makes files over the staging buffer on purpose (the capacity tests of the
 /// runtime's `E_TOO_BIG`).
 pub fn pack_full_max(
     obj: Option<&Dko>,
+    keys: &[u8],
+    dsp: &[u8],
+    o: &Options,
+    max_file: usize,
+) -> Result<Vec<u8>> {
+    pack_inner(obj, obj.is_none(), keys, dsp, o, max_file, &[])
+}
+
+/// Pack an object (or none), the keys table and a DSP section (see [`crate::dkmdsp`]; empty: none). The table at the header's 0x90 pair is the
+/// keys table (`dkneeds::keys`, from `dkneeds::keys::write_keys`; size 0 for a module with no machine and no effect). The module declares its
+/// machines, pages and parameters with builder calls in `init`.
+pub fn pack_keys(obj: Option<&Dko>, keys: &[u8], dsp: &[u8], o: &Options) -> Result<Vec<u8>> {
+    pack_keys_with_service_imports(obj, keys, dsp, o, &[])
+}
+
+/// Pack a manifest's objects with its locally declared service imports.
+pub(crate) fn pack_keys_with_service_imports(
+    obj: Option<&Dko>,
+    keys: &[u8],
+    dsp: &[u8],
+    o: &Options,
+    service_imports: &[crate::module::ServiceImport],
+) -> Result<Vec<u8>> {
+    pack_inner(
+        obj,
+        obj.is_none(),
+        keys,
+        dsp,
+        o,
+        max_file(),
+        service_imports,
+    )
+}
+
+#[derive(Default)]
+struct LocalImports {
+    needs: Vec<dkneeds::keys::Need>,
+    owners: Vec<dkneeds::keys::Pair>,
+}
+
+impl LocalImports {
+    fn of(
+        o: &Options,
+        imports: &[&str],
+        declared: &[crate::module::ServiceImport],
+    ) -> Result<Self> {
+        use dkneeds::keys::{Need, Pair, name_hash};
+        let mut local = Self::default();
+        let mut services: BTreeMap<u32, &str> = BTreeMap::new();
+        for d in declared {
+            let service = name_hash(&d.service);
+            if !crate::module::local_service_name(&d.service)
+                || o.service
+                    .as_ref()
+                    .is_some_and(|p| name_hash(&p.service) == service)
+                || services.insert(service, &d.service).is_some()
+            {
+                return Err(err!(
+                    "{}: invalid, repeated, or self-provided [[service_import]] {:?}",
+                    o.name,
+                    d.service
+                ));
+            }
+            let min_version = parse_version(&d.min_version)?;
+            if min_version == 0 || d.names.is_empty() {
+                return Err(err!(
+                    "{}: [[service_import]] {:?} needs a nonzero min_version and at least one import name",
+                    o.name,
+                    d.service
+                ));
+            }
+            local.needs.push(Need {
+                service,
+                min_version,
+                hard: true,
+            });
+            for name in &d.names {
+                crate::module::validate_local_import(&o.name, name)?;
+                if !imports.contains(&name.as_str()) {
+                    return Err(err!(
+                        "{}: [[service_import]] {name:?} is not linked by the ColdFire object",
+                        o.name
+                    ));
+                }
+                let hash = name_hash(name);
+                if local.owners.iter().any(|p| p.a == hash) {
+                    return Err(err!(
+                        "{}: repeated or colliding [[service_import]] symbol {name:?}",
+                        o.name
+                    ));
+                }
+                local.owners.push(Pair {
+                    a: hash,
+                    b: service,
+                });
+            }
+        }
+        local.owners.sort_by_key(|p| p.a);
+        Ok(local)
+    }
+}
+
+/// [`pack_full_max`] for an object that is only data: its `.text` starts with the stub (`moveq #0,d0; rts`) that is `init`, there is no `dk_module`, and
+/// the other sections are padding and bss. `dkm_synth` makes the capacity-test modules this way, so that a file is exactly header, stub and padding.
+pub fn pack_data_only_max(
+    obj: &Dko,
+    keys: &[u8],
+    dsp: &[u8],
+    o: &Options,
+    max_file: usize,
+) -> Result<Vec<u8>> {
+    pack_inner(Some(obj), true, keys, dsp, o, max_file, &[])
+}
+
+fn pack_inner(
+    obj: Option<&Dko>,
+    data_only: bool,
     reg: &[u8],
     dsp: &[u8],
     o: &Options,
     max_file: usize,
+    service_imports: &[crate::module::ServiceImport],
 ) -> Result<Vec<u8>> {
     if let Some(obj) = obj {
         obj.require_isa_checked()?;
@@ -333,14 +675,13 @@ pub fn pack_full_max(
             hex: hex(&STUB_IMAGE),
         }],
         symbols: vec![crate::dko::DkoSymbol {
-            name: "dkm_init".into(),
+            name: "dk_init_stub".into(),
             section: Some(".text".into()),
             value: 0,
             global: true,
         }],
         relocs: vec![],
     };
-    let has_obj = obj.is_some();
     let obj = obj.unwrap_or(&stub);
     if obj.arch != "cf" {
         return Err(err!(
@@ -376,6 +717,7 @@ pub fn pack_full_max(
         }
     }
     let imports: Vec<&str> = imports.into_iter().collect();
+    let local = LocalImports::of(o, &imports, service_imports)?;
     for n in &imports {
         if n.len() >= IMPORT_LEN {
             return Err(err!("import name {n} is longer than {}", IMPORT_LEN - 1));
@@ -417,42 +759,37 @@ pub fn pack_full_max(
             Some(v) => Err(err!("{n} = {v:#x} is outside the loaded image")),
         }
     };
-    let mut init = sym("dkm_init")?;
-    let mut fini = sym("dkm_fini")?;
-    let mut menu = sym("dkm_menu")?;
-    let mut tick = None;
-    let mut slots: Vec<(u32, u32)> = vec![];
-    for n in 0..SLOTS {
-        if let Some(v) = sym(&format!("dkm_slot_{n}"))? {
-            slots.push((n, v));
-        }
-    }
+    // the old entry is gone: refuse its symbols with a pointer to the new one (a received source module may still have them)
     for s in &obj.symbols {
-        if let Some(n) = s.name.strip_prefix("dkm_slot_")
-            && s.section.is_some()
-            && n.parse::<u32>().map(|n| n >= SLOTS).unwrap_or(true)
+        if s.section.is_some()
+            && (matches!(s.name.as_str(), "dkm_init" | "dkm_fini" | "dkm_menu")
+                || s.name.starts_with("dkm_slot_"))
         {
-            return Err(err!("{}: slot numbers are 0 to {}", s.name, SLOTS - 1));
+            return Err(err!(
+                "{}: the entry points dkm_init, dkm_fini, dkm_menu and dkm_slot_<n> are gone: define the constant dk_module (docs/plans/sdk.md section 5)",
+                s.name
+            ));
         }
     }
-    // the entry point: the constant `dk_module` (init, fini, tick, menu) replaces dkm_init, dkm_fini, dkm_menu and the slots
-    let entry = match sym("dk_module")? {
-        None => false,
+    // the entry point: the constant `dk_module` (init, fini, tick, menu); a data-only module has the stub's init
+    let [init, fini, tick, menu] = if !data_only {
+        let at = sym("dk_module")?
+            .ok_or_else(|| err!("the object defines no dk_module (docs/plans/sdk.md section 5)"))?;
+        module_record(&image, &relocs, at)?
+    } else {
+        [Some(0), None, None, None]
+    };
+    // the ABI fingerprint of a service built with `dkrt-svc-rt`: the value of the data symbol `dk_svc_abi` (a big-endian word in the image)
+    let svc_abi = match sym("dk_svc_abi")? {
+        None => 0,
         Some(at) => {
-            if init.is_some() || fini.is_some() || menu.is_some() || !slots.is_empty() {
-                return Err(err!(
-                    "the object defines dk_module and dkm_init, dkm_fini, dkm_menu or dkm_slot_<n>: use one entry point"
-                ));
+            let at = at as usize;
+            match image.get(at..at + 4) {
+                Some(w) => u32::from_be_bytes([w[0], w[1], w[2], w[3]]),
+                None => return Err(err!("dk_svc_abi is not a whole word of the image")),
             }
-            [init, fini, tick, menu] = module_record(&image, &relocs, at)?;
-            true
         }
     };
-    if !entry && init.is_none() && fini.is_none() && slots.is_empty() && menu.is_none() {
-        return Err(err!(
-            "the object exports none of dk_module, dkm_init, dkm_fini, dkm_slot_<n>, dkm_menu"
-        ));
-    }
     let align = obj
         .sections
         .iter()
@@ -465,135 +802,272 @@ pub fn pack_full_max(
         return Err(err!("a section needs alignment over 16 (the arena's)"));
     }
 
-    let header = if entry {
-        HEADER_TICK
-    } else if menu.is_some() {
-        HEADER_MENU
-    } else {
-        HEADER
+    // the header table: the packer's uses and keys (none: a module that keeps nothing) and the needs of the imports the module links
+    let (provides, svc_exports, svc_hooks, svc_slots, svc_kinds) = match &o.service {
+        None => (vec![], vec![], vec![], vec![], vec![]),
+        Some(s) => {
+            let mut hk: Vec<dkneeds::keys::Pair> = vec![];
+            for (hook, entry, devices) in &s.hooks {
+                if !linked.globals.iter().any(|g| g == entry) {
+                    return Err(err!(
+                        "the service hooks {hook} with {entry}, which is no global symbol of the object"
+                    ));
+                }
+                let at = sym(entry)?.ok_or_else(|| {
+                    err!("the service hooks {hook} with {entry}, which the object does not define")
+                })?;
+                let a = dkneeds::keys::name_hash(hook);
+                let mask = hook_device_mask(devices)?;
+                // one name may be hooked once for each of disjoint devices; no device is every device
+                let overlaps = |p: &dkneeds::keys::Pair| {
+                    let other = p.b >> dkneeds::keys::HOOK_DEVICES_SHIFT;
+                    p.a == a && (mask == 0 || other == 0 || mask & other != 0)
+                };
+                if hk.iter().any(overlaps) {
+                    return Err(err!("the service hooks {hook} twice"));
+                }
+                if at > HOOK_ENTRY_MASK {
+                    return Err(err!(
+                        "the service hooks {hook} with {entry} at image offset {at:#x}, over the 24 bits of a HOOKS entry"
+                    ));
+                }
+                hk.push(dkneeds::keys::Pair {
+                    a,
+                    b: at | mask << dkneeds::keys::HOOK_DEVICES_SHIFT,
+                });
+            }
+            for (patch, devices) in &s.patches {
+                let a = dkneeds::keys::name_hash(patch);
+                let mask = hook_device_mask(devices)?;
+                let overlaps = |p: &dkneeds::keys::Pair| {
+                    let other = p.b >> dkneeds::keys::HOOK_DEVICES_SHIFT;
+                    p.a == a && (mask == 0 || other == 0 || mask & other != 0)
+                };
+                if hk.iter().any(overlaps) {
+                    return Err(err!(
+                        "the service takes {patch} twice (a hook or a patch of that name already has the device)"
+                    ));
+                }
+                hk.push(dkneeds::keys::Pair {
+                    a,
+                    b: dkneeds::keys::HOOK_ENTRY_PATCH | mask << dkneeds::keys::HOOK_DEVICES_SHIFT,
+                });
+            }
+            hk.sort_by_key(|p| p.a);
+            let mut sl: Vec<dkneeds::keys::Slot> = vec![];
+            for (slot, entry, devices) in &s.fills {
+                let at = sym(entry)?.ok_or_else(|| {
+                    err!("the service fills {slot} with {entry}, which the object does not define")
+                })?;
+                let id = dkneeds::keys::name_hash(slot);
+                if sl.iter().any(|p| p.id == id) {
+                    return Err(err!("the service fills {slot} twice"));
+                }
+                sl.push(dkneeds::keys::Slot {
+                    id,
+                    flags: slot_device_flags(devices)?,
+                    entry: at,
+                });
+            }
+            for f in &s.dsp_fills {
+                let at = f.offset.ok_or_else(|| {
+                    err!(
+                        "the service fills the DSP slot {} with {}, but the file has no DSP section that defines it",
+                        f.slot,
+                        f.entry
+                    )
+                })?;
+                let id = dkneeds::keys::name_hash(&f.slot);
+                if sl.iter().any(|p| p.id == id) {
+                    return Err(err!("the service fills {} twice", f.slot));
+                }
+                sl.push(dkneeds::keys::Slot {
+                    id,
+                    flags: dkneeds::keys::SLOT_DSP,
+                    entry: at,
+                });
+            }
+            sl.sort_by_key(|p| p.id);
+            let mut ex: Vec<dkneeds::keys::Pair> = vec![];
+            let local_service = !crate::sdkgen::provider_services().contains(&s.service);
+            for n in &s.exports {
+                let query = n == dkrt_sdk::RESIDENT_QUERY_ENTRY;
+                let flags = if query {
+                    dkneeds::keys::EXPORT_FLAGS
+                } else if local_service {
+                    dkneeds::keys::EXPORT_BOUND
+                } else {
+                    0
+                };
+                let at = sym(n)?.ok_or_else(|| {
+                    err!("the service exports {n}, which the object does not define")
+                })?;
+                if !linked.globals.contains(n) {
+                    return Err(err!(
+                        "the service exports {n}, which is no global symbol of the object"
+                    ));
+                }
+                let a = dkneeds::keys::name_hash(n);
+                if ex.iter().any(|p| p.a == a) {
+                    return Err(err!("the service exports {n} twice"));
+                }
+                if flags != 0
+                    && !obj.symbols.iter().any(|s| {
+                        s.name == *n
+                            && s.section.as_deref().and_then(|sec| kind_of.get(sec))
+                                == Some(&"text")
+                    })
+                {
+                    return Err(err!(
+                        "the service exports {n}, which is not a function in the object's text"
+                    ));
+                }
+                ex.push(dkneeds::keys::Pair { a, b: at | flags });
+            }
+            ex.sort_by_key(|p| p.a);
+            (
+                vec![dkneeds::keys::Pair {
+                    a: dkneeds::keys::name_hash(&s.service),
+                    b: o.version,
+                }],
+                ex,
+                hk,
+                sl,
+                service_kinds(&s.service, init.unwrap_or(0)),
+            )
+        }
     };
-    let import_off = header;
+    let callback_order = o.service.as_ref().and_then(|s| {
+        s.callback_order.map(|b| dkneeds::keys::Pair {
+            a: dkneeds::keys::name_hash(&s.service),
+            b,
+        })
+    });
+    let registration_floor = if svc_exports
+        .iter()
+        .any(|e| e.b & dkneeds::keys::EXPORT_QUERY != 0)
+    {
+        crate::sdkgen::resident_query_runtime()
+    } else if !local.owners.is_empty()
+        || callback_order.is_some()
+        || svc_exports
+            .iter()
+            .any(|e| e.b & dkneeds::keys::EXPORT_BOUND != 0)
+    {
+        crate::sdkgen::service_registration_runtime()
+    } else {
+        0
+    };
+    let table = table_with_needs(
+        reg,
+        &imports,
+        &provides,
+        &svc_exports,
+        &svc_hooks,
+        &svc_slots,
+        &svc_kinds,
+        callback_order,
+        &local,
+        registration_floor,
+    )?;
+    if registration_floor != 0 && table.len() > dkneeds::keys::BOOT_TABLE_MAX {
+        return Err(err!(
+            "service registration needs a {}-byte header table, over the boot planner's {}-byte limit",
+            table.len(),
+            dkneeds::keys::BOOT_TABLE_MAX
+        ));
+    }
+    emit(&EmitParts {
+        name: &o.name,
+        version: o.version,
+        role: if o.service.is_some() {
+            ROLE_SERVICE
+        } else {
+            ROLE_MODULE
+        },
+        // the runtime version the module needs: the newest `since` of its service imports, at least the version that introduced the header table,
+        // and the trace flag
+        runtime_word: needed_runtime(imports.iter().copied())
+            .max(crate::sdkgen::table_runtime())
+            .max(registration_floor)
+            | if o.trace { FLAG_TRACE } else { 0 },
+        svc_abi,
+        image: &image,
+        bss: linked.bss_size as u32,
+        align,
+        imports: &imports,
+        relocs: &relocs,
+        entries: [init, fini, tick, menu],
+        table: &table,
+        dsp,
+        max_file,
+    })
+}
+
+/// What [`emit`] lays out as a file.
+pub(crate) struct EmitParts<'a> {
+    pub name: &'a str,
+    pub version: u32,
+    /// [`ROLE_MODULE`] or [`ROLE_SERVICE`], the word at [`H_ROLE`].
+    pub role: u32,
+    /// The word at [`H_RUNTIME`]: the runtime version the module needs and the trace flag.
+    pub runtime_word: u32,
+    /// The word at [`H_SVC_ABI`]: the service ABI fingerprint of a service (0 for a module).
+    pub svc_abi: u32,
+    pub image: &'a [u8],
+    pub bss: u32,
+    pub align: u32,
+    pub imports: &'a [&'a str],
+    /// (image offset, 0 = base-relative or 1 << 24 | import index), sorted.
+    pub relocs: &'a [(u32, u32)],
+    /// The image offsets of `init`, `fini`, `tick` and `menu`.
+    pub entries: [Option<u32>; 4],
+    /// The header table, already written.
+    pub table: &'a [u8],
+    /// The DSP section (empty: none).
+    pub dsp: &'a [u8],
+    pub max_file: usize,
+}
+
+/// The file layout: header, imports, relocations, header table, DSP section, image, with the file hash. 0x3c..0x40 stay zero.
+pub(crate) fn emit(p: &EmitParts) -> Result<Vec<u8>> {
+    let [init, fini, tick, menu] = p.entries;
+    let (imports, relocs, reg, dsp, image) = (p.imports, p.relocs, p.table, p.dsp, p.image);
+    let import_off = HEADER;
     let reloc_off = import_off + imports.len() * IMPORT_LEN;
-    let slot_off = reloc_off + relocs.len() * 8;
-    let reg_off = slot_off + slots.len() * 8;
+    let reg_off = reloc_off + relocs.len() * 8;
     let reg_size = reg.len();
     let dsp_off = align_up(reg_off + reg_size, 16);
     let image_off = align_up(dsp_off + dsp.len(), 16);
     let total = image_off + image.len();
-    if total > max_file {
+    if total > p.max_file {
         return Err(err!(
-            "the module file is {total} bytes; the runtime stages {max_file}"
+            "the module file is {total} bytes; the runtime stages {}",
+            p.max_file
         ));
     }
     let mut f = vec![0u8; total];
-    put(&mut f, 0, MAGIC);
-    put(&mut f, 4, FORMAT);
+    put(&mut f, H_MAGIC, MAGIC);
+    put(&mut f, H_FORMAT, FORMAT);
     put(&mut f, H_SIZE, total as u32);
-    put(&mut f, H_HDRSIZE, header as u32);
-    if entry {
-        put(&mut f, H_MENU, menu.unwrap_or(NONE));
-        put(&mut f, H_TICK, tick.unwrap_or(NONE));
-    } else if let Some(m) = menu {
-        put(&mut f, H_MENU, m);
-    }
-    put(
-        &mut f,
-        H_RUNTIME,
-        (if dsp.is_empty() {
-            o.runtime_min
-        } else {
-            o.runtime_min.max(RUNTIME_DSP)
-        }) | if o.trace { FLAG_TRACE } else { 0 },
-    );
-    put(&mut f, H_VERSION, o.version);
-    // contracts: api always; machine with a DSP section (that is not only effects) or a machine record; fx with an effect record; service with slot functions or a real `dkm_init`/`dkm_fini` (not the stub)
-    let sdk = crate::sdkgen::embedded();
-    let has_service = !slots.is_empty()
-        || has_obj && (init.is_some() || fini.is_some() || tick.is_some() || menu.is_some());
-    let none = (0, 0);
-    // a DSP section of version 4 with effects and no voice implements the fx contract and not the machine contract (a machine needs a voice or a record)
-    let word = |off: usize| {
-        dsp.get(off..off + 4)
-            .map_or(0, |b| u32::from_be_bytes(b.try_into().unwrap()))
-    };
-    let has_fx =
-        matches!(word(4), crate::dkmdsp::VERSION_4 | crate::dkmdsp::VERSION_5) && word(0x38) > 0;
-    let fx_only = has_fx && word(0x30) == 0;
-    // a version 5 DSP section whose record has kind 2 holds the per-track sample table: the module uses Api 1.5
-    let uses_tracks = word(4) == crate::dkmdsp::VERSION_5
-        && dsp
-            .get(word(0x3c) as usize..)
-            .and_then(|b| b.get(..4))
-            .is_some_and(|b| {
-                u32::from_le_bytes(b.try_into().unwrap()) == crate::dkmdsp::SAMPLE_TRACKS_KIND
-            });
-    let uses_latched = matches!(
-        word(4),
-        crate::dkmdsp::VERSION_3 | crate::dkmdsp::VERSION_4 | crate::dkmdsp::VERSION_5
-    ) && dsp.get(word(0x2c) as usize..).is_some_and(|voices| {
-        voices
-            .chunks_exact(crate::dkmdsp::VOICE_LEN_V3)
-            .take(word(0x30) as usize)
-            .any(|v| u32::from_be_bytes(v[56..60].try_into().unwrap()) != 0)
-    });
-    let pairs = [
-        (
-            sdk.api.0,
-            api_minor(
-                sdk.api.1,
-                uses_tracks,
-                // a module with the entry point needs the newest service import it links (a module of the old entry: `uses_api`)
-                if entry {
-                    o.api_minor.max(entry_api_minor(imports.iter().copied()))
-                } else {
-                    o.api_minor
-                },
-            ),
-        ),
-        if (dsp.is_empty() || fx_only) && !has_machine_record(reg) {
-            none
-        } else if o.gate {
-            (sdk.machine.0, sdk.machine.1.min(MACHINE_GATE_MINOR))
-        } else if !reg.is_empty()
-            && crate::register::Register::parse(reg)?
-                .native_pages
-                .iter()
-                .any(|p| p.version == 2)
-        {
-            (sdk.machine.0, sdk.machine.1.min(MACHINE_NATIVE_PAGES_MINOR))
-        } else if !reg.is_empty()
-            && !crate::register::Register::parse(reg)?
-                .native_pages
-                .is_empty()
-        {
-            (sdk.machine.0, sdk.machine.1.min(MACHINE_NATIVE_PAGE_MINOR))
-        } else if uses_latched {
-            (sdk.machine.0, sdk.machine.1.min(MACHINE_LATCHED_MINOR))
-        } else if o.stereo {
-            (sdk.machine.0, sdk.machine.1.min(MACHINE_STEREO_MINOR))
-        } else {
-            (sdk.machine.0, sdk.machine.1.min(MACHINE_MONO_MINOR))
-        },
-        if has_fx { sdk.fx } else { none },
-        if has_service { sdk.service } else { none },
-    ];
-    for (i, (maj, min)) in pairs.iter().enumerate() {
-        f[H_CONTRACT + 2 * i] = *maj;
-        f[H_CONTRACT + 2 * i + 1] = *min;
-    }
-    f[H_NAME..H_NAME + o.name.len()].copy_from_slice(o.name.as_bytes());
+    put(&mut f, H_HDRSIZE, HEADER as u32);
+    put(&mut f, H_RUNTIME, p.runtime_word);
+    put(&mut f, H_VERSION, p.version);
+    put(&mut f, H_SVC_ABI, p.svc_abi);
+    put(&mut f, H_ROLE, p.role);
+    f[H_NAME..H_NAME + p.name.len()].copy_from_slice(p.name.as_bytes());
     put(&mut f, H_IMAGE_OFF, image_off as u32);
     put(&mut f, H_IMAGE_SIZE, image.len() as u32);
-    put(&mut f, H_BSS, linked.bss_size as u32);
-    put(&mut f, H_ALIGN, align);
+    put(&mut f, H_BSS, p.bss);
+    put(&mut f, H_ALIGN, p.align);
     put(&mut f, H_RELOC_OFF, reloc_off as u32);
     put(&mut f, H_RELOC_N, relocs.len() as u32);
     put(&mut f, H_IMPORT_OFF, import_off as u32);
     put(&mut f, H_IMPORT_N, imports.len() as u32);
     put(&mut f, H_INIT, init.unwrap_or(NONE));
     put(&mut f, H_FINI, fini.unwrap_or(NONE));
-    put(&mut f, H_SLOT_OFF, slot_off as u32);
-    put(&mut f, H_SLOT_N, slots.len() as u32);
+    put(&mut f, H_MENU, menu.unwrap_or(NONE));
+    put(&mut f, H_TICK, tick.unwrap_or(NONE));
     put(&mut f, H_REG_OFF, reg_off as u32);
     put(&mut f, H_REG_SIZE, reg_size as u32);
     for (i, n) in imports.iter().enumerate() {
@@ -601,12 +1075,8 @@ pub fn pack_full_max(
         f[at..at + n.len()].copy_from_slice(n.as_bytes());
     }
     for (i, (off, k)) in relocs.iter().enumerate() {
-        put(&mut f, reloc_off + i * 8, *off);
-        put(&mut f, reloc_off + i * 8 + 4, *k);
-    }
-    for (i, (n, v)) in slots.iter().enumerate() {
-        put(&mut f, slot_off + i * 8, *n);
-        put(&mut f, slot_off + i * 8 + 4, *v);
+        put(&mut f, reloc_off + i * CF_RELOC_LEN + CF_RELOC_OFFSET, *off);
+        put(&mut f, reloc_off + i * CF_RELOC_LEN + CF_RELOC_KIND, *k);
     }
     f[reg_off..reg_off + reg_size].copy_from_slice(reg);
     if !dsp.is_empty() {
@@ -614,7 +1084,7 @@ pub fn pack_full_max(
         put(&mut f, H_DSP_SIZE, dsp.len() as u32);
         f[dsp_off..dsp_off + dsp.len()].copy_from_slice(dsp);
     }
-    f[image_off..].copy_from_slice(&image);
+    f[image_off..].copy_from_slice(image);
     let sha = file_sha(&f);
     f[H_SHA..H_SHA + 32].copy_from_slice(&sha);
     Ok(f)
@@ -624,6 +1094,10 @@ pub fn pack_full_max(
 pub struct Dkm {
     pub name: String,
     pub version: u32,
+    /// [`ROLE_MODULE`] or [`ROLE_SERVICE`].
+    pub role: u32,
+    /// The word at [`H_SVC_ABI`].
+    pub svc_abi: u32,
     pub runtime_min: u32,
     /// Built with `DK_TRACE` ([`FLAG_TRACE`]); not part of `runtime_min`.
     pub trace: bool,
@@ -636,13 +1110,10 @@ pub struct Dkm {
     pub imports: Vec<String>,
     pub init: Option<u32>,
     pub fini: Option<u32>,
-    /// The image offset of `dkm_menu` (or of `dk_module.menu`).
+    /// The image offset of `dk_module.menu`.
     pub menu: Option<u32>,
     /// The image offset of `dk_module.tick`.
     pub tick: Option<u32>,
-    /// A module with the entry point `dk_module` (header size [`HEADER_TICK`]): `init`, `fini`, `tick` and `menu` take a `dk_module_ctx`, not the Api table.
-    pub entry: bool,
-    pub slots: Vec<(u32, u32)>,
     pub register: Vec<u8>,
     /// The DSP section, as bytes (empty: none); parse it with [`crate::dkmdsp::DspSection::parse`].
     pub dsp: Vec<u8>,
@@ -650,10 +1121,9 @@ pub struct Dkm {
 
 impl Dkm {
     /// The size breakdown of a file of `total` bytes: `<total> bytes (image <n>, bss <n>, reloc <n>, import <n>, registry <n>, dsp <n>)`.
-    /// The file is the 0xa0-byte header, the import, reloc and slot tables, the registry, the DSP section and the image, in
-    /// that order, with padding to 16 before the DSP section and the image. So `total` = header + slots (8 bytes each,
-    /// not listed) + padding (under 32) + image + reloc (8 bytes each) + import (32 bytes each) + registry + dsp; `bss` is
-    /// memory the loader adds, not file bytes.
+    /// The file is the 0xa0-byte header, the import and reloc tables, the registry, the DSP section and the image, in
+    /// that order, with padding to 16 before the DSP section and the image. So `total` = header + padding (under 32) + image + reloc
+    /// (8 bytes each) + import (32 bytes each) + registry + dsp; `bss` is memory the loader adds, not file bytes.
     pub fn size_summary(&self, total: usize) -> String {
         format!(
             "{total} bytes (image {}, bss {}, reloc {}, import {}, registry {}, dsp {})",
@@ -674,11 +1144,7 @@ impl Dkm {
         if get(f, 4) != FORMAT {
             return Err(err!("format {} is not supported", get(f, 4)));
         }
-        let header = get(f, H_HDRSIZE) as usize;
-        if get(f, H_SIZE) as usize != f.len()
-            || (header != HEADER && header != HEADER_MENU && header != HEADER_TICK)
-            || f.len() < header
-        {
+        if get(f, H_SIZE) as usize != f.len() || get(f, H_HDRSIZE) as usize != HEADER {
             return Err(err!("size fields do not match the file"));
         }
         if file_sha(f) != f[H_SHA..H_SHA + 32] {
@@ -726,15 +1192,18 @@ impl Dkm {
                 },
             ));
         }
-        let slot_n = get(f, H_SLOT_N) as usize;
-        let sl = rng(get(f, H_SLOT_OFF) as usize, slot_n * 8)?;
-        let slots = (0..slot_n)
-            .map(|i| (get(sl, i * 8), get(sl, i * 8 + 4)))
-            .collect::<Vec<_>>();
+        let role = get(f, H_ROLE);
+        if role != ROLE_MODULE && role != ROLE_SERVICE && role != ROLE_PORT {
+            return Err(err!(
+                "role {role} is not supported (0 module, 1 service, 2 port)"
+            ));
+        }
         let opt = |v: u32| (v != NONE).then_some(v);
         Ok(Dkm {
             name,
             version: get(f, H_VERSION),
+            role,
+            svc_abi: get(f, H_SVC_ABI),
             runtime_min: get(f, H_RUNTIME) & !FLAG_TRACE,
             trace: get(f, H_RUNTIME) & FLAG_TRACE != 0,
             sha256: hex(&f[H_SHA..H_SHA + 32]),
@@ -745,18 +1214,8 @@ impl Dkm {
             imports,
             init: opt(get(f, H_INIT)),
             fini: opt(get(f, H_FINI)),
-            menu: if header == HEADER_MENU || header == HEADER_TICK {
-                opt(get(f, H_MENU))
-            } else {
-                None
-            },
-            tick: if header == HEADER_TICK {
-                opt(get(f, H_TICK))
-            } else {
-                None
-            },
-            entry: header == HEADER_TICK,
-            slots,
+            menu: opt(get(f, H_MENU)),
+            tick: opt(get(f, H_TICK)),
             register: rng(get(f, H_REG_OFF) as usize, get(f, H_REG_SIZE) as usize)?.to_vec(),
             dsp: rng(get(f, H_DSP_OFF) as usize, get(f, H_DSP_SIZE) as usize)?.to_vec(),
         })
@@ -811,7 +1270,8 @@ mod tests {
             addend,
         }
     }
-    /// text: `jsr imp.l; jsr f.l; rts` plus a data pointer to bss and to an import with an addend. Carries the build's ISA check record.
+    /// text: `jsr imp.l; jsr f.l; rts` plus a data pointer to bss and to an import with an addend, and the `dk_module` record (init, fini, tick, menu) at data offset 8
+    /// with `init` and `tick` set. Carries the build's ISA check record.
     fn object() -> Dko {
         let mut o = unstamped();
         o.stamp_isa();
@@ -826,7 +1286,7 @@ mod tests {
             toolchain: Default::default(),
             sections: vec![
                 sec(".text", "text", 2, &text),
-                sec(".data", "data", 4, &[0; 8]),
+                sec(".data", "data", 4, &[0; 24]),
                 DkoSection {
                     name: ".bss".into(),
                     kind: "bss".into(),
@@ -836,16 +1296,19 @@ mod tests {
                 },
             ],
             symbols: vec![
-                sym("dkm_init", Some(".text"), 12),
-                sym("dkm_slot_0", Some(".text"), 6),
+                sym("init_fn", Some(".text"), 12),
+                sym("tick_fn", Some(".text"), 6),
+                sym("dk_module", Some(".data"), 8),
                 sym("counter", Some(".bss"), 4),
                 sym("fw_thing", None, 0),
             ],
             relocs: vec![
                 rel(".text", 2, "cf.32", "fw_thing", 0),
-                rel(".text", 8, "cf.32", "dkm_slot_0", 0),
+                rel(".text", 8, "cf.32", "tick_fn", 0),
                 rel(".data", 0, "cf.32", "counter", 0),
                 rel(".data", 4, "cf.32", "fw_thing", 0x10),
+                rel(".data", 8, "cf.32", "init_fn", 0),
+                rel(".data", 16, "cf.32", "tick_fn", 0),
             ],
         }
     }
@@ -855,11 +1318,10 @@ mod tests {
         Options {
             name: "test/x".into(),
             version: 0x010203,
-            runtime_min: 1,
             trace: false,
             stereo: false,
             gate: false,
-            api_minor: 0,
+            service: None,
         }
     }
 
@@ -872,8 +1334,8 @@ mod tests {
         o.stamp_isa();
         let syms = image_symbols(&o).unwrap();
         let d = Dkm::parse(&pack(&o, &opts()).unwrap()).unwrap();
-        assert_eq!(syms["dkm_init"], d.init.unwrap());
-        assert_eq!(syms["dkm_slot_0"], d.slots[0].1);
+        assert_eq!(syms["init_fn"], d.init.unwrap());
+        assert_eq!(syms["tick_fn"], d.tick.unwrap());
         assert!(
             !syms.contains_key("local_fn"),
             "a static function has no symbol to call by"
@@ -892,7 +1354,7 @@ mod tests {
         assert_eq!(d.name, "test/x");
         assert_eq!(d.imports, vec!["fw_thing"]);
         assert_eq!(d.init, Some(12));
-        assert_eq!(d.slots, vec![(0, 6)]);
+        assert_eq!(d.tick, Some(6));
         assert_eq!(d.bss, 12);
         // the loader at any base equals the patch-time linker at that base with the import at its address
         for base in [0x47e0_0000u32, 0x47e1_2340] {
@@ -921,10 +1383,19 @@ mod tests {
         o.relocs.push(rel(".text", 2, "cf.pc32", "fw_thing", 0));
         o.stamp_isa();
         assert!(pack(&o, &opts()).unwrap_err().0.contains("PC-relative"));
+        for old in ["dkm_init", "dkm_fini", "dkm_menu", "dkm_slot_0"] {
+            let mut o = object();
+            o.symbols.push(sym(old, Some(".text"), 6));
+            o.stamp_isa();
+            assert!(
+                pack(&o, &opts()).unwrap_err().0.contains("are gone"),
+                "{old}"
+            );
+        }
         let mut o = object();
-        o.symbols.push(sym("dkm_slot_9", Some(".text"), 6));
+        o.symbols.retain(|s| s.name != "dk_module");
         o.stamp_isa();
-        assert!(pack(&o, &opts()).unwrap_err().0.contains("slot numbers"));
+        assert!(pack(&o, &opts()).unwrap_err().0.contains("no dk_module"));
         let mut o = Options {
             name: "bad name".into(),
             ..opts()
@@ -935,246 +1406,299 @@ mod tests {
     }
 
     #[test]
-    fn the_api_minor_is_the_lowest_that_has_what_the_module_needs() {
-        // (sdk minor, track table, newest listed entry) -> declared minor
-        assert_eq!(api_minor(6, false, 0), 4);
-        assert_eq!(api_minor(6, true, 0), 5);
-        assert_eq!(api_minor(6, false, 6), 6);
-        assert_eq!(api_minor(6, true, 6), 6);
-        assert_eq!(
-            api_minor(6, false, 3),
-            4,
-            "an old entry never lowers the floor"
-        );
-        assert_eq!(api_minor(6, false, 5), 5);
-        assert_eq!(
-            api_minor(5, false, 6),
-            5,
-            "never above the SDK this packer was built with"
-        );
-        // the entries of the Api: the table of sdk.toml says when each came
-        assert_eq!(crate::sdkgen::api_since("sample_pool_path").unwrap(), 6);
-        assert_eq!(crate::sdkgen::api_since("sample_pool_add").unwrap(), 5);
-        assert_eq!(crate::sdkgen::api_since("store_read").unwrap(), 0);
-        assert!(crate::sdkgen::api_since("no_such_entry").is_err());
+    fn the_abi_fingerprint_of_a_service_object_is_header_word_0x3c() {
+        let mut o = unstamped();
+        // the dk_module record fills data bytes 8 to 24; the fingerprint follows it
+        let mut data = [0u8; 28];
+        data[24..28].copy_from_slice(&0xabcd_0123u32.to_be_bytes());
+        o.sections[1] = sec(".data", "data", 4, &data);
+        o.symbols.push(sym("dk_svc_abi", Some(".data"), 24));
+        o.stamp_isa();
+        assert_eq!(get(&pack(&o, &opts()).unwrap(), H_SVC_ABI), 0xabcd_0123);
+        // an object without the symbol leaves the word zero
+        assert_eq!(get(&pack(&object(), &opts()).unwrap(), H_SVC_ABI), 0);
     }
 
-    #[test]
-    fn native_page_requires_machine_contract_1_4() {
-        use crate::register::{Machine, NativePage, Register};
-        let mut reg = Register {
-            device: 1,
-            ..Register::default()
-        };
-        reg.machines.push(Machine {
-            type_no: 16,
-            clone_of: 0,
-            position: 0,
-            own_dsp: 1,
-            level: 10,
-            knobs: [0; 8],
-            name: "Native".into(),
-            short: "NAT".into(),
-        });
-        let mut bindings = [[0; 3]; 8];
-        bindings[0] = [2, 0, 2];
-        reg.native_pages.push(NativePage {
-            version: 1,
-            page: 1,
-            flags: 0,
-            type_no: 16,
-            draw: 2,
-            event: 4,
-            title: "Native".into(),
-            bindings,
-        });
-        let file = pack_full(Some(&object()), &reg.encode(), &dsp_section(0, 1), &opts()).unwrap();
-        assert_eq!(&file[H_CONTRACT + 2..H_CONTRACT + 4], &[1, 4]);
-        needs(&file).expect("dkneeds accepts the native-page record");
-    }
-
-    #[test]
-    fn replacement_pages_require_machine_contract_1_5() {
-        use crate::register::{Machine, NativePage, Register};
-        let mut reg = Register {
-            device: 1,
-            ..Register::default()
-        };
-        reg.machines.push(Machine {
-            type_no: 16,
-            clone_of: 0,
-            position: 0,
-            own_dsp: 1,
-            level: 10,
-            knobs: [0; 8],
-            name: "Custom".into(),
-            short: "CST".into(),
-        });
-        let mut bindings = [[0; 3]; 8];
-        bindings[0] = [2, 0, 6];
-        for page in 0..2 {
-            reg.native_pages.push(NativePage {
-                version: 2,
-                page,
-                flags: 0,
-                type_no: 16,
-                draw: 2,
-                event: 4,
-                title: "Custom".into(),
-                bindings,
-            });
-        }
-        let file = pack_full(Some(&object()), &reg.encode(), &dsp_section(0, 1), &opts()).unwrap();
-        assert_eq!(&file[H_CONTRACT + 2..H_CONTRACT + 4], &[1, 5]);
-        needs(&file).expect("replacement-page requirements are readable");
-    }
-
-    #[test]
-    fn latched_voice_requires_machine_contract_1_3() {
-        let mut section = crate::dkmdsp::DspSection::parse(&dsp_section(0, 1)).unwrap();
-        section.voices[0].latched = 1;
-        section.voices[0].note_on = 2;
-        let dsp = section.encode();
-        let decoded = crate::dkmdsp::DspSection::parse(&dsp).unwrap();
-        assert_eq!(decoded.voices[0].latched, 1);
-        for stereo in [false, true] {
-            let options = Options { stereo, ..opts() };
-            let file = pack_full(Some(&object()), &[], &dsp, &options).unwrap();
-            assert_eq!(&file[H_CONTRACT + 2..H_CONTRACT + 4], &[1, 3]);
-        }
-    }
-
-    #[test]
-    fn the_header_carries_the_contract_versions() {
-        // 0x38..0x40: api, machine, fx, service as (major, minor)
-        let c = |f: &[u8]| f[H_CONTRACT..H_CONTRACT + 8].to_vec();
-        // ColdFire code with slots and init, no DSP section: api and service
-        let f = pack(&object(), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 0, 0, 0, 0, 1, 0]);
-        // with a DSP section: machine too (the section's bytes are not parsed by pack)
-        let f = pack_full(Some(&object()), &[], &[0u8; 16], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 1, 0]);
-        // a stereo machine: contract 1.2
-        let stereo = Options {
-            stereo: true,
-            ..opts()
-        };
-        let f = pack_full(Some(&object()), &[], &[0u8; 16], &stereo).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 1, 2, 0, 0, 1, 0]);
-        // a machine that reads the gate: contract 1.6, above every other machine minor
-        let gate = Options {
-            gate: true,
-            ..opts()
-        };
-        let f = pack_full(Some(&object()), &[], &[0u8; 16], &gate).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 1, 6, 0, 0, 1, 0]);
-        let both = Options {
-            gate: true,
-            stereo: true,
-            ..opts()
-        };
-        let f = pack_full(Some(&object()), &[], &[0u8; 16], &both).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 1, 6, 0, 0, 1, 0]);
-        // a DSP section with a track table: Api 1.5, and nothing else changes
-        let tracks = crate::dkmdsp::DspSection {
-            sample_bank: None,
-            sample_tracks: Some(crate::dkmdsp::SampleTracks {
-                local_id: 0,
-                records_byte_offset: 0,
-                control_byte_offset: 512,
+    /// The header table of `o` packed with `service` as the provided service of the file.
+    fn service_table(service: &str, o: &Dko) -> (Dkm, Vec<u8>) {
+        let opts = Options {
+            service: Some(Provided {
+                service: service.into(),
+                callback_order: None,
+                exports: vec![],
+                hooks: vec![],
+                patches: vec![],
+                fills: vec![],
+                dsp_fills: vec![],
             }),
-            device: 1,
-            image: vec![0; 768],
-            bss: 0,
-            align: 16,
-            imports: vec![],
-            relocs: vec![],
-            voices: vec![],
-            fxs: vec![],
-        };
-        let f = pack_full(Some(&object()), &[], &tracks.encode(), &stereo).unwrap();
-        assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 1, 0]);
-        needs(&f).expect("dkneeds accepts the kind 2 record the packer wrote");
-        // a manifest that lists an Api entry of 1.6 (`uses_api`): 1.6, with or without a table; a module of 1.4 stays 1.4 without it
-        let uses6 = Options {
-            api_minor: 6,
             ..opts()
         };
-        let f = pack(&object(), &uses6).unwrap();
-        assert_eq!(c(&f), vec![1, 6, 0, 0, 0, 0, 1, 0]);
-        let f = pack_full(
-            Some(&object()),
-            &[],
-            &tracks.encode(),
-            &Options {
-                api_minor: 6,
-                ..stereo
-            },
-        )
-        .unwrap();
-        assert_eq!(c(&f), vec![1, 6, 1, 2, 0, 0, 1, 0]);
-        // an entry of 1.3 does not lower what the table needs
-        let f = pack_full(
-            Some(&object()),
-            &[],
-            &tracks.encode(),
-            &Options {
-                api_minor: 3,
-                stereo: true,
-                ..opts()
-            },
-        )
-        .unwrap();
-        assert_eq!(c(&f), vec![1, 5, 1, 2, 0, 0, 1, 0]);
-        // a data-only module with a DSP section: machine, no service
-        let f = pack_full(None, &[], &[0u8; 16], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 0, 0]);
-        // a data-only module without DSP code: api only
-        let f = pack_with(None, &[], &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 0, 0, 0, 0, 0, 0]);
-        // register records that hold a machine: machine too (a data-only machine module); param and page records alone: not
-        let rec = record;
-        let table = |recs: &[Vec<u8>]| {
-            let mut t = vec![0u8; crate::register::HEADER];
-            t[0..4].copy_from_slice(&crate::register::MAGIC.to_be_bytes());
-            t[4..8].copy_from_slice(&crate::register::VERSION.to_be_bytes());
-            t[12..16].copy_from_slice(&(recs.len() as u32).to_be_bytes());
-            for r in recs {
-                t.extend(r);
-            }
-            t
-        };
-        let param = rec(crate::register::KIND_PARAM, crate::register::LEN_PARAM);
-        let machine = rec(crate::register::KIND_MACHINE, crate::register::LEN_MACHINE);
-        let f = pack_with(None, &table(&[param.clone(), machine]), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 1, 1, 0, 0, 0, 0]);
-        let f = pack_with(None, &table(&[param]), &opts()).unwrap();
-        assert_eq!(c(&f), vec![1, 4, 0, 0, 0, 0, 0, 0]);
+        let f = pack(o, &opts).unwrap();
+        (Dkm::parse(&f).unwrap(), f)
     }
 
-    /// One register record of a kind and length. One-letter names: the packer validates the register section.
-    fn record(kind: u32, len: usize) -> Vec<u8> {
-        use crate::register::{KIND_MACHINE, KIND_PAGE, KIND_PARAM};
-        let mut r = kind.to_be_bytes().to_vec();
-        r.extend((len as u32).to_be_bytes());
-        r.resize(len, 0);
-        // Offsets of the text fields in the whole record, the 8-byte prefix included.
-        let text: &[usize] = match kind {
-            KIND_PARAM => &[32, 64],
-            KIND_MACHINE => &[60, 84],
-            KIND_PAGE => &[48, 72],
-            _ => &[],
+    #[test]
+    fn a_service_file_records_init_as_the_handler_of_each_kind_its_service_owns() {
+        use dkneeds::keys::{Keys, KindDecl};
+        // `lfo` has no `rust` row: a `.dks` owns lfo_shape, and the `service!` glue declares it with the address of `init`
+        let (d, _) = service_table("lfo", &object());
+        let k = Keys::parse(&d.register).unwrap();
+        assert!(k.kinds().eq([KindDecl {
+            kind: dkneeds::KIND_LFO_SHAPE,
+            len: dkneeds::LEN_LFO_SHAPE,
+            entry: d.init.unwrap(),
+        }]));
+        assert_ne!(d.init, Some(0), "the object's init is no stub at offset 0");
+        // a service that owns no kind (svc-test) has an empty KINDS: its file is as before
+        let (d, _) = service_table("svc-test", &object());
+        assert_eq!(Keys::parse(&d.register).unwrap().kinds().count(), 0);
+        // a module that provides nothing has none either
+        let d = Dkm::parse(&pack(&object(), &opts()).unwrap()).unwrap();
+        assert_eq!(Keys::parse(&d.register).unwrap().kinds().count(), 0);
+    }
+
+    #[test]
+    fn a_service_file_that_fills_a_slot_has_a_slots_item_with_the_name_hash_and_the_entry_offset() {
+        use dkneeds::keys::Keys;
+        let o = object();
+        let opts = Options {
+            service: Some(Provided {
+                service: "svc-test".into(),
+                callback_order: None,
+                exports: vec![],
+                hooks: vec![],
+                patches: vec![],
+                fills: vec![("frametype".into(), "tick_fn".into(), vec![])],
+                dsp_fills: vec![],
+            }),
+            ..opts()
         };
-        for &o in text {
-            r[o] = b'x';
+        let d = Dkm::parse(&pack(&o, &opts).unwrap()).unwrap();
+        let k = Keys::parse(&d.register).unwrap();
+        let slots: Vec<_> = k.slots().collect();
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].id, dkneeds::keys::name_hash("frametype"));
+        assert_ne!(slots[0].entry, 0);
+        // a fill with a function the object does not define is refused, and one slot twice
+        let bad = Options {
+            service: Some(Provided {
+                service: "svc-test".into(),
+                callback_order: None,
+                exports: vec![],
+                hooks: vec![],
+                patches: vec![],
+                fills: vec![("frametype".into(), "no_such_function".into(), vec![])],
+                dsp_fills: vec![],
+            }),
+            ..self::opts()
+        };
+        assert!(pack(&o, &bad).is_err());
+    }
+
+    #[test]
+    fn a_fill_limited_to_a_device_stays_in_every_pack_with_the_device_mask_in_its_flags() {
+        use dkneeds::keys::{Keys, SLOT_DEVICES_MASK, SLOT_DEVICES_SHIFT};
+        let o = object();
+        let flags_for = |device: &str| {
+            let opts = Options {
+                service: Some(
+                    Provided {
+                        service: "svc-test".into(),
+                        callback_order: None,
+                        exports: vec![],
+                        hooks: vec![],
+                        patches: vec![],
+                        fills: vec![
+                            ("frametype".into(), "tick_fn".into(), vec!["dn2".into()]),
+                            ("other".into(), "tick_fn".into(), vec![]),
+                        ],
+                        dsp_fills: vec![],
+                    }
+                    .for_device(device),
+                ),
+                ..opts()
+            };
+            let bytes = pack(&o, &opts).unwrap();
+            let d = Dkm::parse(&bytes).unwrap();
+            let mut f: Vec<(u32, u32)> = Keys::parse(&d.register)
+                .unwrap()
+                .slots()
+                .map(|s| (s.id, (s.flags & SLOT_DEVICES_MASK) >> SLOT_DEVICES_SHIFT))
+                .collect();
+            f.sort();
+            (bytes, f)
+        };
+        let (a, fa) = flags_for("dt2");
+        let (b, fb) = flags_for("dn2");
+        assert_eq!(a, b, "one file for every device");
+        let mask_of = |name: &str| {
+            fa.iter()
+                .find(|x| x.0 == dkneeds::keys::name_hash(name))
+                .unwrap()
+                .1
+        };
+        assert_eq!((fa.len(), mask_of("other")), (2, 0));
+        assert_eq!(fa, fb);
+        assert_eq!(
+            mask_of("frametype"),
+            slot_device_flags(&["dn2".into()]).unwrap() >> SLOT_DEVICES_SHIFT
+        );
+    }
+
+    /// The table of a module whose KEYS name the record kinds `kinds` (one key each), packed as a `.dkm`.
+    fn needs_of_keys(kinds: &[u32]) -> Vec<dkneeds::keys::Need> {
+        use dkneeds::keys::{KeyGroup, Keys, Table, table_size, write_table};
+        let ks = [7u32];
+        let groups: Vec<KeyGroup> = kinds
+            .iter()
+            .map(|k| KeyGroup {
+                kind: *k,
+                keys: &ks,
+            })
+            .collect();
+        let t = Table {
+            keys: &groups,
+            ..Table::default()
+        };
+        let mut reg = vec![0u8; table_size(&t)];
+        write_table(&t, &mut reg).unwrap();
+        let f = pack_keys(Some(&object()), &reg, &[], &opts()).unwrap();
+        Keys::parse(&Dkm::parse(&f).unwrap().register)
+            .unwrap()
+            .needs()
+            .collect()
+    }
+
+    /// A packed file whose KEYS are `groups` (kind, keys).
+    fn file_with_keys(groups: &[(u32, &[u32])]) -> Vec<u8> {
+        use dkneeds::keys::{KeyGroup, Table, table_size, write_table};
+        let g: Vec<KeyGroup> = groups
+            .iter()
+            .map(|(kind, keys)| KeyGroup { kind: *kind, keys })
+            .collect();
+        let t = Table {
+            keys: &g,
+            ..Table::default()
+        };
+        let mut reg = vec![0u8; table_size(&t)];
+        write_table(&t, &mut reg).unwrap();
+        pack_keys(Some(&object()), &reg, &[], &opts()).unwrap()
+    }
+
+    #[test]
+    fn the_key_check_names_a_repeated_a_shared_and_a_dropped_key() {
+        use serde_json::json;
+        let m = dkneeds::KIND_MACHINE;
+        let old = file_with_keys(&[(m, &[1, 2, 3])]);
+        let same = keys_check_json(&old, &[]).unwrap();
+        assert_eq!(
+            same,
+            json!({"repeat": null, "shared": null, "missing": null})
+        );
+        // a file that provides a key twice, in one group
+        let twice = file_with_keys(&[(m, &[1, 2, 2])]);
+        assert_eq!(
+            keys_check_json(&twice, &[]).unwrap()["repeat"],
+            json!({"kind": m, "key": 2})
+        );
+        // another module that has a key of the file: the first of the new file's keys the other has
+        let other = file_with_keys(&[(m, &[9, 3, 8])]);
+        let r = keys_check_json(&old, &other).unwrap();
+        assert_eq!(r["shared"], json!({"kind": m, "key": 3}));
+        // the old version has a key the new file lacks: the first such key of the old file
+        let new = file_with_keys(&[(m, &[1, 3, 4])]);
+        let r = keys_check_json(&new, &old).unwrap();
+        assert_eq!(r["missing"], json!({"kind": m, "key": 2}));
+        assert_eq!(
+            keys_check_json(&old, &new).unwrap()["missing"],
+            json!({"kind": m, "key": 4})
+        );
+        // the same key of another kind is another key
+        let fx = file_with_keys(&[(dkneeds::KIND_EFFECT, &[3])]);
+        assert_eq!(keys_check_json(&old, &fx).unwrap()["shared"], json!(null));
+        // not a .dkm
+        assert!(keys_check_json(b"nope", &[]).is_err());
+    }
+
+    #[test]
+    fn a_record_kind_of_a_service_file_is_a_hard_need_and_a_kind_of_an_in_crate_service_is_none() {
+        // lfo_shape: its service (lfo) is provided by a .dks, so the module needs it
+        let needs = needs_of_keys(&[dkneeds::KIND_LFO_SHAPE]);
+        let lfo = dkneeds::keys::name_hash("lfo");
+        let own: Vec<_> = needs.iter().filter(|n| n.service == lfo).collect();
+        assert_eq!(own.len(), 1);
+        assert!(own[0].hard);
+        // effects are owned by a service in the image (no need for them); machines and pages by the machines service file (a hard need on it)
+        let mach = dkneeds::keys::name_hash("machines");
+        assert!(
+            needs_of_keys(&[dkneeds::KIND_EFFECT])
+                .iter()
+                .all(|n| n.service != lfo && n.service != mach),
+        );
+        let m = needs_of_keys(&[dkneeds::KIND_MACHINE, dkneeds::KIND_PAGE]);
+        assert!(m.iter().all(|n| n.service != lfo));
+        assert_eq!(m.iter().filter(|n| n.service == mach && n.hard).count(), 1);
+        // the same kind twice is one need
+        let twice = needs_of_keys(&[dkneeds::KIND_LFO_SHAPE, dkneeds::KIND_LFO_SHAPE]);
+        assert_eq!(twice.iter().filter(|n| n.service == lfo).count(), 1);
+        // no KEYS, no record kind
+        let f = pack(&object(), &opts()).unwrap();
+        assert!(
+            dkneeds::keys::Keys::parse(&Dkm::parse(&f).unwrap().register)
+                .unwrap()
+                .needs()
+                .all(|n| n.service != lfo)
+        );
+    }
+
+    #[test]
+    fn the_header_has_the_needed_runtime_and_no_contract_pairs() {
+        // 0x38..0x40 are reserved zero; 0x30 is the newest `since` of the imports (0: none) with the trace flag
+        let f = pack(&object(), &opts()).unwrap();
+        assert_eq!(&f[H_ROLE..H_ROLE + 4], &[0u8; 4]);
+        assert_eq!(&f[H_SVC_ABI..H_SVC_ABI + 4], &[0u8; 4]);
+        // no import is linked: the file needs the version that introduced the header table
+        assert_eq!(get(&f, H_RUNTIME), crate::sdkgen::table_runtime());
+        let f = pack_keys(Some(&object()), &[], &[0u8; 16], &opts()).unwrap();
+        assert_eq!(&f[H_ROLE..H_ROLE + 8], &[0u8; 8]);
+        let traced = Options {
+            trace: true,
+            ..opts()
+        };
+        let f = pack(&object(), &traced).unwrap();
+        assert_eq!(
+            get(&f, H_RUNTIME),
+            FLAG_TRACE | crate::sdkgen::table_runtime()
+        );
+        assert_eq!(
+            Dkm::parse(&f).unwrap().runtime_min,
+            crate::sdkgen::table_runtime()
+        );
+        assert!(Dkm::parse(&f).unwrap().trace);
+        // the header table is validated; any other bytes are refused
+        assert!(pack_keys(None, &[1, 2, 3], &[], &opts()).is_err());
+        // the needs of the linked imports are written: the service and the newest version among its imports
+        let mut o = unstamped();
+        for s in o.symbols.iter_mut().filter(|s| s.name == "fw_thing") {
+            s.name = "dk_settings_open".into();
         }
-        r
+        for r in o.relocs.iter_mut().filter(|r| r.symbol == "fw_thing") {
+            r.symbol = "dk_settings_open".into();
+        }
+        o.stamp_isa();
+        let f = pack(&o, &opts()).unwrap();
+        let d = Dkm::parse(&f).unwrap();
+        let k = dkneeds::keys::Keys::parse(&d.register).unwrap();
+        let n: Vec<_> = k.needs().collect();
+        assert_eq!(n.len(), 1);
+        assert_eq!(n[0].service, dkneeds::keys::name_hash("runtime"));
+        assert_eq!(n[0].min_version, 0x000700);
+        assert!(n[0].hard);
     }
 
     /// A DSP section of an 8-byte image with BSS bytes of bss and one version 3 voice with `voices` states of 20 bytes (0: version 2).
     fn dsp_section(bss: u32, voices: u32) -> Vec<u8> {
         crate::dkmdsp::DspSection {
-            sample_bank: None,
             sample_tracks: None,
             device: 1,
             image: vec![0; 8],
@@ -1218,7 +1742,7 @@ mod tests {
             n
         );
         // a DSP section: image 8, bss 100, three states of 20 (rounded to 24): 8 + 100 -> 112, + 72 = 184, granule 192; the relocated image is a block of 8
-        let f = pack_full(Some(&object()), &[], &dsp_section(100, 3), &opts()).unwrap();
+        let f = pack_keys(Some(&object()), &[], &dsp_section(100, 3), &opts()).unwrap();
         let n = needs(&f).unwrap();
         assert_eq!(
             (n.dsp_area, n.dsp_align, n.voice_rows, n.arena_xfer),
@@ -1228,23 +1752,12 @@ mod tests {
         let s = crate::dkmdsp::DspSection::parse(&Dkm::parse(&f).unwrap().dsp).unwrap();
         assert_eq!(s.range_len(), n.dsp_area);
         // without state (version 2) the voice adds nothing: 8 + 100 = 108 -> 112 -> granule 128
-        let f = pack_full(Some(&object()), &[], &dsp_section(100, 0), &opts()).unwrap();
+        let f = pack_keys(Some(&object()), &[], &dsp_section(100, 0), &opts()).unwrap();
         assert_eq!(needs(&f).unwrap().dsp_area, 128);
-        // register records: the counts of each kind
-        let rec = record;
-        let mut t = vec![0u8; crate::register::HEADER];
-        t[0..4].copy_from_slice(&0x444b_5247u32.to_be_bytes());
-        t[4..8].copy_from_slice(&1u32.to_be_bytes());
-        t[12..16].copy_from_slice(&4u32.to_be_bytes());
-        for r in [
-            rec(crate::register::KIND_PARAM, crate::register::LEN_PARAM),
-            rec(crate::register::KIND_PARAM, crate::register::LEN_PARAM),
-            rec(crate::register::KIND_MACHINE, crate::register::LEN_MACHINE),
-            rec(crate::register::KIND_PAGE, crate::register::LEN_PAGE),
-        ] {
-            t.extend(r);
-        }
-        let f = pack_with(None, &t, &opts()).unwrap();
+        // a keys table: the row counts the packer wrote
+        let mut keys = vec![0u8; dkneeds::keys::keys_size((1, 2, 1), 0, 1, 0)];
+        dkneeds::keys::write_keys((1, 2, 1), 0, &[0x123400], &[], &mut keys).unwrap();
+        let f = pack_keys(None, &keys, &[], &opts()).unwrap();
         let n = needs(&f).unwrap();
         assert_eq!(
             (n.param_rows, n.machine_rows, n.page_rows, n.fx_slots),
@@ -1257,48 +1770,6 @@ mod tests {
         let j = needs_json(&f).unwrap();
         assert_eq!(j["PARAM_ROWS"], 2);
         assert_eq!(j["file_size"], f.len());
-    }
-
-    #[test]
-    fn dkneeds_reads_the_formats_the_packer_writes() {
-        // dkneeds has its own copies of the constants of the files it reads (it has no dependency): they are the packer's
-        assert_eq!(dkneeds::MAGIC, MAGIC);
-        assert_eq!(dkneeds::FORMAT, super::FORMAT);
-        assert_eq!(dkneeds::HEADER as usize, HEADER);
-        assert_eq!(dkneeds::SLOTS, crate::dkm::SLOTS);
-        for (a, b) in [
-            (dkneeds::H_SIZE, H_SIZE),
-            (dkneeds::H_HDRSIZE, H_HDRSIZE),
-            (dkneeds::H_IMAGE_OFF, H_IMAGE_OFF),
-            (dkneeds::H_IMAGE_SIZE, H_IMAGE_SIZE),
-            (dkneeds::H_BSS, H_BSS),
-            (dkneeds::H_ALIGN, H_ALIGN),
-            (dkneeds::H_RELOC_OFF, H_RELOC_OFF),
-            (dkneeds::H_RELOC_N, H_RELOC_N),
-            (dkneeds::H_IMPORT_OFF, H_IMPORT_OFF),
-            (dkneeds::H_IMPORT_N, H_IMPORT_N),
-            (dkneeds::H_SLOT_OFF, H_SLOT_OFF),
-            (dkneeds::H_SLOT_N, H_SLOT_N),
-            (dkneeds::H_REG_OFF, H_REG_OFF),
-            (dkneeds::H_REG_SIZE, H_REG_SIZE),
-            (dkneeds::H_DSP_OFF, H_DSP_OFF),
-            (dkneeds::H_DSP_SIZE, H_DSP_SIZE),
-        ] {
-            assert_eq!(a as usize, b);
-        }
-        use crate::register as r;
-        assert_eq!(dkneeds::REG_HEADER as usize, r::HEADER);
-        assert_eq!(dkneeds::KIND_PARAM, r::KIND_PARAM);
-        assert_eq!(dkneeds::KIND_MACHINE, r::KIND_MACHINE);
-        assert_eq!(dkneeds::KIND_PAGE, r::KIND_PAGE);
-        assert_eq!(dkneeds::LEN_PARAM as usize, r::LEN_PARAM);
-        assert_eq!(dkneeds::LEN_MACHINE as usize, r::LEN_MACHINE);
-        assert_eq!(dkneeds::LEN_PAGE as usize, r::LEN_PAGE);
-        assert_eq!(dkneeds::KIND_EFFECT, r::KIND_EFFECT);
-        assert_eq!(dkneeds::LEN_EFFECT as usize, r::LEN_EFFECT);
-        use crate::dkmdsp as d;
-        assert_eq!(dkneeds::DSP_MAGIC, d::MAGIC);
-        assert_eq!(dkneeds::DSP_HEADER as usize, d::HEADER);
     }
 
     #[test]
@@ -1369,17 +1840,12 @@ mod tests {
         let o = entry_object(&[0, 8, 12]);
         let syms = image_symbols(&o).unwrap();
         let f = pack(&o, &opts()).unwrap();
-        assert_eq!(get(&f, H_HDRSIZE) as usize, HEADER_TICK);
+        assert_eq!(get(&f, H_HDRSIZE) as usize, HEADER);
         let d = Dkm::parse(&f).unwrap();
-        assert!(d.entry);
         assert_eq!(d.init, Some(syms["init_fn"]));
         assert_eq!(d.fini, None);
         assert_eq!(d.tick, Some(syms["tick_fn"]));
         assert_eq!(d.menu, Some(syms["menu_fn"]));
-        assert!(d.slots.is_empty());
-        // a module of the old entry keeps its header, with no tick
-        let old = Dkm::parse(&pack(&object(), &opts()).unwrap()).unwrap();
-        assert!(!old.entry && old.tick.is_none());
         // no menu: the field is NONE
         let f = pack(&entry_object(&[0, 4, 8]), &opts()).unwrap();
         assert_eq!(get(&f, H_MENU), NONE);
@@ -1391,11 +1857,7 @@ mod tests {
         let mut o = entry_object(&[0, 8]);
         o.symbols.push(sym("dkm_init", Some(".text"), 0));
         o.stamp_isa();
-        assert!(pack(&o, &opts()).unwrap_err().0.contains("one entry point"));
-        let mut o = entry_object(&[0, 8]);
-        o.symbols.push(sym("dkm_slot_0", Some(".text"), 0));
-        o.stamp_isa();
-        assert!(pack(&o, &opts()).unwrap_err().0.contains("one entry point"));
+        assert!(pack(&o, &opts()).unwrap_err().0.contains("are gone"));
         // a field that is an import
         let mut o = entry_object(&[0, 8]);
         o.relocs[0].symbol = "fw_thing".into();
@@ -1424,42 +1886,31 @@ mod tests {
     }
 
     #[test]
-    fn a_module_with_the_entry_point_needs_the_newest_since_of_its_imports() {
-        let minor = |f: &[u8]| f[H_CONTRACT + 1];
-        let sdk_minor = crate::sdkgen::embedded().api.1;
-        assert_eq!(
-            sdk_minor, API_ENTRY_MINOR,
-            "the entry point is the newest api minor"
-        );
-        // the imports of the old time and no import: the entry point alone is 1.11
-        assert_eq!(entry_api_minor(["memcpy", "fw_alloc"]), API_ENTRY_MINOR);
-        assert_eq!(entry_api_minor([]), API_ENTRY_MINOR);
-        // a service import: its own `since`
+    fn a_module_needs_the_newest_since_of_its_imports() {
+        let runtime = runtime_version();
+        // the compiler helpers and no import need no version
+        assert_eq!(needed_runtime(["memcpy", "__muldi3"]), 0);
+        assert_eq!(needed_runtime([]), 0);
+        // a service import: its own `since`, never above the runtime's
         let table = crate::sdkgen::import_infos();
-        assert_eq!(table["dk_settings_open"].since, 11);
-        assert_eq!(
-            entry_api_minor(["dk_settings_open", "memcpy"]),
-            table["dk_settings_open"].since.max(API_ENTRY_MINOR)
-        );
-        // a packed module declares it; a module of the old entry with an import of the new table is not changed by it
+        assert_eq!(table["dk_settings_open"].since, 0x000700);
+        assert_eq!(needed_runtime(["dk_settings_open", "memcpy"]), 0x000700);
+        assert!(table.values().all(|i| i.since <= runtime));
+        // a packed module declares it
         let mut o = entry_object(&[0, 8]);
         o.symbols.push(sym("dk_settings_open", None, 0));
         o.relocs
             .push(rel(".text", 0, "cf.32", "dk_settings_open", 0));
         o.stamp_isa();
         let f = pack(&o, &opts()).unwrap();
-        assert_eq!(minor(&f), API_ENTRY_MINOR);
+        // the newest `since` of its imports, and at least the version that introduced the header table
+        assert_eq!(get(&f, H_RUNTIME), crate::sdkgen::table_runtime());
         assert_eq!(Dkm::parse(&f).unwrap().imports, vec!["dk_settings_open"]);
-        let old = pack(&object(), &opts()).unwrap();
+        // a module that links nothing of the SDK needs the header table's version
         assert_eq!(
-            minor(&old),
-            API_PRE_TRACKS_MINOR,
-            "an old module stays at 1.4"
+            get(&pack(&object(), &opts()).unwrap(), H_RUNTIME),
+            crate::sdkgen::table_runtime()
         );
-        // `uses_api` still lifts a module of the old entry, and never above the SDK
-        let mut with = opts();
-        with.api_minor = 6;
-        assert_eq!(minor(&pack(&object(), &with).unwrap()), 6);
     }
 
     #[test]
@@ -1469,12 +1920,346 @@ mod tests {
             "dk_usb_bulk_open",
             "dk_usb_bulk_state",
             "memcpy",
-            "fw_alloc",
-            "usb_bulk_enable",
+            "dk_fw_alloc",
+            "__muldi3",
         ]);
-        assert_eq!(s["runtime"], vec!["dk_settings_open"]);
+        assert_eq!(s["runtime"], vec!["dk_settings_open", "dk_fw_alloc"]);
         assert_eq!(s["usb_bulk"], vec!["dk_usb_bulk_open", "dk_usb_bulk_state"]);
-        assert_eq!(s.len(), 2, "an import of the old time names no service");
+        assert_eq!(s.len(), 2, "a compiler helper names no service");
         assert!(services_of(["memcpy"]).is_empty());
+    }
+    #[test]
+    fn a_version_is_three_numbers_up_to_255() {
+        assert_eq!(parse_version("1.2.3").unwrap(), 0x010203);
+        assert_eq!(parse_version("0.8.0").unwrap(), 0x000800);
+        assert_eq!(parse_version("255.255.255").unwrap(), 0xffffff);
+        for (bad, why) in [
+            ("1.2", "expected major.minor.patch"),
+            ("1.2.3.4", "expected major.minor.patch"),
+            ("", "expected major.minor.patch"),
+            ("1.2.x", "bad number"),
+            ("1..3", "bad number"),
+            ("-1.0.0", "bad number"),
+            ("1.2.256", "over 255"),
+        ] {
+            let e = parse_version(bad).unwrap_err().0;
+            assert!(e.contains(why), "{bad:?}: {e}");
+        }
+    }
+
+    fn pack_error(o: &Dko) -> String {
+        pack(o, &opts()).unwrap_err().0
+    }
+
+    /// `object()` with the import `fw_thing` renamed to `name`.
+    fn object_importing(name: &str) -> Dko {
+        let mut o = unstamped();
+        for s in o.symbols.iter_mut().filter(|s| s.name == "fw_thing") {
+            s.name = name.into();
+        }
+        for r in o.relocs.iter_mut().filter(|r| r.symbol == "fw_thing") {
+            r.symbol = name.into();
+        }
+        o.stamp_isa();
+        o
+    }
+
+    #[test]
+    fn an_object_that_cannot_be_packed_is_refused_with_the_reason() {
+        // not ColdFire code
+        let mut o = unstamped();
+        o.arch = "sharc".into();
+        o.stamp_isa();
+        assert!(pack_error(&o).contains("ColdFire"));
+        // an import name over the 31 characters of an import slot, and one of exactly 31
+        assert!(pack_error(&object_importing(&"x".repeat(IMPORT_LEN))).contains("is longer than"));
+        assert!(pack(&object_importing(&"x".repeat(IMPORT_LEN - 1)), &opts()).is_ok());
+        // a relocation in a bss section
+        let mut o = object();
+        o.relocs.push(rel(".bss", 0, "cf.32", "counter", 0));
+        o.stamp_isa();
+        let e = pack_error(&o);
+        assert!(e.contains("bss"), "{e}");
+        // a relocation whose word is not in the image
+        let mut o = object();
+        o.relocs.push(rel(".data", 22, "cf.32", "counter", 0));
+        o.stamp_isa();
+        assert!(!pack_error(&o).is_empty());
+        // a symbol the packer reads that lies outside the image (in bss), and one that is not a whole word of it
+        let mut o = object();
+        o.symbols.push(sym("dk_svc_abi", Some(".bss"), 0));
+        o.stamp_isa();
+        assert!(pack_error(&o).contains("outside the loaded image"));
+        let mut o = object();
+        o.symbols.push(sym("dk_svc_abi", Some(".data"), 22));
+        o.stamp_isa();
+        assert!(pack_error(&o).contains("not a whole word"));
+    }
+
+    fn service_of(p: Provided) -> Options {
+        Options {
+            service: Some(p),
+            ..opts()
+        }
+    }
+
+    fn provided() -> Provided {
+        Provided {
+            service: "svc-test".into(),
+            callback_order: None,
+            exports: vec![],
+            hooks: vec![],
+            patches: vec![],
+            fills: vec![],
+            dsp_fills: vec![],
+        }
+    }
+
+    #[test]
+    fn service_registration_rejects_a_table_the_boot_planner_cannot_capture() {
+        use dkneeds::keys::{Table, Use, table_size, write_table};
+        let table = Table {
+            uses: &[Use {
+                resource: 1,
+                count: 1,
+            }; 80],
+            ..Table::default()
+        };
+        let mut reg = vec![0; table_size(&table)];
+        write_table(&table, &mut reg).unwrap();
+        let opts = service_of(Provided {
+            callback_order: Some(100),
+            ..provided()
+        });
+        let error = pack_keys(Some(&object()), &reg, &[], &opts).unwrap_err();
+        assert!(error.0.contains("boot planner's 640-byte limit"), "{error}");
+    }
+
+    #[test]
+    fn a_device_without_a_runtime_id_is_refused_under_the_name_of_the_item() {
+        let mut none = crate::devdata::all()[0].clone();
+        none.short = "noid".into();
+        none.digikit_id = None;
+        let all = [none];
+        let devices = ["noid".to_string()];
+        let hook = runtime_id_mask(&all, &devices, "hook")
+            .unwrap_err()
+            .to_string();
+        assert!(hook.contains("hook device \"noid\""), "{hook}");
+        let slot = runtime_id_mask(&all, &devices, "slot")
+            .unwrap_err()
+            .to_string();
+        assert!(slot.contains("slot device \"noid\""), "{slot}");
+    }
+
+    #[test]
+    fn one_hook_name_for_disjoint_devices_packs_one_entry_for_each_under_the_runtime_id_mask() {
+        let o = object();
+        let dev =
+            |entry: &str, d: &str| ("hook.a".to_string(), entry.to_string(), vec![d.to_string()]);
+        let ids: Vec<(String, u32)> = crate::devdata::all()
+            .iter()
+            .filter_map(|d| d.digikit_id.map(|id| (d.short.clone(), id)))
+            .take(2)
+            .collect();
+        assert_eq!(ids.len(), 2, "two runtime devices");
+        let p = Provided {
+            hooks: vec![dev("tick_fn", &ids[0].0), dev("init_fn", &ids[1].0)],
+            ..provided()
+        };
+        let packed = pack(&o, &service_of(p)).unwrap();
+        let register = crate::dkm::Dkm::parse(&packed).unwrap().register;
+        let keys = dkneeds::keys::Keys::parse(&register).unwrap();
+        let hooks: Vec<_> = keys.hooks().collect();
+        assert_eq!(hooks.len(), 2, "one item for each device");
+        let mut masks: Vec<u32> = hooks.iter().map(|h| h.b >> 24).collect();
+        masks.sort();
+        let mut want: Vec<u32> = ids.iter().map(|(_, id)| 1 << (id - 1)).collect();
+        want.sort();
+        assert_eq!(masks, want);
+        assert!(
+            hooks
+                .iter()
+                .all(|h| h.a == dkneeds::keys::name_hash("hook.a"))
+        );
+    }
+
+    /// A patch is a `HOOKS` item with the patch entry and the device mask in the top byte: the values are the service's, given in `init`, so the file holds none.
+    #[test]
+    fn a_service_patch_is_a_hooks_item_with_the_patch_entry_and_a_device_mask() {
+        let o = object();
+        let ids: Vec<(String, u32)> = crate::devdata::all()
+            .iter()
+            .filter_map(|d| d.digikit_id.map(|id| (d.short.clone(), id)))
+            .take(2)
+            .collect();
+        assert_eq!(ids.len(), 2, "two runtime devices");
+        let p = Provided {
+            hooks: vec![("hook.a".into(), "tick_fn".into(), vec![])],
+            patches: vec![
+                ("patch.a".into(), vec![]),
+                ("patch.b".into(), vec![ids[1].0.clone()]),
+            ],
+            ..provided()
+        };
+        let packed = pack(&o, &service_of(p)).unwrap();
+        let register = crate::dkm::Dkm::parse(&packed).unwrap().register;
+        let keys = dkneeds::keys::Keys::parse(&register).unwrap();
+        let find = |n: &str| {
+            keys.hooks()
+                .find(|h| h.a == dkneeds::keys::name_hash(n))
+                .unwrap()
+        };
+        assert!(
+            !dkneeds::keys::hook_is_patch(find("hook.a").b),
+            "the hook keeps its entry"
+        );
+        assert_eq!(
+            find("patch.a").b,
+            dkneeds::keys::HOOK_ENTRY_PATCH,
+            "no device: every device"
+        );
+        assert_eq!(
+            find("patch.b").b,
+            dkneeds::keys::HOOK_ENTRY_PATCH | (1 << (ids[1].1 - 1)) << 24
+        );
+        // one name is a hook or a patch for a device, not both, and not two patches
+        let e = |p: Provided| pack(&o, &service_of(p)).unwrap_err().0;
+        let both = Provided {
+            hooks: vec![("hook.a".into(), "tick_fn".into(), vec![])],
+            patches: vec![("hook.a".into(), vec![])],
+            ..provided()
+        };
+        assert!(e(both).contains("takes hook.a twice"));
+        let twice = Provided {
+            patches: vec![("patch.a".into(), vec![]), ("patch.a".into(), vec![])],
+            ..provided()
+        };
+        assert!(e(twice).contains("takes patch.a twice"));
+        let unknown = Provided {
+            patches: vec![("patch.a".into(), vec!["zz9".into()])],
+            ..provided()
+        };
+        assert!(e(unknown).contains("zz9"));
+    }
+
+    #[test]
+    fn a_service_that_names_an_entry_twice_or_one_the_object_lacks_is_refused() {
+        let o = object();
+        let hook =
+            |name: &str, entry: &str| (name.to_string(), entry.to_string(), Vec::<String>::new());
+        let e = |p: Provided| pack(&o, &service_of(p)).unwrap_err().0;
+        // the same name twice
+        let twice = Provided {
+            exports: vec!["tick_fn".into(), "tick_fn".into()],
+            ..provided()
+        };
+        assert!(e(twice).contains("exports tick_fn twice"));
+        let twice = Provided {
+            hooks: vec![hook("hook.a", "tick_fn"), hook("hook.a", "init_fn")],
+            ..provided()
+        };
+        assert!(e(twice).contains("hooks hook.a twice"));
+        // one name for the same device twice, or for every device and one: refused
+        let shorts: Vec<String> = crate::devdata::all()
+            .iter()
+            .filter(|d| d.digikit_id.is_some())
+            .map(|d| d.short.clone())
+            .collect();
+        assert!(shorts.len() >= 2, "two runtime devices");
+        let dev = |name: &str, entry: &str, d: &str| {
+            (name.to_string(), entry.to_string(), vec![d.to_string()])
+        };
+        let overlap = Provided {
+            hooks: vec![
+                dev("hook.a", "tick_fn", &shorts[0]),
+                dev("hook.a", "init_fn", &shorts[0]),
+            ],
+            ..provided()
+        };
+        assert!(e(overlap).contains("hooks hook.a twice"));
+        let overlap = Provided {
+            hooks: vec![
+                hook("hook.a", "tick_fn"),
+                dev("hook.a", "init_fn", &shorts[1]),
+            ],
+            ..provided()
+        };
+        assert!(e(overlap).contains("hooks hook.a twice"));
+        let twice = Provided {
+            fills: vec![hook("slot", "tick_fn"), hook("slot", "init_fn")],
+            ..provided()
+        };
+        assert!(e(twice).contains("fills slot twice"));
+        // an entry the object does not define, for each list
+        assert!(
+            e(Provided {
+                exports: vec!["nope".into()],
+                ..provided()
+            })
+            .contains("exports nope, which the object does not define")
+        );
+        assert!(
+            e(Provided {
+                hooks: vec![hook("hook.a", "nope")],
+                ..provided()
+            })
+            .contains("no global symbol")
+        );
+        assert!(
+            e(Provided {
+                fills: vec![hook("slot", "nope")],
+                ..provided()
+            })
+            .contains("fills slot with nope")
+        );
+        // a hook for a device that does not exist
+        let bad_device = Provided {
+            hooks: vec![("hook.a".into(), "tick_fn".into(), vec!["zz9".into()])],
+            ..provided()
+        };
+        let bad = e(bad_device);
+        assert!(
+            bad.contains("hook device") && !bad.contains("slot"),
+            "{bad}"
+        );
+        // the same functions once each pack
+        let ok = Provided {
+            exports: vec!["tick_fn".into()],
+            hooks: vec![hook("hook.a", "init_fn")],
+            ..provided()
+        };
+        assert!(pack(&o, &service_of(ok)).is_ok());
+    }
+
+    /// `f` with the sha256 written for its bytes: a damaged field that `parse` must find by itself.
+    fn resealed(mut f: Vec<u8>) -> Vec<u8> {
+        let sha = file_sha(&f);
+        f[H_SHA..H_SHA + 32].copy_from_slice(&sha);
+        f
+    }
+
+    #[test]
+    fn a_file_with_a_damaged_field_is_refused_by_parse_with_the_field_named() {
+        let f = pack(&object(), &opts()).unwrap();
+        let with = |edit: &dyn Fn(&mut Vec<u8>)| {
+            let mut g = f.clone();
+            edit(&mut g);
+            Dkm::parse(&resealed(g)).unwrap_err().0
+        };
+        assert!(with(&|g| put(g, 4, 2)).contains("format 2 is not supported"));
+        assert!(with(&|g| g[H_NAME] = b' ').contains("bad module name"));
+        assert!(with(&|g| put(g, H_ROLE, 3)).contains("role 3 is not supported"));
+        // the first relocation: past the image, an unknown kind, an import that is not in the import table
+        let at = get(&f, H_RELOC_OFF) as usize;
+        assert!(with(&|g| put(g, at + CF_RELOC_OFFSET, 0x1000)).contains("outside the image"));
+        assert!(with(&|g| put(g, at + CF_RELOC_KIND, 2 << 24)).contains("bad relocation kind"));
+        assert!(with(&|g| put(g, at + CF_RELOC_KIND, 1 << 24 | 9)).contains("bad relocation kind"));
+        // a table that starts after the end of the file, and a size field that is not the file's
+        let end = f.len() as u32;
+        assert!(with(&|g| put(g, H_REG_OFF, end + 8)).contains("outside the file"));
+        let mut short = f.clone();
+        short.truncate(f.len() - 4);
+        assert!(Dkm::parse(&short).unwrap_err().0.contains("size fields"));
     }
 }

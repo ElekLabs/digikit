@@ -2,8 +2,8 @@
 
 There is one implementation, in Rust (`packages/dkneeds`): the DIGIKIT menu runs it on the card's files, patchkit and its wasm run it on the host.
 This module asks the patchkit command line (`patchkit needs --json FILE...`); it computes nothing itself. The fields are `file_size` and the names
-of CAPACITY's kinds (`ARENA`, `ARENA_XFER`, `DSP_AREA`, `DSP_ALIGN`, `MACHINE_ROWS`, `VOICE_ROWS`, `PARAM_ROWS`, `PAGE_ROWS`, `FX_SLOTS`), the
-input of the fit rule. The fit rule is in Rust too (`modules/core/runtime/fit`, the code the DIGIKIT menu runs): `fit` asks `patchkit fit --json -`.
+of CAPACITY's kinds (`ARENA`, `ARENA_XFER`, `DSP_AREA`, `DSP_ALIGN`, `MACHINE_ROWS`, `VOICE_ROWS`, `PARAM_ROWS`, `PAGE_ROWS`, `FX_SLOTS`, and the module's own `DSP_COST_VOICE` and `DSP_COST_FX`), the
+input of the fit rule. The fit rule is in Rust too (`runtime/core/fit`, the code the DIGIKIT menu runs): `fit` asks `patchkit fit --json -`.
 
     needs = dkneeds.needs_of(data)          # raises NeedsError: the loader would refuse the file
     many = dkneeds.needs_many([a, b, c])    # one process for all: each a dict, or None for a file with no needs
@@ -69,7 +69,7 @@ def needs_of(data: bytes) -> Needs:
 
 
 def fit(caps: Caps, needs: list[Needs], empty: bool = False) -> dict[str, Any]:
-    """The fit rule (`patchkit fit --json -`, modules/core/runtime/fit) for NEEDS against CAPS (kind name -> {limit, used, largest}, as
+    """The fit rule (`patchkit fit --json -`, runtime/core/fit) for NEEDS against CAPS (kind name -> {limit, used, largest}, as
     `Uploader.capacity()` returns it). EMPTY first makes CAPS the capacity of a runtime that has loaded nothing (the next boot).
 
     Returns `{"each": [...], "set": ..., "line": ...}`: `each` is per need, None or the short resource when that need alone does not fit; `set` is

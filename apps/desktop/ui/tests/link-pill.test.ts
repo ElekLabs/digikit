@@ -1,8 +1,9 @@
-// The link pill of the Target row and the progress suffix (apps/web/src/transfer/link-core.ts), and the bar message that carries the suffix.
+// The link pill of the Target row and the progress suffix (packages/workbench-core/src/transfer/link-core.ts), and the bar message that carries the suffix.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { linkTag, viaSuffix } from '../../../web/src/transfer/link-core.ts';
-import { applyUpload, samplesBar, type Uploads } from '../src/samples-core.ts';
+import { linkHint, linkTag, viaSuffix } from '@digi/workbench-core/transfer/link-core.ts';
+import { applyUpload, type Uploads } from '@digi/workbench-core/transfer/sample-upload.ts';
+import { samplesBar } from '@digi/workbench-core/transfer/samples-core.ts';
 
 test('no pill and no suffix while the link is unknown', () => {
   assert.equal(linkTag(undefined), undefined);
@@ -19,10 +20,39 @@ test('bulk is a green FAST USB pill, sysex a neutral SYSEX pill', () => {
   assert.equal(sysex?.tone, 'dim');
   assert.match(sysex?.title ?? '', /install the usb-fast module/i);
   assert.doesNotMatch(sysex?.title ?? '', /USB CONFIG/);
-  const taken = linkTag({ state: 'bulk', takenOver: true });
-  assert.equal(taken?.text, 'FAST USB (USB audio paused)');
-  assert.equal(taken?.tone, 'ok');
-  assert.match(taken?.title ?? '', /USB audio is paused/);
+  assert.doesNotMatch(fast?.title ?? '', /paused/);
+});
+
+test('a SysEx link in USB AUDIO/MIDI with no bulk route says to set USB CONFIG', () => {
+  const t = linkTag({ state: 'sysex', wrongMode: true });
+  assert.equal(t?.text, 'SYSEX');
+  assert.equal(t?.tone, 'warn');
+  assert.equal(t?.title, linkHint({ state: 'sysex', wrongMode: true }));
+  assert.match(t?.title ?? '', /no Fast USB interface in USB AUDIO\/MIDI.*set USB CONFIG to USB MIDI/);
+});
+
+test('a SysEx link with a reason is an amber pill whose tooltip is the hint', () => {
+  const link = { state: 'sysex', reason: 'USB device x: boom' } as const;
+  const t = linkTag(link);
+  assert.equal(t?.text, 'SYSEX');
+  assert.equal(t?.tone, 'warn');
+  assert.equal(t?.title, 'Fast USB not used: USB device x: boom');
+  assert.equal(t?.title, linkHint(link));
+});
+
+test('linkHint gives one sentence for each way samples miss Fast USB', () => {
+  assert.equal(linkHint(undefined), null);
+  assert.equal(linkHint({ state: 'bulk' }), null);
+  assert.equal(
+    linkHint({ state: 'fallback', reason: 'timeout' }),
+    'Fast USB stopped during this run (timeout); the rest went over SysEx.',
+  );
+  assert.match(linkHint({ state: 'fallback' }) ?? '', /\(no reason logged\)/);
+  const failure = { name: 'usb-fast.dkm', result: -7, needs: 'usb-bulk' };
+  assert.equal(linkHint({ state: 'sysex', failure }), linkTag({ state: 'sysex', failure })?.title);
+  assert.match(linkHint({ state: 'sysex', wrongMode: true }) ?? '', /^This firmware has no Fast USB interface/);
+  assert.equal(linkHint({ state: 'sysex', reason: 'r' }), 'Fast USB not used: r');
+  assert.equal(linkHint({ state: 'sysex' }), 'Install the usb-fast module for Fast USB.');
 });
 
 test('a SysEx link with a usb-fast load failure names the module it needs', () => {
@@ -56,7 +86,7 @@ test('the progress line of a running upload carries the suffix, and a finished r
   u = applyUpload(u, { event: 'queued', folder: '', name: 'kick.wav', bytes: 1000 });
   u = applyUpload(u, { event: 'progress', folder: '', name: 'kick.wav', sent: 10, bytes: 1000 });
   const run = (link?: Parameters<typeof samplesBar>[4]) => samplesBar(u, {}, true, undefined, link)?.message;
-  assert.match(run({ state: 'bulk' }) ?? '', /^Uploading kick\.wav \(1 of 1\) · via Fast USB$/);
+  assert.match(run({ state: 'bulk' }) ?? '', /^Transferring 1 of 1 · kick\.wav · via Fast USB$/);
   assert.match(run({ state: 'fallback', reason: 'x' }) ?? '', / · via SysEx$/);
   assert.doesNotMatch(run() ?? '', /via/);
   assert.doesNotMatch(samplesBar(u, {}, false, undefined, { state: 'bulk' })?.message ?? '', /via/);

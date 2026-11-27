@@ -11,7 +11,7 @@ fn root() -> PathBuf {
 
 fn patched(file: &str, modules: &[&str]) -> Option<Vec<u8>> {
     let raw = std::fs::read(root().join("firmware").join(file)).ok()?;
-    let registry = Registry::from_dir(&root().join("devices/ports")).unwrap();
+    let registry = Registry::from_dir(&root().join("ports")).unwrap();
     let ids: Vec<String> = modules.iter().map(|m| m.to_string()).collect();
     // builds the content modules the image needs, no others (skipped without the toolchain)
     let library = Library::scan_repo_for_or_skip(&root(), Some(&ids))?;
@@ -21,10 +21,10 @@ fn patched(file: &str, modules: &[&str]) -> Option<Vec<u8>> {
 
 #[test]
 fn a_patched_image_with_a_changed_main_boots_from_its_record() {
-    // test/patched-pluck adds ColdFire code, so neither the file nor the MAIN digest is a known one.
+    // test/cf-demo adds ColdFire code, so neither the file nor the MAIN digest is a known one.
     let Some(syx) = patched(
         "Digitakt_II_OS1.17.syx",
-        &["core/expansion", "test/patched-pluck"],
+        &["core/expansion", "test/cf-demo"],
     ) else {
         return;
     };

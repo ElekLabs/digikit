@@ -1,0 +1,21 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/services/shortcuts-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": ["core/services/shortcuts", "dkrt-svc-shortcuts"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "shortcuts.device.test.ts"
+        ],
+        "modules": [
+          "test/shortcut-demo",
+          "core/services/shortcuts"
+        ]
+      }
+    ]
+  }
+}

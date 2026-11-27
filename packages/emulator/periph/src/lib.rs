@@ -23,6 +23,7 @@ pub mod esdhc;
 pub mod gpio;
 pub mod intc;
 pub mod machine;
+pub mod peer;
 pub mod pit;
 pub mod regfile;
 pub mod snap;

@@ -1,37 +1,47 @@
-// The right-hand column of the Emulator page and the Remote page: tabs over one panel at a time. The Emulator page offers Card, Memory and
-// Metrics; the Remote page Memory alone (its single tab shows as a title). The column folds to a narrow rail so the faceplate takes the width
-// back; the rail lists the tabs vertically, and a click on one opens the column on it. The chosen tab and the fold are kept (panel-open.ts).
-// Card and Memory read through the one session of their target (target.ts), and only while their tab is shown.
+// The selected target’s inspector. Each binding owns its panel reads and calibration run.
+import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
-import type { DkSession } from '@digi/dk-session';
-import CardPanel from './CardPanel';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 import MemoryPanel from './MemoryPanel';
+import type { SpanRecording } from './span-recording';
+import type { PerformanceView } from './PerformancePanel';
+import type { PerformanceCapture } from '@digi/workbench-core/profile/performance-capture.ts';
+import ProfilePanel from './profile/ProfilePanel';
+import CalibrationPanel from './CalibrationPanel';
+import { createCalibrationHub } from './calibration-hub';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { TAB_LABEL, shownTab, type InspectorTab } from './inspector-core';
 import { inspectorOpen, inspectorTab, setInspectorOpen, setInspectorTab } from './panel-open';
 import './card-panel.css';
 
-/**
- * `visible`: the column is on screen (the page is shown). `active`: the emulator runs, so Card and Memory can read (default true).
- * `card`: offer the Card tab, with its `reload`. `metrics`: offer the Metrics tab with this content. `session`, `where`, `track`: the
- * Memory panel's (memory-panel props).
- */
 export default function SidePanels(props: {
+  /** The host of the Profile panel (the emulator's `cf.profile` and `sharc.profile`, the save dialog). */
+  host?: Host;
   visible: boolean;
   active?: boolean;
-  card?: boolean;
-  reload?: () => Promise<void>;
+  collectSpans?: boolean;
+  liveDsp?: boolean;
+  savedCapture?: PerformanceCapture;
+  showCaptureControls?(view?: PerformanceView): void;
+  openCapture?(): void;
+  captureContext?(): { id: string; saved_checkpoint: string | null; working_card: boolean } | undefined;
+  profileGeneration?: number;
+  onSpanRecording?(recording?: SpanRecording): void;
+  openCatalog?(path: string, sha256: string, entry: number): void;
   metrics?: JSX.Element;
-  session: () => Promise<DkSession>;
-  where: () => string;
-  track?: () => unknown;
+  source: TargetBinding;
 }): JSX.Element {
+  // shared by the Profile and Calibration tabs: a run in progress, and the calibration kept per device
+  const hub = createCalibrationHub(useTransferApp().storage);
   const offered = (): InspectorTab[] => [
-    ...(props.card ? (['card'] as const) : []),
     'memory',
     ...(props.metrics ? (['metrics'] as const) : []),
+    'profile',
+    ...(props.host ? (['calibration'] as const) : []),
   ];
   const tab = () => shownTab(inspectorTab(), offered());
-  const reads = (t: InspectorTab) => props.visible && (props.active ?? true) && inspectorOpen() && tab() === t;
+  const shown = (t: InspectorTab) => props.visible && inspectorOpen() && tab() === t;
+  const reads = (t: InspectorTab) => shown(t) && (props.active ?? true);
   const tabpanel = (t: InspectorTab) =>
     offered().length > 1 ? { id: `side-panel-${t}`, labelledBy: `side-tab-${t}` } : undefined;
   const pick = (t: InspectorTab, focus = false) => {
@@ -65,7 +75,11 @@ export default function SidePanels(props: {
     ),
   );
   return (
-    <div class="side-col" classList={{ rail: !inspectorOpen() }} hidden={!props.visible}>
+    <div
+      class="side-col"
+      classList={{ rail: !inspectorOpen(), wide: inspectorOpen() && (tab() === 'profile' || tab() === 'calibration') }}
+      hidden={!props.visible}
+    >
       <div class="side-head">
         <Show when={inspectorOpen()}>
           <Show
@@ -144,19 +158,41 @@ export default function SidePanels(props: {
           </For>
         </div>
       </Show>
-      <Show when={props.visible && inspectorOpen() && !(props.active ?? true) && tab() !== 'metrics'}>
+      <Show
+        when={props.visible && inspectorOpen() && !(props.active ?? true) && tab() !== 'metrics' && tab() !== 'profile'}
+      >
         <p class="side-empty">The emulator is not running.</p>
       </Show>
-      <Show when={props.card}>
-        <CardPanel visible={reads('card')} reload={props.reload} tabpanel={tabpanel('card')} />
+      <MemoryPanel visible={reads('memory')} source={props.source} tabpanel={tabpanel('memory')} />
+      <Show when={props.profileGeneration ?? 1} keyed>
+        {(_generation) => (
+          <ProfilePanel
+            visible={shown('profile')}
+            active={props.active}
+            liveDsp={props.liveDsp}
+            savedCapture={props.savedCapture}
+            showCaptureControls={props.showCaptureControls}
+            openCapture={props.openCapture}
+            captureContext={props.captureContext}
+            collectSpans={props.collectSpans && (props.active ?? true)}
+            onSpanRecording={props.onSpanRecording}
+            openCatalog={props.openCatalog}
+            source={props.source}
+            host={props.host}
+            hub={hub}
+            tabpanel={tabpanel('profile')}
+          />
+        )}
       </Show>
-      <MemoryPanel
-        visible={reads('memory')}
-        session={props.session}
-        where={props.where}
-        track={props.track}
-        tabpanel={tabpanel('memory')}
-      />
+      <Show when={props.host}>
+        <CalibrationPanel
+          visible={reads('calibration')}
+          source={props.source}
+          host={props.host}
+          hub={hub}
+          tabpanel={tabpanel('calibration')}
+        />
+      </Show>
       <Show when={props.metrics}>
         <div
           class="card-panel metrics-panel"

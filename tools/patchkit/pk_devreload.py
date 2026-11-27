@@ -3,7 +3,7 @@
 
     mise run dk:dev -- MODULE_OR_SET [--device dn2[,dt2]] [--keys FILE|INLINE] [--store IDS] [--trace] [--out DIR] [--stop]
 
-MODULE_OR_SET is a patch set of devices/<device>.toml (`emulator`), or module ids separated by commas (`test/ui-demo`); the modules
+MODULE_OR_SET is a patch set of devices/<device>.toml (`emulator`), or module ids separated by commas (`core/ui`); the modules
 they require are added. Per device the tool
 
 1. builds the objects of every module in the set whose sources changed (`patchkit build`: unchanged objects cost nothing),
@@ -44,10 +44,10 @@ ROOT = HERE.parent.parent
 
 from tools.control.digi_client import Emu, EmuError, oled_png  # noqa: E402
 from tools.devtools.portable_flock import LOCK_EX, LOCK_NB, LOCK_UN, flock  # noqa: E402
-from tools.patchkit import modroots, patchkit  # noqa: E402
+from tools.patchkit import modroots, patchkit, pk_device, pk_services  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
-FIRMWARE = {"dt2": "1.17", "dn2": "1.12"}
+FIRMWARE = pk_device.acceptance_firmware()  # the harness' default firmware per device
 STOCK_SYX = {"dt2": "Digitakt_II_OS1.17.syx", "dn2": "Digitone_II_OS1.12.syx"}
 DEVICE_FILE = {"dt2": "digitakt-ii.toml", "dn2": "digitone-ii.toml"}
 SHEET_COLUMNS = 4
@@ -126,27 +126,6 @@ def target_dsp_mode(target: str, device: str, store: list[str]) -> str:
         "patch_sets", {}
     )
     return dsp_mode(resolve_modules(target, device), store, zero_framework=hinted)
-
-
-def store_ui_preview_mode(target: str, device: str, store: list[str]) -> str:
-    """Internal dk:module path: one declarative machine on a zero-safe base."""
-    if (
-        target != "emulator"
-        or len(store) != 1
-        or store[0].startswith(("file:", "synth:"))
-    ):
-        raise H.HarnessError(
-            "UI preview requires the emulator set and one machine store id"
-        )
-    mid = store[0].rstrip("*")
-    manifest = tomllib.loads((modroots.module_dir(mid) / "module.toml").read_text())
-    if manifest["module"].get("type") != "machine":
-        raise H.HarnessError(
-            "UI preview store requires a declarative machine; use --dsp"
-        )
-    if target_dsp_mode(target, device, []) != "zero":
-        raise H.HarnessError("UI preview requires a zero-DSP emulator base")
-    return "zero"
 
 
 def assert_mode(emu: Emu, dsp: str) -> None:
@@ -292,14 +271,13 @@ def prepare_store(
     ids: list[str],
     run_dir: Path,
     trace: bool = False,
-    *,
-    ui_preview: bool = False,
 ) -> dict[str, Any]:
     """Pack/copy requested content in isolated staging, without touching a mounted card."""
     folder = run_dir / "plus_drive"
     shutil.rmtree(folder, ignore_errors=True)
     (folder / "digikit" / "modules").mkdir(parents=True)
     selected = []
+    explicit: list[str] = []  # service modules named in the store
     for mid in ids:
         pick = mid.endswith(
             "*"
@@ -324,6 +302,9 @@ def prepare_store(
             spec = run_dir / f"{name}.toml"
             spec.write_text(f'name = "dev/{name}"\nbss = {int(bss) // 4 * 4}\n')
             pack_store("synth-dkm", spec, "--device", device, "-o", out)
+        elif pk_services.is_service(device, mid):  # a service is a file of the card
+            explicit.append(mid)
+            continue
         else:
             out = folder / "digikit" / "modules" / f"{mid.rpartition('/')[2]}.dkm"
             pack_store(
@@ -334,10 +315,19 @@ def prepare_store(
                 "-o",
                 out,
                 *(["--trace"] if trace else []),
-                *(["--ui-preview"] if ui_preview else []),
             )
         if pick:
             selected.append(f"modules/{out.name}")
+    # the services of the card: those named, then those the packed modules need (as the device tests put them on the card)
+    for svc in pk_services.card_services(
+        device,
+        ROOT / "out" / "cache" / "devreload-svc" / device,
+        files=sorted((folder / "digikit" / "modules").glob("*.dkm")),
+        modules=explicit,
+    ):
+        to = folder / "digikit" / svc["store_path"]
+        to.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(svc["file"], to)
     files = {}
     for path in sorted(folder.rglob("*")):
         if path.is_file():
@@ -349,7 +339,6 @@ def prepare_store(
         "device": device,
         "ids": ids,
         "trace": trace,
-        "ui_preview": ui_preview,
         "selected": selected,
         "files": files,
     }
@@ -361,7 +350,6 @@ def store_card(
     run_dir: Path,
     trace: bool = False,
     *,
-    ui_preview: bool = False,
     prepared: dict[str, Any] | None = None,
 ) -> Path:
     """Build a card from freshly prepared content, including its initial selection."""
@@ -369,7 +357,7 @@ def store_card(
     from tools.patchkit import pk_dkrt
 
     if prepared is None:
-        prepared = prepare_store(device, ids, run_dir, trace, ui_preview=ui_preview)
+        prepared = prepare_store(device, ids, run_dir, trace)
     syx = config.stock(STOCK_SYX[device])
     image = run_dir / "store-card.img"
     pk_dkrt.build_card(pk_dkrt.Tools(), run_dir / "plus_drive", image, syx, device)
@@ -417,7 +405,7 @@ def stop_connected(emu: Emu, run_dir: Path, timeout: float = 5) -> None:
 
 def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
     """Update one preview DKM on the mounted card, then soft-reset the guest."""
-    from tools.device import dkrun, dktransfer, dkupload
+    from tools.device import dkmodule, dkproto, dkrun, dkupload
 
     def idle() -> None:
         if emu.status().get("job"):
@@ -430,16 +418,40 @@ def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
     try:
         emu.subscribe()
         up = dkupload.Uploader(dkupload.EmuTransport(emu))
-        dkrun.require_runtime(up.info())
+        info = up.info()
+        dkrun.require_runtime(info)
         path = prepared["selected"][0]
         source = candidate / "plus_drive/digikit" / path
         data = source.read_bytes()
-        header = dktransfer.header_info(data[: dkupload.HEADER_BYTES])
+        header = dkmodule.header_info(data)
         if header is None:
             raise H.HarnessError("preview pack has no DKM header")
         dkrun.upload_if_changed(up, path, data)
         if up.verify(path) != dkupload.file_hash(data).hex():
             raise H.HarnessError("preview module did not verify on the mounted card")
+        # A module that is loaded already and a runtime that can reload it: no boot (RELOAD, docs/TESTING.md "Fast iteration"). The emulator is stepped
+        # between the asks, as the guest runs only then.
+        loaded = {m["name"] for m in up.modules()["modules"]}
+        if (
+            header["name"] in loaded
+            and info.get("caps", 0) >> dkproto.CAP["RELOAD"] & 1
+        ):
+            print("preview: upload verified; reloading module", flush=True)
+            result, unloaded = up.reload_and_wait(
+                path, lambda: emu.step(int(0.05 * dkrun.EMU_IPS))
+            )
+            if result == 0:
+                print(f"preview: module reloaded ({header['name']})", flush=True)
+                return
+            # refused before anything changed (the old module still runs), or failed after the old one was removed (the module is not loaded): the boot below takes the file as it is
+            what = (
+                "failed, the module is not loaded"
+                if unloaded
+                else "the DSP loader is retained, restart needed"
+                if result == -87
+                else "refused, the old module ran"
+            )
+            print(f"preview: reload {what} ({result}); restarting instead", flush=True)
         # A preview selects one module explicitly; all other card contents stay.
         print("preview: upload verified; selecting module", flush=True)
         up.select(prepared["selected"])
@@ -450,7 +462,7 @@ def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
         # The emulator event proves a new boot; MODULES proves the selection loaded.
         dkrun.emu_boot_waiter(emu, timeout_s=90)()
         print("preview: firmware booted; waiting for module", flush=True)
-        dktransfer.wait_loaded(
+        dkmodule.wait_loaded(
             up,
             [header["name"]],
             sleep=lambda seconds: emu.step(int(seconds * dkrun.EMU_IPS)),
@@ -462,7 +474,7 @@ def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
     except (
         dkupload.UploadError,
         dkrun.RunError,
-        dktransfer.TransferError,
+        dkmodule.TransferError,
         TimeoutError,
     ) as exc:
         raise H.HarnessError(f"preview upload/restart failed: {exc}") from exc
@@ -495,7 +507,6 @@ def refresh_store(
     ids: list[str],
     run_dir: Path,
     trace: bool,
-    ui_preview: bool,
     *,
     live_update: bool = False,
 ) -> tuple[Emu | None, Path]:
@@ -503,7 +514,7 @@ def refresh_store(
     run_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".dk-store-", dir=run_dir.parent) as tmp:
         candidate = Path(tmp)
-        prepared = prepare_store(device, ids, candidate, trace, ui_preview=ui_preview)
+        prepared = prepare_store(device, ids, candidate, trace)
         prepared["target"] = target
         try:
             baseline = json.loads((run_dir / "store-request.json").read_text())
@@ -535,9 +546,7 @@ def refresh_store(
             )
             return emu, image
         # Card construction and selection validation may fail: keep the daemon alive until both succeed.
-        store_card(
-            device, ids, candidate, trace, ui_preview=ui_preview, prepared=prepared
-        )
+        store_card(device, ids, candidate, trace, prepared=prepared)
         if emu is not None:
             stop_connected(emu, run_dir)
         # A saved overlay belongs to the previous card layout/content. Quit may
@@ -558,7 +567,6 @@ def start(
     trace: bool = False,
     dsp: str = "sharc",
     *,
-    store_ui_preview: bool = False,
     prepared_card: Path | None = None,
     reuse_runtime: bool = False,
 ) -> tuple[Emu, H.Session]:
@@ -575,9 +583,7 @@ def start(
         session.card_override = str(prepared_card)
     elif store:
         run_dir.mkdir(parents=True, exist_ok=True)
-        session.card_override = str(
-            store_card(cell.device, store, run_dir, trace, ui_preview=store_ui_preview)
-        )
+        session.card_override = str(store_card(cell.device, store, run_dir, trace))
     image = cached_runtime_image(session) if reuse_runtime else None
     session.open(**({"image": image} if image is not None else {}))
     assert session.emu is not None
@@ -672,8 +678,9 @@ def runtime_fingerprint(modules: list[str], device: str, syx: Path) -> str | Non
         Path(modroots.__file__),
         patchkit.binary(),
     }
-    for tree in (ROOT / "devices", ROOT / "packages/patchkit/src"):
+    for tree in (ROOT / "devices", ROOT / "ports/fw", ROOT / "packages/patchkit/src"):
         paths.update(p for p in tree.rglob("*") if p.is_file())
+    paths.update(p for p in (ROOT / "ports").glob("*.toml") if p.is_file())
     digest = hashlib.sha256(f"preview-runtime-v1:{device}".encode())
     try:
         for mid in closure(modules):
@@ -792,12 +799,7 @@ def run_device(device: str, a: argparse.Namespace) -> dict[str, Any]:
     for m in modules:
         modroots.module_dir(m)
     store = [m for m in (a.store or "").split(",") if m]
-    ui_preview = a.store_ui_preview
-    dsp = (
-        store_ui_preview_mode(a.target, device, store)
-        if ui_preview
-        else target_dsp_mode(a.target, device, store)
-    )
+    dsp = target_dsp_mode(a.target, device, store)
     run_dir = run_dir_of(device, a.target, store, a.trace, dsp)
     with session_lock(run_dir):
         return run_device_locked(device, a, modules, store, dsp, run_dir)
@@ -813,7 +815,6 @@ def run_device_locked(
 ) -> dict[str, Any]:
     t_all = time.monotonic()
     cell = H.Cell(device, FIRMWARE[device], modules)
-    ui_preview = a.store_ui_preview
     t_build, rebuilt = build(closure(modules))
     print(f"{device}: auto DSP {dsp}", file=sys.stderr, flush=True)
     t_reload_started = time.monotonic()
@@ -840,7 +841,6 @@ def run_device_locked(
                 store,
                 run_dir,
                 a.trace,
-                ui_preview,
                 **({"live_update": True} if getattr(a, "reuse", False) else {}),
             )
         except BaseException:
@@ -857,7 +857,6 @@ def run_device_locked(
             store,
             a.trace,
             dsp,
-            store_ui_preview=ui_preview,
             **({"reuse_runtime": True} if getattr(a, "reuse", False) else {}),
             **({"prepared_card": prepared_card} if prepared_card is not None else {}),
         )
@@ -972,15 +971,12 @@ def main(argv: list[str]) -> int:
         help="build the --store modules with DK_TRACE (patchkit pack --trace): their DK_TRACE_LOG and DK_STEP marks exist; the kept daemon is its own (the card differs)",
     )
     ap.add_argument("--reuse", action="store_true", help=argparse.SUPPRESS)
-    ap.add_argument("--store-ui-preview", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--out", default=str(ROOT / "out" / "runs" / "devreload"))
     ap.add_argument(
         "--stop", action="store_true", help="end the kept daemons of this module set"
     )
     ap.add_argument("--json", action="store_true", help="print the reports as JSON")
     a = ap.parse_args(argv)
-    if a.store_ui_preview and a.trace:
-        ap.error("--store-ui-preview cannot be combined with --trace")
     devices = [d for d in a.device.split(",") if d]
     for d in devices:
         if d not in FIRMWARE:

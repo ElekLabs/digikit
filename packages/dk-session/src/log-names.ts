@@ -1,0 +1,186 @@
+// Names for the addresses of the runtime log (docs/ADDRMAP.md "Workbench"): the resolver the Log pane gives to the text builders of
+// packages/dk-session/src/runtime-log.ts, and the load table read from the memory of the running image through PEEK of the debug module
+// (the emulator and a device alike). No DOM, no Tauri: `prof` is dkprof.wasm (packages/dk-session/src/dkprof.ts) and the session is a
+// `DkSession` or a fake, so a test gives the real wasm and a fake memory.
+// Host tests: packages/dk-session/tests/log-names.test.ts.
+import type { AddrMapJson, DkProf, LoadTableJson } from './dkprof.ts';
+import type { AddrNamer } from './runtime-log.ts';
+import { DkError } from './dkupload-core.ts';
+import { CAP } from './gen_proto.ts';
+import { HOST_DIR_SYMBOL, hostAddress } from './host-directory.ts';
+
+/** What the controller answers to `runtime.maps` (docs/CONTROL.md). */
+export interface RuntimeMaps {
+  image_sha256: string;
+  /** The maps belong to the running image's bytes; false: they may name the wrong code. */
+  matches: boolean;
+  /** The ship map, as JSON text. */
+  ship: string;
+  /** Byte addresses of the symbols the load table is read from. */
+  symbols: Record<string, number>;
+}
+
+/** The part of dkprof the names need. */
+export type NameProf = Pick<DkProf, 'prepareAddrLookup' | 'loadTable'>;
+
+/**
+ * The resolver of one image: `maps` (the ship map and the maps of the built modules) and the load table that says where the modules sit.
+ * A module that is not in the table has no names, and an address no map holds has none: the answer is null and the caller keeps the hex.
+ */
+export function makeResolver(prof: NameProf, maps: AddrMapJson[], loads: LoadTableJson): AddrNamer {
+  try {
+    const lookup = prof.prepareAddrLookup({ maps, loads });
+    return (cpu, addr, ret = false) => {
+      try {
+        const [r] = lookup({ ret, addrs: [{ cpu, addr }] }).results;
+        if (!r?.text) return null;
+        return r.module ? `${r.module}: ${r.text}` : r.text;
+      } catch {
+        return null;
+      }
+    };
+  } catch {
+    return () => null;
+  }
+}
+
+/** Read `len` bytes of RAM at a byte address: PEEK of the debug module over a `DkSession`, for the emulator and for a device alike. */
+export type Peek = (addr: number, len: number) => Promise<Uint8Array>;
+
+/**
+ * The load table of a running image: dkprof says which symbols to read and how many bytes (`reads`, from the loader header of the ship
+ * map), the bytes come from `peek` at the symbol addresses of the image, and dkprof decodes them.
+ */
+export async function readLoadTable(
+  prof: NameProf,
+  ship: AddrMapJson,
+  symbols: Record<string, number>,
+  peek: Peek,
+): Promise<LoadTableJson> {
+  const { reads } = prof.loadTable({ maps: [ship] }) as { reads: { symbol: string; len: number; host_id?: number }[] };
+  const snapshot: Record<string, Uint8Array> = {};
+  for (const { symbol, len, host_id } of reads) {
+    // a resident symbol is in the image; a static of the system package is found through the host directory, which is read before it (`DKRT_HOST_DIR`)
+    let base: number | undefined;
+    if (host_id === undefined) base = symbols[symbol];
+    else base = hostAddress(snapshot[HOST_DIR_SYMBOL] ?? new Uint8Array(), host_id);
+    if (base === undefined) throw new Error(`the image has no symbol ${symbol}`);
+    snapshot[symbol] = await peek(base, len);
+  }
+  const hex = Object.fromEntries(
+    Object.entries(snapshot).map(([symbol, bytes]) => [
+      symbol,
+      Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(''),
+    ]),
+  );
+  return prof.loadTable({ maps: [ship], snapshot: hex }) as LoadTableJson;
+}
+
+/** The ship map of the image a session talks to, with the addresses of its load-table symbols. */
+export interface ShipSource {
+  /** The ship map as JSON text. */
+  ship: string;
+  symbols: Record<string, number>;
+  /** The map belongs to the bytes that run (the controller says so for the emulator). Default: yes. */
+  matches?: boolean;
+}
+
+/** The part of a protocol session the names read: INFO (capabilities, the image id) and PEEK. */
+export interface NameSession {
+  info(quick?: boolean): Promise<{ caps: number | null; image_id?: string | null; port?: string }>;
+  peek?(addr: number, len: number): Promise<Uint8Array>;
+}
+
+/** What a target supplies: where its ship map comes from, and the maps of the built modules. */
+export interface NameSources {
+  prof(): Promise<NameProf>;
+  /** The ship map of the image behind the session, or why there is none (a short reason). */
+  ship(session: NameSession): Promise<ShipSource | { unavailable: string }>;
+  /** The JSON texts of the module maps of a device (`dt2`, `dn2`). */
+  moduleMaps(device: string): Promise<string[]>;
+  firmwareMaps?(stockHash: string): Promise<AddrMapJson[]>;
+  revision?(): number;
+}
+
+/** The names of one origin the follower reads: `resolve` is what the text builders take, `refresh` reads the maps and the load table again. */
+export interface LogNames {
+  /** The resolver of the last refresh, or undefined when there is none. */
+  resolve(): AddrNamer | undefined;
+  /** Why there are no names (a short reason), after a refresh that made none; undefined while there are. */
+  unavailable(): string | undefined;
+  /** The maps and the load table behind `resolve` (the Profile pane names DSP addresses with them), or undefined when there are none. */
+  inputs(): { maps: AddrMapJson[]; loads: LoadTableJson } | undefined;
+  /** Verified stock image, also available when module memory cannot be read. */
+  imageHash?(): string | undefined;
+  needsRefresh?(): boolean;
+  refresh(session: NameSession): Promise<void>;
+}
+
+const PEEK_CAP = 'needs the debug module (digikit/debug): its PEEK reads the load table';
+
+export function stockImageHash(map: AddrMapJson): string | undefined {
+  const hash = (map.key as { image_sha256?: string } | undefined)?.image_sha256;
+  return typeof hash === 'string' && /^[a-f0-9]{64}$/i.test(hash) ? hash.toLowerCase() : undefined;
+}
+
+/** The names of one target. The same code serves the emulator and a device: they differ in `sources.ship` only. */
+export function createLogNames(sources: NameSources): LogNames {
+  let resolver: AddrNamer | undefined;
+  let inputs: { maps: AddrMapJson[]; loads: LoadTableJson } | undefined;
+  let why: string | undefined;
+  let imageHash: string | undefined;
+  let revision = sources.revision?.();
+  let request = 0;
+  const needsRefresh = () => revision !== sources.revision?.();
+  const none = (reason: string) => {
+    resolver = undefined;
+    inputs = undefined;
+    why = reason;
+  };
+  return {
+    resolve: () => (needsRefresh() ? undefined : resolver),
+    unavailable: () => why,
+    imageHash: () => imageHash,
+    inputs: () => (needsRefresh() ? undefined : inputs),
+    needsRefresh,
+    async refresh(session) {
+      const token = ++request;
+      imageHash = undefined;
+      none('');
+      revision = sources.revision?.();
+      const info = await session.info();
+      const canPeek = info.caps !== null && ((info.caps >>> CAP.PEEK) & 1) === 1 && !!session.peek;
+      if (token !== request) return;
+      if (!canPeek && !sources.firmwareMaps) return none(PEEK_CAP);
+      const src = await sources.ship(session);
+      if (token !== request) return;
+      if ('unavailable' in src) return none(src.unavailable);
+      if (src.matches === false)
+        return none('the maps are not those of the image that runs (reload or flash it again)');
+      const ship = JSON.parse(src.ship) as AddrMapJson;
+      const hash = stockImageHash(ship);
+      imageHash = hash;
+      const firmware = hash && sources.firmwareMaps ? await sources.firmwareMaps(hash) : [];
+      if (token !== request) return;
+      revision = sources.revision?.();
+      if (!canPeek && !firmware.length) return none(PEEK_CAP);
+      const device = (ship.key as { device?: string } | undefined)?.device;
+      const prof = await sources.prof();
+      let loads: LoadTableJson = { modules: [] };
+      let modules: string[] = [];
+      if (canPeek && session.peek) {
+        try {
+          loads = await readLoadTable(prof, ship, src.symbols, session.peek.bind(session));
+          if (device) modules = await sources.moduleMaps(device);
+        } catch (error) {
+          if (!firmware.length || (error instanceof DkError && error.kind === 'cancelled')) throw error;
+        }
+      }
+      if (token !== request || needsRefresh()) return;
+      const maps = [ship, ...modules.map((m) => JSON.parse(m) as AddrMapJson), ...firmware];
+      resolver = makeResolver(prof, maps, loads);
+      inputs = { maps, loads };
+      why = undefined;
+    },
+  };
+}

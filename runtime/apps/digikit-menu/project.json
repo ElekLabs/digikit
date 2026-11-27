@@ -1,0 +1,16 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/digikit-menu",
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "tests/apply-live.device.test.ts"
+        ],
+        "firmwareOnly": "the real MODULES page applies a change without a boot, and a playing transport refuses it",
+        "modules": [],
+        "plusdrive": true
+      }
+    ]
+  }
+}

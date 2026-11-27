@@ -1,15 +1,18 @@
-// A fake controller for the Card panel in the preview: `card.folder`, `card.folder_set`, `card.sync` and the folder dialog, so each state
-// of the panel is reached from the address (`?page=emulator&card=dn2|dt2&chosen=1&missing=1`) and by clicking.
+// A fake controller for the card-folder strip of the Files page in the preview: `card.folder`, `card.folder_set`, `card.sync` and the folder dialog, so each state
+// of the panel is reached from the address (`?page=files&card=dn2|dt2&chosen=1&missing=1`) and by clicking.
 //   card=dn2|dt2   the loaded device
 //   chosen=1       the user already chose a folder for it
 //   missing=1      the saved choice is gone (the default is used)
 //   overlay=0      the card has no saved changes (the reset button is off)
 
+import { previewHome } from './preview-home';
+import { deviceOfPort } from '@digi/workbench-core/data/device-profiles.ts';
+
 const query = new URLSearchParams(location.search);
 const device = query.get('card') === 'dt2' ? 'dt2' : 'dn2';
-const HOME = '/Users/em/src/digi/digitakt2';
-const CHOSEN = `/Users/em/Music/Elektron/${device === 'dt2' ? 'Digitakt II' : 'Digitone II'} card`;
-const DEFAULT = `${HOME}/plus_drive/${device}`;
+const workspace = `${previewHome}/Projects/digikit`;
+const CHOSEN = `${previewHome}/Music/Elektron/${device === 'dt2' ? 'Digitakt II' : 'Digitone II'} card`;
+const DEFAULT = `${workspace}/plus_drive/${device}`;
 
 /** The folder the module store is mirrored to now, and the saved choice (the next load's folder). */
 const state = {
@@ -62,8 +65,8 @@ export async function cardCall(method: string, params: Record<string, unknown>):
     const had = state.overlay;
     state.overlay = false;
     return {
-      overlay: `${HOME}/out/native/run/cards/card/overlay.bin`,
-      set_aside: had ? `${HOME}/out/native/run/cards/card/overlay.bin.set-aside-1` : null,
+      overlay: `${workspace}/out/native/run/cards/card/overlay.bin`,
+      set_aside: had ? `${workspace}/out/native/run/cards/card/overlay.bin.set-aside-1` : null,
     };
   }
   return folderState();
@@ -76,4 +79,15 @@ export async function reloadCard(): Promise<void> {
   state.folder = next();
 }
 
-export const cardDevice = device;
+export const previewBootFile = (query: URLSearchParams) => query.get('bootfile') ?? 'Digitakt_II_OS1.17.syx';
+
+export function previewEmulatorDevice(query: URLSearchParams): string {
+  const bootFile = previewBootFile(query);
+  const bootDevice = deviceOfPort(bootFile.replaceAll('_', ' '));
+  return (
+    query.get('bootdevice') ??
+    query.get('emudev') ??
+    (query.has('boot') || query.get('page') === 'run' ? bootDevice : undefined) ??
+    device
+  );
+}

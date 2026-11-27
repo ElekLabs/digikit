@@ -1,0 +1,232 @@
+// The Profile pane's backend in the preview (replaces ../src/profile/recorder.ts): a recorder over a made-up device, so the pane's own code draws
+// the three states. The state is in the address: `prof=rec` (recording), `prof=stopped` (the default, ready to record), `prof=nodebug` (no debug
+// module); `card=dn2|dt2` names the device, and the Remote page (`page=remote`) reads a device, the Emulator page the emulator.
+// The shares follow a fixed model per owner (a machine, an effect that is loaded after 19 s, the debug module, phases and polls); the clock is real
+// time, one reading a second. The numbers show layout, not measurements. The DSP figures go through the app's own `dspView`.
+import { dspView } from '@digi/workbench-core/profile/profile-core.ts';
+import type { ModuleRef, Snapshot, SpanIn } from '@digi/workbench-core/profile/profile-core.ts';
+import { cfView, DSP_BLOCKS_NOT_ARMED } from '../src/profile/recorder';
+import type { Part } from '@digi/workbench-core/profile/profile-artifact.ts';
+import type { ProfileDeps, ProfileReading, Recorder } from '../src/profile/recorder';
+
+export { isDebugMissing } from '../src/profile/recorder';
+
+const query = new URLSearchParams(location.search);
+const state = query.get('prof') ?? 'stopped';
+const dev = query.get('card') === 'dt2' ? 'dt2' : 'dn2';
+const HZ = 132_000_000;
+/** A made-up `cf.profile` part: four paths and ten heavy PCs (the numbers show layout only). */
+const CF_PART: Part = {
+  clock: { source: 'emu.cf.insn', unit: 'insn', sampling: '' },
+  metrics: [
+    ['ram_clear', 0.4e9, 8.0e8, 1200],
+    ['run_fast', 6.1e9, 9.2e9, 48_000],
+    ['step_once', 0.9e9, 1.1e8, 90_000],
+    ['idle_skip', 0.2e9, 3.9e9, 31_000],
+  ].flatMap(([p, ns, ins, calls]) => [
+    { name: `path.${p}.host_ns`, value: ns as number, unit: 'ns' },
+    { name: `path.${p}.instructions`, value: ins as number, unit: 'insn' },
+    { name: `path.${p}.calls`, value: calls as number, unit: 'calls' },
+  ]),
+  raw: [
+    [0x40101000, 'usb_bulk_tick', 9100],
+    [0x4010a2c0, 'mixer_service', 7400],
+    [0x400f3e10, '', 5200],
+    [0x400c0044, 'sample_copy', 4100],
+    [0x40200010, 'sched_wait', 3300],
+    [0x400b8c9a, '', 2100],
+    [0x401020f0, 'usb_bulk_tick', 1800],
+    [0x400d5a00, 'fx_send', 1200],
+    [0x400d5a40, 'fx_send', 900],
+    [0x40000200, 'boot_wait', 400],
+  ].map(([addr, , count]) => ({ cpu: 'cf', addr, count, series: 'pc' })),
+  loss: [],
+  overhead: [],
+};
+const CF_NAMES = new Map<number, string>([
+  [0x40101000, 'usb_bulk_tick'],
+  [0x4010a2c0, 'mixer_service'],
+  [0x400c0044, 'sample_copy'],
+  [0x40200010, 'sched_wait'],
+  [0x400d5a00, 'fx_send'],
+]);
+const FX_AT = 19; // seconds after the start
+
+interface Model {
+  index: number;
+  kind: SpanIn['kind'];
+  /** The share of the CPU at second `t`, and the mean and maximum of one call in microseconds. */
+  share: (t: number) => number;
+  meanUs: number;
+  maxUs: number;
+}
+const wave = (t: number, k: number) => Math.sin(t * 0.7 + k) * 0.012 + Math.cos(t * 1.3 + k) * 0.008;
+const MODEL: Model[] = [
+  { index: 0, kind: 'module', share: (t) => 0.184 + wave(t, 0), meanUs: 148.4, maxUs: 210 },
+  { index: 1, kind: 'module', share: (t) => (t < FX_AT ? 0 : 0.061 + wave(t, 1) / 2), meanUs: 49.2, maxUs: 388 },
+  { index: 2, kind: 'module', share: () => 0.004, meanUs: 3.1, maxUs: 6 },
+  { index: 0, kind: 'phase', share: () => 0.021, meanUs: 17, maxUs: 31 },
+  { index: 1, kind: 'phase', share: () => 0.013, meanUs: 10.4, maxUs: 22 },
+  { index: 2, kind: 'phase', share: () => 0.002, meanUs: 1.6, maxUs: 4 },
+  { index: 0, kind: 'poll', share: () => 0.006, meanUs: 4.8, maxUs: 61 },
+  { index: 1, kind: 'poll', share: () => 0.003, meanUs: 2.2, maxUs: 9 },
+];
+const MODULES = (t: number): ModuleRef[] => [
+  { index: 0, name: 'test/saw', kind: 'machine' },
+  ...(t >= FX_AT ? [{ index: 1, name: 'test/verb', kind: 'effect' as const }] : []),
+  { index: 2, name: 'test/mon', kind: 'tool' },
+];
+
+export function createRecorder(deps: ProfileDeps): Recorder {
+  const emulator = !!deps.rpc;
+  let running = state === 'rec';
+  const traceSupported = !query.has('legacyProfile');
+  let withDspBlocks = false;
+  let dspBlocks: Extract<ProfileReading, { noDebug: false }>['dspBlocks'];
+  let capture: Extract<ProfileReading, { noDebug: false }>['frozenTrace'];
+  let t = 0; // seconds recorded
+  let last = Date.now();
+  let elapsed = 0n;
+  const sums = MODEL.map(() => 0n);
+  const calls = MODEL.map(() => 0);
+  const advance = () => {
+    const now = Date.now();
+    const dt = running ? Math.min(2, (now - last) / 1000) : 0;
+    last = now;
+    if (dt <= 0) return;
+    t += dt;
+    elapsed += BigInt(Math.round(dt * HZ));
+    MODEL.forEach((m, i) => {
+      const s = m.share(t);
+      sums[i] += BigInt(Math.round(s * dt * HZ));
+      calls[i] += s > 0 ? Math.round((s * dt) / (m.meanUs * 1e-6)) : 0;
+    });
+  };
+  const sampleDsp = (): typeof dspBlocks => ({
+    unit: emulator ? 'instructions' : 'cycles',
+    blocks: Math.max(1, Math.round(t * 1500)),
+    overruns: 2,
+    rows: [
+      { row: 0, kind: 'machine', calls: 5800, meanBlock: 14880, maxBlock: 21130, maxCall: 7400 },
+      { row: 8, kind: 'effect', calls: 1500, meanBlock: 9850, maxBlock: 16675, maxCall: 16675 },
+      { row: 1, kind: 'machine', calls: 840, meanBlock: 2640, maxBlock: 9840, maxCall: 8270 },
+    ],
+  });
+
+  const snap = (): Snapshot => ({
+    running,
+    hz: HZ,
+    elapsedTicks: elapsed,
+    spans: MODEL.map((m, i) => ({
+      row: i,
+      kind: m.kind,
+      index: m.index,
+      calls: calls[i]!,
+      sumTicks: sums[i]!,
+      maxTicks: calls[i]! > 0 ? Math.round((m.maxUs * HZ) / 1e6) : 0,
+    })),
+    polls: [
+      { owner: 'runtime', fn: 0x40101000, name: 'usb_bulk_tick' },
+      { owner: 2, fn: 0x47e20040 },
+    ],
+  });
+  return {
+    async read(_detail, liveDsp): Promise<ProfileReading> {
+      await new Promise((r) => setTimeout(r, 60));
+      const port = `${dev}-${dev === 'dn2' ? '1.12' : '1.17'}`;
+      if (state === 'nodebug') return { noDebug: true, port: 'dt2-1.17', emulator };
+      advance();
+      const modules = MODULES(t);
+      const r: ProfileReading = {
+        noDebug: false,
+        port,
+        emulator,
+        capabilities: {
+          hasDsp: true,
+          dspBlocks: true,
+          dspHotspots: emulator || 'DSP hotspot recording requires the emulator.',
+          mainHotspots: emulator || 'Main CPU hotspot recording requires the emulator.',
+        },
+        observedAt: Date.now(),
+        snap: snap(),
+        modules,
+        traceSupported,
+        frozenTrace: capture,
+        dspBlockNote: running && !withDspBlocks ? DSP_BLOCKS_NOT_ARMED : undefined,
+        dspBlocks: running && liveDsp && withDspBlocks ? sampleDsp() : dspBlocks,
+      };
+      if (emulator && elapsed > 0n) {
+        r.cf = cfView(CF_PART, (a) => CF_NAMES.get(a));
+        r.dsp = dspView(
+          {
+            blocks: 1000,
+            series: [
+              {
+                series: 'pc',
+                cpu: 'sharc',
+                owners: [
+                  { owner: 'test/saw', per_block: 31_600 },
+                  ...(t >= FX_AT ? [{ owner: 'test/verb', per_block: 12_100 }] : []),
+                  { owner: 'firmware', per_block: 51_000 },
+                ],
+                functions: [
+                  { name: 'render · loop +0x40..+0x9c', module: 'test/saw', per_block: 24_648 },
+                  { name: 'render · setup', module: 'test/saw', per_block: 4_740 },
+                  { name: 'note_on', module: 'test/saw', per_block: 2_212 },
+                  { name: 'send', module: 'test/verb', per_block: 12_100 },
+                ],
+              },
+            ],
+          },
+          modules,
+          dev === 'dn2' ? 92_796 : 194_244,
+        );
+      } else if (!emulator && elapsed > 0n) r.deviceDsp = { avgPct: 21.3, maxPct: 34 };
+      return r;
+    },
+    async releaseDsp() {
+      withDspBlocks = false;
+    },
+    async start(dsp = false) {
+      withDspBlocks = dsp;
+      capture = undefined;
+      dspBlocks = undefined;
+      advance();
+      running = true;
+      last = Date.now();
+    },
+    async stop() {
+      advance();
+      running = false;
+      if (withDspBlocks) dspBlocks = sampleDsp();
+      if (traceSupported) {
+        const events = Array.from({ length: 48 }, (_, i) => ({
+          owner: [0x100, 0, 0x101, 2][i % 4]!,
+          startTicks: String(Math.floor(i / 4) * 24000 + (i % 4) * 4000),
+          durationTicks: i % 4 === 0 ? 11000 : 1500 + (i % 3) * 1000,
+        }));
+        capture = {
+          trace: { version: 1, generation: 1, hz: HZ, dropped: 12, events },
+          names: new Map([
+            [0, 'test/saw'],
+            [2, 'test/mon'],
+            [0x100, 'early'],
+            [0x101, 'late'],
+          ]),
+        };
+      }
+    },
+    async reset() {
+      capture = undefined;
+      dspBlocks = undefined;
+      advance();
+      t = 0;
+      elapsed = 0n;
+      sums.fill(0n);
+      calls.fill(0);
+    },
+    async exportFile() {
+      return { text: '{}\n', name: 'preview.dkprof.json' };
+    },
+  };
+}

@@ -13,7 +13,7 @@
 // Options (defaults match tools/emulator/digi_env.py; DIGI_EMU_* variables are honoured):
 //   --core PATH        apps/web/.local/emulator-core-sharc.wasm
 //   --syx PATH         firmware/Digitone_II_OS1.11.syx            (DIGI_EMU_SYX)
-//   (READY = ready_dir of tools/emulator/ready_inputs.json, or DIGI_EMU_READY_DIR)
+//   (READY = `[acceptance] ready_dir` of devices/digitone-ii.toml, or DIGI_EMU_READY_DIR)
 //   --dsp-image PATH   READY/digi-audio-dn2-image.bin (DIGI_EMU_DSP_IMAGE)
 //   --dsp-state PATH   READY/digi-audio-m5.snap.dsp   (DIGI_EMU_DSP_STATE)
 //   --cf-snapshot PATH READY/digi-audio-m5.snap       (DIGI_EMU_CF_SNAPSHOT)
@@ -30,6 +30,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { readyDirs } from '../nx/ready-dirs.mjs';
 
 const STEP_CHUNK = 250_000; // packages/emulator/coupled STEP_CHUNK
 const FRAMES_PER_SECOND = 1500;
@@ -47,11 +48,7 @@ const root = path.resolve(
     (fs.existsSync(path.join(here, '..', '..', 'packages', 'emulator')) ? path.join(here, '..', '..') : process.cwd()),
 );
 const env = process.env;
-const ready = path.resolve(
-  root,
-  env.DIGI_EMU_READY_DIR ??
-    JSON.parse(fs.readFileSync(path.join(root, 'tools/emulator/ready_inputs.json'), 'utf8')).ready_dir,
-);
+const ready = path.resolve(root, env.DIGI_EMU_READY_DIR ?? readyDirs.dn2);
 const paths = {
   core: args.core ?? path.join(root, 'apps/web/.local/emulator-core-sharc.wasm'),
   syx: args.syx ?? env.DIGI_EMU_SYX ?? env.DIGI_COUPLED_SYX ?? path.join(root, 'firmware', 'Digitone_II_OS1.11.syx'),
@@ -113,7 +110,7 @@ const hostEnv = {
     kernels[id] = null;
   },
 };
-// --split 1: the two-worker session of the browser (apps/web/src/split-session.ts):
+// --split 1: the two-worker session of the browser (packages/workbench-core/src/split-session.ts):
 // the ColdFire instance runs in this thread, the DSP instance in a worker_threads
 // worker (tools/devtools/wasm_split.mjs), DSPI2 frames cross a SharedArrayBuffer. Same
 // scenario loop and events, so the PCM must be the single-instance PCM.
@@ -127,7 +124,7 @@ const dspiStub = {
   },
 };
 if (args.split === '1') {
-  const web = path.join(root, 'apps/web/src');
+  const web = path.join(root, 'packages/workbench-core/src');
   const { createCfSide } = await import(path.join(web, 'split-session.ts'));
   const { createLinkBuffer } = await import(path.join(web, 'sab-link.ts'));
   const { Worker } = await import('node:worker_threads');
@@ -319,7 +316,7 @@ const wallS = (performance.now() - wallStart) / 1000;
 let pcm = Buffer.concat(chunks);
 let stats;
 if (cfSide) {
-  const { LinkServer } = await import(path.join(root, 'apps/web/src/sab-link.ts'));
+  const { LinkServer } = await import(path.join(root, 'packages/workbench-core/src/sab-link.ts'));
   new LinkServer(linkBuffer).close();
   const done = await dspDone;
   pcm = Buffer.from(done.pcm);

@@ -1,0 +1,169 @@
+{
+  "machines": [
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [
+            null,
+            {
+              "param": "decay",
+              "slot": 26
+            },
+            {
+              "param": "pick_position",
+              "slot": 27
+            },
+            null,
+            {
+              "param": "brightness",
+              "slot": 29
+            },
+            {
+              "param": "excitation_colour",
+              "slot": 30
+            }
+          ],
+          "level": 10,
+          "name": "Pluck",
+          "own_dsp": true,
+          "page": {
+            "name": "PLUCK",
+            "title": "Pluck"
+          },
+          "position": null,
+          "short": "PLK",
+          "type": null
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            {
+              "param": "decay",
+              "slot": 1
+            },
+            {
+              "param": "pick_position",
+              "slot": 2
+            },
+            null,
+            {
+              "param": "brightness",
+              "slot": 4
+            },
+            {
+              "param": "excitation_colour",
+              "slot": 5
+            },
+            null,
+            {
+              "slot": 7,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "Pluck",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "PLK",
+          "type": null
+        }
+      },
+      "id": "pluck",
+      "name": "Pluck",
+      "short": "PLK"
+    }
+  ],
+  "module": "digikit/pluck",
+  "params": {
+    "dn2": [
+      {
+        "default": 16384,
+        "id": "decay",
+        "max": 32512,
+        "min": 0,
+        "name": "Decay",
+        "short": "DECAY",
+        "slot": 26,
+        "template": 213
+      },
+      {
+        "default": 8192,
+        "id": "pick_position",
+        "max": 32512,
+        "min": 0,
+        "name": "Pick position",
+        "short": "PICK",
+        "slot": 27,
+        "template": 213
+      },
+      {
+        "default": 20480,
+        "id": "brightness",
+        "max": 32512,
+        "min": 0,
+        "name": "Brightness",
+        "short": "BRIGHT",
+        "slot": 29,
+        "template": 213
+      },
+      {
+        "default": 10240,
+        "id": "excitation_colour",
+        "max": 32512,
+        "min": 0,
+        "name": "Excitation colour",
+        "short": "COLOR",
+        "slot": 30,
+        "template": 213
+      }
+    ],
+    "dt2": [
+      {
+        "default": 16384,
+        "id": "decay",
+        "max": 32512,
+        "min": 0,
+        "name": "Decay",
+        "short": "DECAY",
+        "slot": 1,
+        "template": 204
+      },
+      {
+        "default": 8192,
+        "id": "pick_position",
+        "max": 32512,
+        "min": 0,
+        "name": "Pick position",
+        "short": "PICK",
+        "slot": 2,
+        "template": 204
+      },
+      {
+        "default": 20480,
+        "id": "brightness",
+        "max": 32512,
+        "min": 0,
+        "name": "Brightness",
+        "short": "BRIGHT",
+        "slot": 4,
+        "template": 204
+      },
+      {
+        "default": 10240,
+        "id": "excitation_colour",
+        "max": 32512,
+        "min": 0,
+        "name": "Excitation colour",
+        "short": "COLOR",
+        "slot": 5,
+        "template": 204
+      }
+    ]
+  }
+}

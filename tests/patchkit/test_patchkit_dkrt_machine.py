@@ -2,7 +2,7 @@
 
 Static checks: the committed objects are current, the DSP section is deterministic, its relocation agrees in three places
 (the Rust reference loader behind `patchkit dkm-dsp-image`, this file's own, and the loader's checks), and the two sides of the
-DSP area's size agree. The emulator proofs are the boot-time equivalence scenarios (equiv-dyn-* in tests/digikit and modules/core/adapters/dynreg/tests/equiv.device.test.ts: a selected
+DSP area's size agree. The emulator proofs are the boot-time equivalence scenarios (equiv-dyn-* in tests/digikit and runtime/core/tests/machines/equiv.device.test.ts: a selected
 module against the patched-in one, PCM sample for sample); the hot-load proof that was here is archived."""
 
 import json
@@ -14,9 +14,9 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 
-from tools.device.dklog_kinds import RUNTIME_VERSION  # noqa: E402
 from tools.patchkit import (  # noqa: E402
     modroots,
+    pk_device,
     pk_dkrt,
     pk_dkrt_machine,
     pk_toolchains,
@@ -73,14 +73,15 @@ def test_dsp_section_is_deterministic_and_relocates_like_the_reference(tmp_path)
     # the voice names its machine by key: the 24-bit hash of "test/sine:sine" above a zero type byte
     h = pk_dkrt_machine.machine_hash("test/sine", "sine")
     assert (
-        f"voice type h{h:06x} entry +0x0 note_on +0x14a state 16x8 clear 8" in info
+        f"voice type h{h:06x} entry +0x0 note_on +0x126 state 16x8 clear 8" in info
         and "imports _dv_exp2" in info
     )
-    # the guard's ranges: LEVEL (knob 1) declares 0 .. 0x7f00; TUNE and LEV are stock rows (undeclared)
-    assert "ranges [0, 7f000000, 0, 0, 0, 0, 0, 0]" in info
-    assert (
-        f"runtime   >= {'.'.join(map(str, RUNTIME_VERSION))}" in info
-    )  # DSP sections of version 2 (voices with knob ranges) need runtime 5
+    # the guard's ranges: since S3 a parameter is declared by a builder call that carries no range, so every knob is undeclared (0)
+    assert "ranges [0, 0, 0, 0, 0, 0, 0, 0]" in info
+    # a module needs the newest `since` of the imports it links (sdk.toml), at least the version that introduced the header table (`[runtime] table`):
+    # not the runtime's own patch version
+    table = tomllib.loads((ROOT / "sdk/sdk.toml").read_text())["runtime"]["table"]
+    assert f"runtime   >= {table}" in info
     sec = pk_dkrt_machine.parse_dsp_section(a.read_bytes())
     imports = {"_dv_exp2": 0xB9D7E0, "_dv_frame_hw": 0xB9D80E}
     for base in (0x2000_0000, 0x2001_AE80, 0x2003_F000):
@@ -99,13 +100,15 @@ def test_runtime_watch_env_preserves_dma_holes_and_sequential_mode(
 ):
     from tools.coldfire import arena_safety
 
+    device = "dt2"
+    stage = 0x20000
     plan = tmp_path / "runtime.plan.json"
     plan.write_text(
         json.dumps(
             {
-                "base": {"device": "dt2", "version": "1.17"},
+                "base": {"device": device, "version": "1.17"},
                 "regions": {"cf.expansion": [0x180]},
-                "symbols": {"core/runtime@0.1.0:DKRT_STAGE": 0x20000},
+                "symbols": {"core/runtime@0.1.0:DKRT_STAGE": stage},
             }
         )
     )
@@ -113,7 +116,8 @@ def test_runtime_watch_env_preserves_dma_holes_and_sequential_mode(
     env = pk_dkrt_machine.runtime_watch_env(
         plan, tmp_path / "watch.jsonl", sequential=True
     )
-    assert env["DIGI_WRITE_WATCH"] == "0x1000-0x20000,0x30000-0x80000"
+    stage_end = stage + pk_device.load(device)["limits"]["stage_bytes"]
+    assert env["DIGI_WRITE_WATCH"] == f"0x1000-{stage:#x},{stage_end:#x}-0x80000"
     assert env["DIGI_WRITE_WATCH_ALLOW_PC"] == "0x1000-0x1180"
     assert env["DIGI_WRITE_WATCH_AFTER"] == "cacr" and env["DIGI_FLUSH_CHECK"] == "1"
     assert env["DIGI_WRITE_WATCH_SEQ"] == "1"

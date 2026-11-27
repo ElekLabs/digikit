@@ -1,0 +1,36 @@
+[module]
+id = "test/lfo-shape"
+version = "0.1.0"
+name = "LFO shape"
+category = "test"
+type = "service"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: emits one lfo_shape record with dk_record_add; no firmware effect."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The record the module emits: its key derives from the module id and this id (`DK_KEY_SHAPE` in build/gen/module_ids.h). The packer writes the key into the header
+# table, where the boot planner checks that the kind has an owner and that no other module has the key.
+[[record]]
+kind = "lfo_shape"
+id = "shape"
+
+# The record block `init` commits: the register section header (16 bytes) and one record (80 bytes).
+[uses.dt2]
+record_bytes = 96
+
+[uses.dn2]
+record_bytes = 96
+
+# C, built by `patchkit build`; the runtime loads it from the card store.
+[[object]]
+path = "build/lfo-shape.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"

@@ -1,0 +1,148 @@
+# link: the ColdFire side of the DSP link: block interrupt, frame call, records
+# Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
+
+[[fn]]
+name = "cf.link.fn.block_isr"
+was = ["health.hook.block"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "e17112316e2cef97a3ebdd4ec57cc849", offset = 0x0, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "f44b8037b4b199d47efc3899eb659b74", offset = 0x0, len = 8 }
+mark = "D"
+users = ["core/health"]
+doc = "The block interrupt handler (vector 191), found by the hashes of core/dsp-link. `cf.link.site.reply_copy_lit` is the literal of its first `pea` (the address of the record copy: the DSP's last reply, 0xabc bytes; its first word is the DSP's cycle count)."
+
+[[fn]]
+name = "cf.link.fn.frame"
+was = ["dl.cf.frame_fn"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "c7fa95828acc6073c8bac3dcd78b465f", offset = 0x0, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "321c6b90f1d02ec2acbb38e45d7f6940", offset = 0x0, len = 2 }
+mark = "D"
+users = ["core/dsp-link"]
+doc = "The stock block-frame driver, called by the block interrupt handler with `jsr abs.l` at +0x68; core/dsp-link keeps it as the stock sender."
+
+# The firmware's own DSP block counter (finding 37, "Safe mode after the first UI pass"): the tail of the block interrupt handler (vector 191,
+# the function core/dsp-link and core/health find by these hashes) adds the block to its clocks with `addq.l #1,<counter>` and nothing else
+# touches the word, so it counts blocks (1500 per second) from boot. The anchor is the 4-byte address literal of that instruction
+# (`52b9 <lit>`): offset 0x1654 in the Digitakt II function, 0x1d4e in the Digitone II one, the same in both versions of each.
+[[site]]
+name = "cf.link.site.block_isr.counter_lit"
+was = ["cf.storage.site.block_counter_lit", "dkrt.fw.block_counter_lit"]
+bind = "static"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "e17112316e2cef97a3ebdd4ec57cc849", offset = 0x1654, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "f44b8037b4b199d47efc3899eb659b74", offset = 0x1d4e, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "The 4-byte address literal of `addq.l #1,<counter>` in the block interrupt handler's tail: the firmware's DSP block counter, 1500 per second from boot. core/runtime reads it."
+
+# ColdFire anchors. The block-frame sender is an interrupt handler (finding 04: vector 191; DT2 vector_191_handler, DN2 the
+# handler at 0x40025e36 in 1.11 and 1.12). It calls the stock driver with `jsr abs.l` at 104 bytes into the handler, in all
+# four images; the driver is found by its masked hash, and the literal `lea <tx queue>,a0` inside it gives the queue's address.
+# Digitakt II:
+# Digitone II:
+[[site]]
+name = "cf.link.site.block_isr.frame_call"
+was = ["cf.link.site.frame_call", "dl.cf.frame_call"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "e17112316e2cef97a3ebdd4ec57cc849", offset = 0x68, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "f44b8037b4b199d47efc3899eb659b74", offset = 0x68, len = 6 }
+mark = "D"
+users = ["core/dsp-link"]
+doc = "ColdFire anchors."
+
+[[site]]
+name = "cf.link.site.reply_copy_lit"
+was = ["cf.link.site.rec_lit", "dl.cf.rec_lit", "health.rec_lit"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "e17112316e2cef97a3ebdd4ec57cc849", offset = 0x56, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "f44b8037b4b199d47efc3899eb659b74", offset = 0x56, len = 4 }
+mark = "D"
+users = ["core/dsp-link", "core/health"]
+doc = "The literal of the handler's first `pea`: the address of the record copy (the DSP's last reply). dl_diag reads the diagnostic words there; the same site core/health reads."
+
+[[site]]
+name = "cf.link.site.tx_queue_lit"
+was = ["cf.link.site.tx_lit", "dl.cf.tx_lit"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "c7fa95828acc6073c8bac3dcd78b465f", offset = 0x6c, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "321c6b90f1d02ec2acbb38e45d7f6940", offset = 0x92, len = 4 }
+mark = "D"
+users = ["core/dsp-link"]
+doc = "The 4-byte literal of `lea <tx queue>,a0` inside the stock frame driver: the address of the DSP transmit queue. core/dsp-link writes to it."
+
+[[hook]]
+name = "cf.link.hook.block_isr"
+site = "cf.link.fn.block_isr"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["ccr"] }
+handler = { sig = "void ()", args = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/health"]
+doc = "Entry of the DSP block interrupt handler (vector 191); the hook point for per-block counting and reading the DSP's cycle count."
+
+[[hook]]
+name = "cf.link.hook.block_isr.frame_call"
+site = "cf.link.site.block_isr.frame_call"
+cpu = "cf"
+mode = "retarget"
+regs = { in = [], clobbers = ["ccr"] }
+handler = { sig = "void (i32 len, const u16 *src, i32 reclen, const u16 *rec)", args = ["sp+4", "sp+8", "sp+12", "sp+16"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/dsp-link"]
+doc = "The jsr abs.l with which the block interrupt handler calls the stock frame driver (four arguments on the stack); the hook point for the DSP link's per-block sender."
+
+[[site]]
+name = "cf.link.site.boot_wire_size"
+cpu = "cf"
+devices = ["dn2"]
+rule = { kind = "cf_func", hash = "ca0006cf073207083d26359db1321886", offset = 0x290, len = 6 }
+mark = "D"
+users = ["core/sample-pool"]
+doc = "DN2 1.12 boot-only size getter CALL, before the transfer size setter and DMA arming. Retargeting this call leaves the original getter and stock 0xabc reply copy unchanged. Private diagnostic only."
+
+[[hook]]
+name = "cf.link.hook.boot_wire_size"
+site = "cf.link.site.boot_wire_size"
+cpu = "cf"
+mode = "retarget"
+regs = { in = [], clobbers = ["ccr"] }
+handler = { sig = "u32 ()", args = [] }
+devices = ["dn2"]
+mark = "D"
+users = ["core/sample-pool"]
+doc = "Private boot-only replacement for the wire-length getter call."
+
+[[site]]
+name = "cf.link.site.reply_copy"
+cpu = "cf"
+devices = ["dn2"]
+rule = { kind = "cf_func", hash = "321c6b90f1d02ec2acbb38e45d7f6940", offset = 0x34, len = 6 }
+mark = "D"
+users = ["core/sample-pool"]
+doc = "DN2 1.12 stock reply memcpy CALL inside the frame driver, before DMA rearming. Keep its 0xabc length: destination+0xabc is the stock TX buffer."
+
+[[hook]]
+name = "cf.link.hook.reply_copy"
+site = "cf.link.site.reply_copy"
+cpu = "cf"
+mode = "retarget"
+regs = { in = [], clobbers = ["ccr"] }
+handler = { sig = "u8 *(u8 *destination, const u8 *source, u32 length)", args = ["sp+4", "sp+8", "sp+12"] }
+devices = ["dn2"]
+mark = "D"
+users = ["core/sample-pool"]
+doc = "Private wrapper preserves the original copy and return value, then copies the isolated extension before DMA rearming."
+
+[[fn]]
+name = "cf.link.fn.reply_copy"
+cpu = "cf"
+devices = ["dn2"]
+rule = { kind = "cf_func", hash = "15dd6d0fca20a82c6d39d15a7971a3af", offset = 0x0, len = 2 }
+sig = "u8 *(u8 *destination, const u8 *source, u32 length)"
+mark = "D"
+users = ["core/sample-pool"]
+doc = "Original DN2 reply memcpy, returning destination in D0; retained by the private extension wrapper."

@@ -1,0 +1,68 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-boot-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime"
+  ],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "safe-mode.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "test/c-demo",
+          "test/dyn-dn2",
+          "test/dyn-crash",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "core-only.device.test.ts"
+        ],
+        "firmwareOnly": "a core-only boot of the real firmware: the reported cause, the core-only frame in place of the intro, the resident store answering, and the counter cleared on the card by an upload of the package or by RETRY",
+        "modules": [],
+        "plusdrive": true,
+        "sources": [
+          "runtime/core/tests/fixtures/safe-counter.bin",
+          "runtime/core/tests/fixtures/core-crashes.bin",
+          "runtime/core/tests/fixtures/core-missing.bin"
+        ]
+      },
+      {
+        "files": [
+          "boot-restart.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "test/dyn-dn2",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
+        "plusdrive": true
+      }
+    ],
+    "mergeTests": [
+      "safe-mode.device.test.ts"
+    ]
+  }
+}

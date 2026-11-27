@@ -1,0 +1,139 @@
+.firmware-symbols {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.firmware-symbols[hidden] {
+  display: none;
+}
+
+.symbols-body {
+  overflow: auto;
+  padding: 20px 0;
+  color: var(--ink-2);
+}
+
+.symbols-body section {
+  max-width: 860px;
+  display: grid;
+  gap: 12px;
+}
+
+.symbols-body h3 {
+  font-size: 17px;
+}
+
+.symbols-body h3,
+.symbols-body strong {
+  color: var(--ink);
+}
+
+.symbols-target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--panel);
+}
+
+.symbols-body code {
+  display: block;
+  flex-basis: 100%;
+  color: var(--ink-2);
+  font: 11px/1.55 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.symbols-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.symbols-body button {
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.symbols-body button:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+
+.symbols-body button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.symbols-files,
+.symbols-images {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.symbols-files {
+  display: grid;
+  gap: 8px;
+}
+
+.symbols-files > li {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--panel);
+}
+
+.symbols-file {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.symbols-file > div {
+  min-width: 0;
+}
+
+.symbols-images li {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.symbols-match {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--ok);
+}
+
+.symbols-error {
+  color: var(--bad);
+  overflow-wrap: anywhere;
+}
+
+.symbol-profiles {
+  display: grid;
+  gap: 16px;
+}
+.symbol-profile summary {
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.symbol-profile .symbols-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+.symbols-origin {
+  margin-left: 8px;
+  font-size: 0.85em;
+  color: var(--ink-3);
+}

@@ -1,0 +1,60 @@
+[module]
+id = "digikit/lfo_shapes_1"
+version = "0.1.0"
+name = "LFO Shapes 1"
+category = "lfo"
+type = "service"
+author = "digikit"
+status = "experimental"
+summary = "Seven LFO shapes: staircase, pulse, half sine, rectified sine, soft square, sidechain duck and wobble."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# One record per shape (src/module.c, `KEYS`): its key derives from the module id and this id (`DK_KEY_<ID>` in build/gen/module_ids.h). The packer writes the key into the
+# header table, where the boot planner checks that the kind has an owner and that no other module has the key. The kind is an LFO shape: a value of the LFO WAVE parameter. A module has 1 to 8 shapes.
+[[record]]
+kind = "lfo_shape"
+id = "stp4"
+
+[[record]]
+kind = "lfo_shape"
+id = "puls"
+
+[[record]]
+kind = "lfo_shape"
+id = "hsin"
+
+[[record]]
+kind = "lfo_shape"
+id = "absn"
+
+[[record]]
+kind = "lfo_shape"
+id = "soft"
+
+[[record]]
+kind = "lfo_shape"
+id = "duck"
+
+[[record]]
+kind = "lfo_shape"
+id = "wobl"
+
+# The record block `init` commits: the register section header (16 bytes) and one record (80 bytes) per shape; `module:check` writes the measured size.
+[uses.dt2]
+record_bytes = 576
+
+[uses.dn2]
+record_bytes = 576
+
+# C, built by `patchkit build`; the runtime loads it from the card store.
+[[object]]
+path = "build/lfo_shapes_1.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"

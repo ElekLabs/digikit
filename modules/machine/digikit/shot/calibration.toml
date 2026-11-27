@@ -1,0 +1,9 @@
+# The case of this module in the calibration profile "modules" (devices/calibration/profiles/modules.toml, docs/INSTRUMENTATION.md "Calibration runs").
+schema = "dk.calcase/1"
+id = "shot"
+module = "digikit/shot"
+# the sample machine imports the sample pool, which not every image has: the runtime then refuses the module and the case is skipped with that reason
+needs = ["core/sample-pool"]
+steps = "play-module-machine"
+# a sample voice ends with its sample: the key is pressed again every second so that the voice sounds for the whole window (not measured: no image of this repository has the sample pool)
+args = { machine = "digikit/shot", retrigger_ms = 1000 }

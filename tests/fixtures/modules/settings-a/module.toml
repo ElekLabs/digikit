@@ -1,12 +1,12 @@
 [module]
 id = "test/settings-a"
 version = "0.1.0"
-name = "Settings API A"
+name = "Boot settings"
 category = "test"
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "Test fixture: the module settings API (put, get, remove through service commands run in slot 0; reads its key in dkm_init)."
+summary = "Test fixture: the module settings API (put, get, remove through service commands run in `tick`; reads its key in `init`)."
 requires = []
 conflicts = []
 

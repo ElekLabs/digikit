@@ -21,7 +21,7 @@
 use sharc_native::frames::{self, FrameOut, Pack, hex, median, run_call};
 use sharc_native::rt::{Int, NUREG, V};
 use sharc_native::sha256::Sha256;
-use sharc_native::{Engine, canon, trap_name};
+use sharc_native::{Engine, canon};
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -32,7 +32,7 @@ fn clock() -> u64 {
 }
 
 fn load(p: &Pack) -> Engine {
-    frames::load(p).expect("frame pack")
+    frames::load(p, &sharc_gen::CORE).expect("frame pack")
 }
 
 fn reload(e: &mut Engine, p: &Pack) {
@@ -460,7 +460,7 @@ fn main() {
                 );
                 for ((b, kind, at), c) in rows.iter().take(25) {
                     if *kind == 1 {
-                        let t = trap_name(sharc_native::rt::Trap(*at));
+                        let t = sharc_gen::CORE.trap_name(sharc_native::rt::Trap(*at));
                         println!("    block {b:#x} trap {t}: {c}");
                     } else {
                         println!("    block {b:#x} kind {kind} at {at:#x}: {c}");

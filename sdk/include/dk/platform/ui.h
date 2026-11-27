@@ -1,68 +1,62 @@
 /* <dk/platform/ui.h>: menus, lists and dialogs on the device screen. Hand-written.
-   The calls are device-agnostic. core/ui implements them for each device with the firmware's own views.
+   The calls are device-agnostic. core/ui implements them for each device with the firmware's own views. The prototypes of the generated calls are in
+   <dk/gen/imports.h> (included here); this header adds the menu descriptor, the flags and the two calls that need typed pointers.
 
-   The new entry (<dk/core/module.h>, include it first; the prototypes are in <dk/gen/imports.h>): `dk_ui_service_open(ctx, &ui)` in `init` gives the UI handle,
-   or DK_E_MISSING when core/ui is not in the image; the module then loads and decides whether it can run without menus. The menu calls have new names
-   and the same rules as the old ones: dk_ui_menu_open/close/select/refresh/is_open and the rows dk_ui_menu_add_text/add_action/add_submenu/add_toggle/add_value and dk_ui_menu_check/checked
-   (an action or change callback is a `dk_ui_action_fn`: `void (void *arg, int32_t value)`; `dk_ui_menu_add_action(menu, text, run, arg, value)` gives it the pointer `arg`
-   and the `value` the row was added with). dk_ui_menu_new, dk_ui_toast, dk_ui_confirm, dk_ui_choice and dk_ui_tick
-   keep their names and are declared below. The module's settings menu is the `menu` field of `dk_module`: `void menu(dk_module_ctx *ctx, dk_ui_menu *menu)`.
-   Transitional: `dk_ui_service_open` is the accessor that becomes `dk_ui_open` (docs/plans/sdk.md section 5.1); the name `dk_ui_open` is still the old call that opens a
-   menu (below), and S2b-2 renames `dk_ui_service_open` to `dk_ui_open`. The text below is the old entry and the calls both entries share.
+   `dk_ui_open(ctx, &ui)` in `init` gives the UI handle, or DK_E_MISSING when core/ui is not in the image: the module then loads and decides whether
+   it can run without menus. The calls that make an object or a dialog take the handle first: dk_ui_menu_new, dk_ui_confirm, dk_ui_choice,
+   dk_ui_toast and dk_ui_tick. The calls that work on a menu take the menu: dk_ui_menu_open/close/select/refresh/is_open, the rows
+   dk_ui_menu_add_text/add_action/add_submenu/add_toggle/add_value and dk_ui_menu_check/checked. An action or change callback is a
+   `dk_ui_action_fn`: `void (void *arg, int32_t value)`; `dk_ui_menu_add_action(menu, text, run, arg, value)` gives it the pointer `arg` and the `value`
+   the row was added with. The module's settings menu is the `menu` field of `dk_module`: `void menu(dk_module_ctx *ctx, dk_ui_menu *menu)`.
 
-   A menu is built once and kept. Its fill function adds the rows each time the menu opens or is
-   refreshed:
+   A menu is built once and kept. Its fill function adds the rows each time the menu opens or is refreshed:
 
-     static void fill(dk_ui_menu *m, void *ctx) {
-         dk_ui_action(m, "APPLY", apply, ctx, 0);
-         dk_ui_toggle(m, "LOUD", &loud, loud_changed, ctx);
+     static void fill(dk_ui_menu *m, void *arg) {
+         dk_ui_menu_add_action(m, "APPLY", apply, arg, 0);
+         dk_ui_menu_add_toggle(m, "LOUD", &loud, loud_changed, arg);
      }
      static const dk_ui_menu_desc main_desc = {.name = "MyMenu", .title = "MY MODULE", .fill = fill};
-     dk_ui_open(dk_ui_menu_new(&main_desc));
+     dk_ui_menu_open(dk_ui_menu_new(ui, &main_desc));
 
    Lifetime rules:
    - Text is copied when a row is added or a dialog opens. The caller may reuse its buffers.
-   - ctx is kept and passed to the callbacks later, after the opening function has returned.
+   - `arg` is kept and passed to the callbacks later, after the opening function has returned.
      It must point at static or module memory, never at the stack.
    - Callbacks run on the UI task. A dialog's callback runs after the dialog has closed.
    - Menus are never freed. Dialogs free themselves after they close.
-   - A content module (a .dkm) has no unload at run time, so no UI object of the module is freed. Every
-     ctx, callback and descriptor a module passes must still point at its own memory (static data or
-     code of the module), never at the stack or at a heap block that is freed later. Build a menu when
-     the user opens it (in the entry point below, or from a callback), after all modules are loaded.
+   - A menu is never freed and keeps its descriptor, `fill` and `arg`. A module that built a menu with `dk_ui_menu_new` (or whose settings menu the DIGIKIT menu
+     has opened) is therefore not unloaded or reloaded while the device runs: the runtime refuses with DK_E_RELOAD_MENUS until the next restart. A module that builds
+     none can be. Every arg, callback and descriptor a module passes must still point at its own memory (static data or code of the module), never at the stack or at a heap block
+     that is freed later. Build a menu when the user opens it (in `menu`, or from a callback), after all modules are loaded.
 
-   A module with settings exports dkm_menu with DK_MENU(fill). The DIGIKIT menu shows SETTINGS... for
-   the loaded module and calls dkm_menu only when the user opens it; fill adds the rows of that menu:
+   A module with settings sets the `menu` field of `dk_module`. The DIGIKIT menu shows SETTINGS... for the loaded module and calls it only when the user
+   opens it; it adds the rows of that menu:
 
-     static void settings(dk_ui_menu *m, void *ctx) { dk_ui_action(m, "RESET", reset, 0, 0); }
-     DK_MENU(settings)
+     static void menu(dk_module_ctx *ctx, dk_ui_menu *m) { dk_ui_menu_add_action(m, "RESET", reset, 0, 0); }
 
    The calls are imports of the module (sdk/sdk.toml, requires core/ui). When core/ui is not in the
-   image the module still loads and each call returns its failure value: dk_ui_menu_new 0, the
-   int calls -1, dk_ui_has, dk_ui_checked and dk_ui_is_open 0, the void calls nothing.
+   image the module still loads: `dk_ui_open` returns DK_E_MISSING, and the other calls return a failure value
+   (dk_ui_menu_new NULL, the calls with a result a negative code, dk_ui_menu_checked and dk_ui_menu_is_open 0) or do nothing.
 
    Keys: YES runs a row's action, flips a toggle, or (in a list with a check function) toggles the
    row's check mark. The encoder changes a value row; changed is called only when the value moves.
    In a list, RIGHT opens the side panel; choosing a panel row closes the panel, then runs the row.
-   LEFT or NO closes the panel. NO on a menu goes back.
-
-   Before a call that a device may not have, check dk_ui_has(cap). */
+   LEFT or NO closes the panel. NO on a menu goes back. */
 #ifndef DK_UI_H
 #define DK_UI_H
 #include <stdint.h>
+#include <dk/gen/imports.h>
+#include <dk/platform/canvas.h>
+#include <dk/gen/keys.h>
 
-/* Bytes of row text, terminator included. Longer text is cut. */
+/* Label limits include the terminator. Plain text rows in a list scroll when selected. */
 #define DK_UI_ROW 24
+#define DK_UI_LIST_TEXT 80
 /* Characters a toast shows. */
 #define DK_UI_TOAST 32
 
-typedef struct dk_ui_menu dk_ui_menu;
-
 /* Adds the rows of a menu or of a list's side panel. */
-typedef void dk_ui_fill_fn(dk_ui_menu *m, void *ctx);
-/* A row action or a change: arg is the value the row was added with (an action) or the new value
-   (a toggle or a value). */
-typedef void dk_ui_act_fn(void *ctx, int arg);
+typedef void dk_ui_fill_fn(dk_ui_menu *m, void *arg);
 
 /* Menu flags. */
 enum {
@@ -77,89 +71,98 @@ typedef struct dk_ui_menu_desc {
     const char *title; /* shown in the title */
     uint32_t flags;    /* DK_UI_* */
     dk_ui_fill_fn *fill;
-    void *ctx;
+    void *arg; /* passed to fill, panel, check and back */
     /* DK_UI_LIST only. Each may be 0. */
     const char *empty; /* text shown when the list has no rows */
-    void (*panel)(dk_ui_menu *panel, int row,
-                  void *ctx);                  /* RIGHT on row: add the side-panel rows */
-    void (*check)(void *ctx, int row, int on); /* YES on row toggled its check mark */
-    int (*back)(void *ctx);                    /* NO on the list: return 1 to stay open */
+    void (*panel)(dk_ui_menu *panel, int32_t row,
+                  void *arg);                          /* RIGHT on row: add the side-panel rows */
+    void (*check)(void *arg, int32_t row, int32_t on); /* YES on row toggled its check mark */
+    int32_t (*back)(void *arg);                        /* NO on the list: return 1 to stay open */
 } dk_ui_menu_desc;
 
-/* Capabilities for dk_ui_has. */
-enum {
-    DK_UI_CAP_MENU = 1,
-    DK_UI_CAP_TEXT_PAGE,
-    DK_UI_CAP_LIST,
-    DK_UI_CAP_TOGGLE,
-    DK_UI_CAP_VALUE,
-    DK_UI_CAP_CONFIRM,
-    DK_UI_CAP_CHOICE,
-    DK_UI_CAP_TOAST,
-    DK_UI_CAP_TICK,
-};
+/* Make a menu from a descriptor; NULL when out of memory. `desc` must stay valid: it is kept. Context: ui. Since api 2.11. */
+dk_ui_menu *dk_ui_menu_new(dk_ui *ui, const dk_ui_menu_desc *desc);
 
-/* 1 when this device has the capability. A missing one makes its calls do nothing and return -1. */
-int dk_ui_has(int cap);
+/* A choice of `n` items. `done(arg, index)` gets the index; NO closes the dialog without calling `done`. Returns 0 when shown, a negative code when not
+   (out of memory, or another dialog is open). `title` is cut to DK_UI_ROW - 1 (23) characters and every item to DK_UI_LIST_TEXT - 1 (79); the stock popup shows what fits.
+   A tab in an item starts a second column: "NAME\tREST" is drawn with REST at the same pixel column in every item (core/ui pads the shorter NAMEs). Context: ui. Since api 2.11. */
+int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int32_t n,
+                     dk_ui_choice_fn *done, void *arg);
 
-/* Menus and lists. */
-dk_ui_menu *dk_ui_menu_new(const dk_ui_menu_desc *d); /* 0 when out of memory; d must stay valid */
-int dk_ui_open(
-    dk_ui_menu *
-        m); /* fill, then show on top of the current view; if open, refresh. A menu or list keeps its selected row
-                                  from the last time; a text page opens at its first row. */
-void dk_ui_close(dk_ui_menu *m);
-/* Puts the cursor of a list or menu on row `row` (counted as the rows are added; clamped to the rows). Call it before dk_ui_open to start a
-   list on its current choice: dk_ui_open keeps the cursor row. On an open list the cursor moves at once. */
-void dk_ui_select(dk_ui_menu *m, int row);
-int dk_ui_is_open(const dk_ui_menu *m);
-void dk_ui_refresh(dk_ui_menu *m); /* fill again; the selection stays on the same row when it can */
+/* Like dk_ui_choice, and the popup opens with item `start` selected; an index outside 0..n-1 selects item 0. Context: ui. Since runtime 0.13.3. */
+int32_t dk_ui_choice_at(dk_ui *ui, const char *title, const char *const *items, int32_t n,
+                        int32_t start, dk_ui_choice_fn *done, void *arg);
 
-/* Rows, added from a fill function. In a list, the row number (from 0, in the order added) is the
-   row argument of panel and check. */
-void dk_ui_action(dk_ui_menu *m, const char *text, dk_ui_act_fn *fn, void *ctx, int arg);
-void dk_ui_submenu(dk_ui_menu *m, const char *text, dk_ui_menu *sub);
-void dk_ui_text(dk_ui_menu *m, const char *text); /* no action */
-/* ON/OFF. *value is read when drawn; changed gets the new value after *value is written. */
-void dk_ui_toggle(dk_ui_menu *m, const char *text, int *value, dk_ui_act_fn *changed, void *ctx);
-/* A number from min to max, changed by the encoder. */
-void dk_ui_value(dk_ui_menu *m, const char *text, int *value, int min, int max,
-                 dk_ui_act_fn *changed, void *ctx);
+/* The other dialogs are in <dk/gen/imports.h>:
+     int32_t dk_ui_confirm(ui, title, text, done, arg)   YES or NO; done(arg, yes) gets 1 for YES, 0 for NO. title and text: up to 80 characters each.
+     int32_t dk_ui_toast(ui, text)                       a short message on the main screen that goes away by itself.
+   Rows are added from a fill function. In a list, the row number (from 0, in the order added) is the `row` argument of panel and check;
+   dk_ui_menu_select puts the cursor on a row before dk_ui_menu_open, so a list starts on its current choice (dk_ui_menu_open keeps the cursor row;
+   a text page opens at its first row). dk_ui_menu_refresh fills again; the selection stays on the same row when it can. dk_ui_menu_add_toggle: ON/OFF,
+   `*value` is read when drawn, `changed` gets the new value after `*value` is written. dk_ui_menu_add_value: a number from `min` to `max` changed by the
+   encoder. dk_ui_menu_check / dk_ui_menu_checked: the check marks of a DK_UI_LIST.
 
-/* The check marks of a DK_UI_LIST. */
-void dk_ui_check(dk_ui_menu *list, int row, int on);
-int dk_ui_checked(const dk_ui_menu *list, int row);
-
-/* Dialogs. Each returns 0 when shown, -1 when not (missing capability, out of memory, or another
-   dialog is open). */
-/* YES or NO. done gets 1 for YES, 0 for NO. title and text: up to 80 characters each. */
-int dk_ui_confirm(const char *title, const char *text, void (*done)(void *ctx, int yes), void *ctx);
-/* One of n items. done gets the index; NO closes the dialog without calling done. */
-int dk_ui_choice(const char *title, const char *const *items, int n,
-                 void (*done)(void *ctx, int index), void *ctx);
-/* A short message on the main screen that goes away by itself. */
-int dk_ui_toast(const char *text);
-
-/* A timer in the UI task (DK_UI_CAP_TICK). fn(ctx) runs about every period_ms, in the same task as the fill and action callbacks, so it
-   may call dk_ui_refresh and read module state without a lock. Use it to redraw a screen that shows a change nobody triggers with a key
+   A timer in the UI task, `dk_ui_tick(ui, fn, arg, period_ms)`: fn(arg) runs about every period_ms, in the same task as the fill and action callbacks,
+   so it may call dk_ui_menu_refresh and read module state without a lock. Use it to redraw a screen that shows a change nobody triggers with a key
    (a load that is still running). Rules:
    - The accuracy is the UI loop (about 8 ms) at best; a callback runs late when the task is busy. Do not count calls: read the state.
    - Keep fn short. It runs between key events and delays them. It must not wait.
-   - fn and ctx stay in use: static module code and memory, never the stack.
-   - A timer is identified by (fn, ctx). Calling again with the same pair changes its period (the next call is one period away).
+   - fn and arg stay in use: static module code and memory, never the stack.
+   - A timer is identified by (fn, arg). Calling again with the same pair changes its period (the next call is one period away).
      period_ms 0 stops it, also from inside fn; stopping a timer that does not run is not an error. Stop the timer when its screen
      closes: a running timer costs a call per period.
    - Room for 4 timers in the image, shared by all modules. A longer period than 1,000,000 ms is cut.
-   Returns 0 when set or stopped, -1 when it could not be (no core/ui or no DK_UI_CAP_TICK, fn 0, or the table is full). */
-typedef void dk_ui_tick_fn(void *ctx);
-int dk_ui_tick(dk_ui_tick_fn *fn, void *ctx, uint32_t period_ms);
+   Returns 0 when set or stopped, a negative code when it could not be (fn 0, or the table is full). */
 
-/* The module settings entry point: defines dkm_menu (docs/design/digikit-dkm.md) with fill as its body. The DIGIKIT
-   menu passes the menu to fill and 0 as ctx. */
-#define DK_MENU(fill)                                                                              \
-    void dkm_menu(dk_ui_menu *m, void *ctx)                                                        \
-    {                                                                                              \
-        fill(m, ctx);                                                                              \
-    }
+/* ---- Module screens ----
+   `dk_ui_view_open(ui, &desc)` opens a screen the module draws. Context: ui. Returns a handle, or NULL when the desc is wrong or the pool is full (room for
+   DK_UI_VIEWS views in the image, shared by all modules).
+   - DK_UI_VIEW_OVERLAY: the view is drawn over the stock screen, and every key goes on to the stock views (`key` is not called). Without the flag the view
+     covers the screen and gets the keys first: `key` returns 1 when it used the key, and 0 to pass it on to the stock view below.
+   - `draw(arg, canvas)` runs for every frame while the view is open (<dk/platform/canvas.h>).
+   - `closed(arg)` runs once, after the view left the screen: after `dk_ui_view_close`, or when the system closed it. It may open a view again.
+   - `dk_ui_view_close` with the handle closes the view. Closing a handle twice, or after `closed`, does nothing. A view is closed for you when its module unloads
+     (without a `closed` call, as the module is gone), so a module with views stays unloadable.
+   - `desc` is copied. `arg` is kept: static or module memory, never the stack. Callbacks run in the UI task and must be short.
+   `key(arg, key, flags)` gets the logical key (<dk/gen/keys.h>) and the event flags: DK_UI_KEY_DOWN is set for a press and clear for a release; the other bits
+   are reserved. A key the device gives no name is not passed to the view and does not act on the stock screen. */
+#define DK_UI_KEY_DOWN 1u
+enum {
+    DK_UI_VIEW_OVERLAY = 1,
+};
+#define DK_UI_VIEWS 4
+
+typedef struct dk_ui_view_desc {
+    uint32_t flags; /* DK_UI_VIEW_* */
+    void (*draw)(void *arg, const dk_canvas *canvas);
+    int32_t (*key)(void *arg, dk_key key, uint32_t flags); /* full screen only; 1 = used */
+    void (*closed)(void *arg);                             /* 0 or a function */
+    void *arg;
+} dk_ui_view_desc;
+
+dk_ui_view *dk_ui_view_open(dk_ui *ui, const dk_ui_view_desc *desc);
+
+/* ---- A row in SETTINGS ----
+   `dk_ui_settings_row(ui, text, open, arg)`, in `init` only: adds a row `text` (up to DK_UI_ROW - 1 characters) at the end of the SETTINGS list.
+   `open(arg)` runs on YES, in the UI task. Rows are in load order, after the rows of the DIGIKIT menu. Room for DK_UI_SETTINGS_ROWS rows in the image.
+   The row goes away when the module or service unloads. The owner is a module or a service file: its record name keys the row. Returns 0, DK_E_CONTRACT (no `text` or `open`, or a `ui` that is
+   not an owner's handle: the core handle of dk_ui_core_handle has no record, so no row) or DK_E_NOMEM (no room). */
+#define DK_UI_SETTINGS_ROWS 4
+
+/* ---- The stock naming screen ----
+   `dk_ui_text_input(ui, &desc)` opens the firmware's own text entry. `done(arg, text)` runs on YES only, with the text as edited (trailing blanks
+   removed); NO closes the screen and calls nothing. `title` is the prompt, `initial` the text to start from (NULL: empty; longer than `max_len`: cut).
+   `max_len` is 1 to DK_UI_TEXT_INPUT_MAX and must fit the screen. One entry screen at a time. Context: ui.
+   Returns 0 when shown, DK_E_CONTRACT (the desc is wrong) or DK_E_BUSY (a text input is open) or another negative code. */
+#define DK_UI_TEXT_INPUT_MAX 15
+
+typedef struct dk_ui_text_input_desc {
+    const char *title, *initial;
+    uint32_t max_len;
+    void (*done)(void *arg, const char *text);
+    void *arg;
+} dk_ui_text_input_desc;
+
+int32_t dk_ui_text_input(dk_ui *ui, const dk_ui_text_input_desc *desc);
 
 #endif

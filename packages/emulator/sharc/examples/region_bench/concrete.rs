@@ -6,13 +6,13 @@
 //! Unsupported forms, controls and unknown entry inputs refuse before running.
 use generated::core_g as core;
 use generated::syms::*;
+use sharc_gen::generated;
+use sharc_gen::sym_of;
 use sharc_native::fast::decode_view::Dec;
 use sharc_native::rt::{
     Fields, FlagUpdate, Insn, R, RegView, S_CONFIDENT, SYM_DYN, SpecView, St, Sym, Trap, V, VI, bnd,
 };
-use sharc_native::{
-    EXIT_NEXT, EXIT_TRAP, Engine, addressing, decode, exec_insn, generated, sym_of,
-};
+use sharc_native::{EXIT_NEXT, EXIT_TRAP, Engine, addressing, decode, exec_insn};
 use std::time::Instant;
 
 type Res<T> = Result<T, String>;
@@ -833,12 +833,18 @@ fn boundary_diag(
 // Small synthetic RAM keeps random differential tests independent of the
 // multi-megabyte captured overlay. Each complete decoded instruction is checked.
 fn forms(p: &Program, image: &[u8], mode: u32, trials: usize) -> Res<usize> {
-    let mut a = Engine::from_image(image).map_err(|e| format!("image error {e}"))?;
-    let mut b = Engine::from_image(image).map_err(|e| format!("image error {e}"))?;
-    let mut c = Engine::from_image(image).map_err(|e| format!("image error {e}"))?;
-    let mut d = Engine::from_image(image).map_err(|e| format!("image error {e}"))?;
-    let mut reparse = Engine::from_image(image).map_err(|e| format!("image error {e}"))?;
-    let mut full_advance = Engine::from_image(image).map_err(|e| format!("image error {e}"))?;
+    let mut a =
+        Engine::from_image(image, &sharc_gen::CORE).map_err(|e| format!("image error {e}"))?;
+    let mut b =
+        Engine::from_image(image, &sharc_gen::CORE).map_err(|e| format!("image error {e}"))?;
+    let mut c =
+        Engine::from_image(image, &sharc_gen::CORE).map_err(|e| format!("image error {e}"))?;
+    let mut d =
+        Engine::from_image(image, &sharc_gen::CORE).map_err(|e| format!("image error {e}"))?;
+    let mut reparse =
+        Engine::from_image(image, &sharc_gen::CORE).map_err(|e| format!("image error {e}"))?;
+    let mut full_advance =
+        Engine::from_image(image, &sharc_gen::CORE).map_err(|e| format!("image error {e}"))?;
     let corners = [
         0, 0x80000000, 1, 0x80000001, 0x007fffff, 0x00800000, 0x3f800000, 0xbf800000, 0x7f800000,
         0xff800000, 0x7fc12345, 0x7f812345, 0x7f7fffff, 0xff7fffff,
