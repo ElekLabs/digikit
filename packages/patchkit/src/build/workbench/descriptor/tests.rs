@@ -67,7 +67,7 @@ fn each_new_type_writes_its_kind_and_body() {
 
 #[test]
 fn a_version_1_module_encodes_as_before() {
-    // the bytes the encoder made before the typed settings: checked in by hand from the old layout
+    // the bytes the version 1 encoder made before the typed settings (taken from that encoder)
     for (dir, id, name, hex) in [
         (
             "modules/tool/tools/bootscreen",

@@ -2,6 +2,7 @@
 //! on this enum.
 
 use super::declaration::{RawField, RawType};
+use super::descriptor::MAX_STRING_BYTES;
 use super::label::Label;
 use crate::error::*;
 use std::collections::HashSet;
@@ -110,9 +111,9 @@ impl Kind {
             ));
         }
         let reset_label = raw.reset_label.clone().unwrap_or_else(|| "None".into());
-        if !(1..=255).contains(&reset_label.len()) {
+        if !(1..=MAX_STRING_BYTES).contains(&reset_label.len()) {
             return Err(err!(
-                "setting {id:?}: reset label must be 1 to 255 UTF-8 bytes"
+                "setting {id:?}: reset label must be 1 to {MAX_STRING_BYTES} UTF-8 bytes"
             ));
         }
         Ok(Kind::FileName {
@@ -151,21 +152,20 @@ impl Kind {
         let Some(toml::Value::Integer(default)) = raw.default else {
             return Err(err!("setting {id:?}: integer needs an integer default"));
         };
-        let default = i32::try_from(default)
-            .ok()
-            .filter(|d| (min..=max).contains(d))
-            .ok_or_else(|| err!("setting {id:?}: default is outside min and max"))?;
-        if (i64::from(default) - i64::from(min)) % i64::from(step) != 0 {
-            return Err(err!("setting {id:?}: default is not on a step"));
-        }
-        Ok(Kind::Integer {
+        let outside = || err!("setting {id:?}: default is outside min and max or not on a step");
+        let default = i32::try_from(default).map_err(|_| outside())?;
+        let kind = Kind::Integer {
             min,
             max,
             step,
             decimals,
             unit,
             default,
-        })
+        };
+        if !kind.accepts(&default.to_be_bytes()) {
+            return Err(outside());
+        }
+        Ok(kind)
     }
 
     fn choice(raw: &RawField) -> Result<Kind> {
@@ -211,15 +211,16 @@ impl Kind {
         }
     }
 
-    /// The word in `workbench.toml` and in the generated TypeScript.
+    /// The type word in `workbench.toml` and in the generated TypeScript (the one name table is `RawType::name`).
     pub(super) fn name(&self) -> &'static str {
-        match self {
-            Kind::Text { .. } => "text",
-            Kind::FileName { .. } => "file-name",
-            Kind::Integer { .. } => "integer",
-            Kind::Boolean { .. } => "boolean",
-            Kind::Choice { .. } => "choice",
-        }
+        let declared = match self {
+            Kind::Text { .. } => RawType::Text,
+            Kind::FileName { .. } => RawType::FileName,
+            Kind::Integer { .. } => RawType::Integer,
+            Kind::Boolean { .. } => RawType::Boolean,
+            Kind::Choice { .. } => RawType::Choice,
+        };
+        declared.name()
     }
 
     /// True for the kinds a version 1 descriptor holds.
@@ -236,8 +237,7 @@ impl Kind {
         }
     }
 
-    #[cfg(test)]
-    /// Whether `value` is a stored value of this kind: length and UTF-8 for the text kinds (file names are checked against the module's
+    /// The one value rule: whether `value` is a stored value of this kind: length and UTF-8 for the text kinds (file names are checked against the module's
     /// files by the runtime), range, step and length for an integer, 0 or 1 for a boolean, an index below the count for a choice.
     pub(super) fn accepts(&self, value: &[u8]) -> bool {
         match self {

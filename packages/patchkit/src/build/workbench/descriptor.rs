@@ -5,6 +5,8 @@ use super::schema::Schema;
 use crate::error::*;
 
 const MAX_BYTES: usize = 512;
+/// The most bytes of a string in the descriptor: its length takes one byte.
+pub(super) const MAX_STRING_BYTES: usize = 255;
 
 fn push_string(out: &mut Vec<u8>, value: &str) {
     // Every string was checked to fit in a byte when the schema was read.

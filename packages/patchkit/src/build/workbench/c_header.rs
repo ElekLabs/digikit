@@ -1,5 +1,6 @@
 //! The C header patchkit generates from a `Schema`: the descriptor bytes, one key macro per setting and typed inline accessors over
-//! `dk_settings_get` and `dk_settings_put`. Names start with `WB_SETTING_` and `wb_setting_`.
+//! `dk_settings_get` and `dk_settings_put`. Names start with `WB_SETTING_` and `wb_setting_`. No label or other free text is written
+//! into the header: a comment would have to escape it.
 
 use super::kind::Kind;
 use super::schema::Schema;
@@ -54,7 +55,7 @@ impl CHeader {
     }
 
     fn setting(&mut self, s: &Setting) {
-        writeln!(&mut self.text, "\n/* {} */", s.label().replace("*/", "* /")).unwrap();
+        self.text.push('\n');
         self.define(s.constant("KEY"), format_args!("\"{}\"", s.id()));
         match s.kind() {
             Kind::Text { max_bytes } | Kind::FileName { max_bytes, .. } => {

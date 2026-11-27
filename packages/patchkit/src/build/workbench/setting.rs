@@ -2,12 +2,11 @@
 
 use super::apply::Apply;
 use super::declaration::RawField;
+use super::descriptor::MAX_STRING_BYTES;
 use super::ident::Ident;
 use super::kind::Kind;
 use crate::error::*;
 use dkrt_sdk::settings::{KEY_MAX, module_key};
-
-pub(super) const TEXT_MAX_BYTES: usize = 255;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Setting {
@@ -30,8 +29,10 @@ impl Setting {
                 raw.id
             )
         })?;
-        if !(1..=TEXT_MAX_BYTES).contains(&raw.label.len()) {
-            return Err(err!("settings label must be 1 to 255 UTF-8 bytes"));
+        if !(1..=MAX_STRING_BYTES).contains(&raw.label.len()) {
+            return Err(err!(
+                "settings label must be 1 to {MAX_STRING_BYTES} UTF-8 bytes"
+            ));
         }
         Ok(Setting {
             id: raw.id.clone(),
