@@ -26,22 +26,24 @@ impl Scalar {
 pub(in crate::build::wire) fn max_sizes(schema: &Schema) -> Vec<u32> {
     let mut max: Vec<u32> = vec![];
     for m in &schema.messages {
-        let mut total = 0;
+        // saturating: a bound is at most REPLY_MAX, but nested repeated messages multiply
+        let mut total: u32 = 0;
         for f in &m.fields {
             let key = key_len(f);
             let one = |kind: &Kind| match kind {
                 Kind::Scalar(s) => s.max_size(),
-                Kind::String(n) | Kind::Bytes(n) => varint_len(u64::from(*n)) + n,
-                Kind::Message(i) => varint_len(u64::from(max[*i])) + max[*i],
+                Kind::String(n) | Kind::Bytes(n) => varint_len(u64::from(*n)).saturating_add(*n),
+                Kind::Message(i) => varint_len(u64::from(max[*i])).saturating_add(max[*i]),
             };
-            total += match (&f.kind, f.repeated) {
+            total = total.saturating_add(match (&f.kind, f.repeated) {
                 (Kind::Scalar(s), Some(n)) => {
-                    let body = n * s.max_size();
-                    key + varint_len(u64::from(body)) + body
+                    let body = n.saturating_mul(s.max_size());
+                    key.saturating_add(varint_len(u64::from(body)))
+                        .saturating_add(body)
                 }
-                (kind, Some(n)) => n * (key + one(kind)),
-                (kind, None) => key + one(kind),
-            };
+                (kind, Some(n)) => n.saturating_mul(key.saturating_add(one(kind))),
+                (kind, None) => key.saturating_add(one(kind)),
+            });
         }
         max.push(total);
     }
@@ -51,21 +53,25 @@ pub(in crate::build::wire) fn max_sizes(schema: &Schema) -> Vec<u32> {
 /// An upper bound of `sizeof` of each message's C struct (every member padded to 4 bytes; the ColdFire pads to 2), by message index.
 pub(in crate::build::wire) fn struct_sizes(schema: &Schema) -> Vec<u32> {
     let mut sizes: Vec<u32> = vec![];
-    let pad = |n: u32| n.div_ceil(4) * 4;
+    // every step saturates: no bound wraps, a size past u32 stays over the stack budget
+    let pad = |n: u32| n.div_ceil(4).saturating_mul(4);
     for m in &schema.messages {
-        let mut total = 0;
+        let mut total: u32 = 0;
         for f in &m.fields {
-            total += match (&f.kind, f.repeated) {
+            total = total.saturating_add(match (&f.kind, f.repeated) {
                 (Kind::Scalar(_), None) => 4,
-                (Kind::Scalar(Scalar::Bool), Some(n)) => pad(n) + 4,
-                (Kind::Scalar(_), Some(n)) => 4 * n + 4,
-                (Kind::String(n), None) => pad(n + 1) + 4,
-                (Kind::Bytes(n), None) => pad(*n) + 4,
-                (Kind::String(n), Some(c)) => c * pad(n + 1) + 4 * c + 4,
-                (Kind::Message(i), None) => sizes[*i] + 4,
-                (Kind::Message(i), Some(c)) => c * sizes[*i] + 4,
+                (Kind::Scalar(Scalar::Bool), Some(n)) => pad(n).saturating_add(4),
+                (Kind::Scalar(_), Some(n)) => n.saturating_mul(4).saturating_add(4),
+                (Kind::String(n), None) => pad(n.saturating_add(1)).saturating_add(4),
+                (Kind::Bytes(n), None) => pad(*n).saturating_add(4),
+                (Kind::String(n), Some(c)) => c
+                    .saturating_mul(pad(n.saturating_add(1)))
+                    .saturating_add(c.saturating_mul(4))
+                    .saturating_add(4),
+                (Kind::Message(i), None) => sizes[*i].saturating_add(4),
+                (Kind::Message(i), Some(c)) => c.saturating_mul(sizes[*i]).saturating_add(4),
                 (Kind::Bytes(_), Some(_)) => unreachable!("refused by the schema"),
-            };
+            });
         }
         sizes.push(pad(total));
     }

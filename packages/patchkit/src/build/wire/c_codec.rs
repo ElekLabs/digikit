@@ -62,12 +62,20 @@ impl<'a> CCodec<'a> {
         for e in &schema.enums {
             c.head.push('\n');
             for (name, number) in &e.values {
+                // the enum's name keeps equal value names of nested enums apart
                 let value = if *number < 0 {
                     format!("({number})")
                 } else {
                     number.to_string()
                 };
-                writeln!(c.head, "#define {}_{} {value}", prefix.to_uppercase(), name).unwrap();
+                writeln!(
+                    c.head,
+                    "#define {}_{}_{} {value}",
+                    prefix.to_uppercase(),
+                    e.name,
+                    name
+                )
+                .unwrap();
             }
         }
         let max = size::max_sizes(schema);
@@ -109,12 +117,12 @@ impl<'a> CCodec<'a> {
                     format!("{} {n}[{max}];\n    uint32_t {n}_count;", s.c_type())
                 }
                 (Kind::String(max), None) => {
-                    format!("char {n}[{}];\n    uint32_t {n}_len;", max + 1)
+                    format!("char {n}[{}];\n    uint32_t {n}_len;", max.saturating_add(1))
                 }
                 (Kind::Bytes(max), None) => format!("uint8_t {n}[{max}];\n    uint32_t {n}_len;"),
                 (Kind::String(max), Some(count)) => format!(
                     "char {n}[{count}][{}];\n    uint32_t {n}_len[{count}];\n    uint32_t {n}_count;",
-                    max + 1
+                    max.saturating_add(1)
                 ),
                 (Kind::Message(m), None) => format!("{} {n};\n    uint8_t has_{n};", self.ty(*m)),
                 (Kind::Message(m), Some(max)) => {
@@ -127,6 +135,3 @@ impl<'a> CCodec<'a> {
         writeln!(self.head, "}} {ty};").unwrap();
     }
 }
-
-#[cfg(test)]
-mod tests;

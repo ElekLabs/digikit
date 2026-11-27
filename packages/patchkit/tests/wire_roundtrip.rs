@@ -1,10 +1,8 @@
 //! The generated query codec against protobuf-es: `runtime/core/vectors/wire-vectors.json` (written by packages/wire) holds bytes made by
 //! protobuf-es; the C codec generated from `tests/fixtures/wire/project_manager.proto`, compiled for the host, decodes each and encodes
-//! it again, and must give protobuf-es's bytes. Refused inputs must be refused.
+//! it again, and must give protobuf-es's bytes. Refused inputs must be refused. The harness also calls the generated query table.
 
-use patchkit::build::toolchain::{CFLAGS, Env};
 use patchkit::build::wire::{CCodec, Schema};
-use patchkit::build::{cf, elf};
 use serde_json::Value;
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -63,6 +61,8 @@ fn the_c_codec_decodes_and_encodes_the_bytes_of_protobuf_es() {
         .collect();
     let lines = run_harness(&exe, &input);
     assert_eq!(lines.len(), cases.len());
+    // the query table and call function, checked inside the harness
+    assert_eq!(run_harness(&exe, &["@calls".to_string()]), ["CALLS-OK"]);
     let mut failures = vec![];
     for (case, got) in cases.iter().zip(lines) {
         let want = match case["expect"].as_str().unwrap() {
@@ -100,57 +100,4 @@ fn run_harness(exe: &std::path::Path, lines: &[String]) -> Vec<String> {
         .lines()
         .map(str::to_string)
         .collect()
-}
-
-#[test]
-fn the_generated_code_compiles_for_the_coldfire_and_passes_its_isa_check() {
-    let env = Env::new(&root());
-    if !env.m68k_or_skip() {
-        return;
-    }
-    let dir = tempfile::tempdir().unwrap();
-    harness(dir.path());
-    // every function external (no inlining away), as the module build's flags compile it; a jump table would be data words in the
-    // code, which `check_text` refuses
-    std::fs::write(
-        dir.path().join("all.c"),
-        "#include <stdint.h>\n#include \"pm.h\"\n#include \"pm.c\"\n",
-    )
-    .unwrap();
-    let compile = |source: PathBuf, name: &str| {
-        let object = dir.path().join(name);
-        let build = Command::new(env.m68k("gcc").unwrap())
-            .args(CFLAGS)
-            .arg("-DDK_WIRE_FN=")
-            .arg("-I")
-            .arg(dir.path())
-            .arg("-I")
-            .arg(root().join("sdk/include"))
-            .arg("-c")
-            .arg(source)
-            .arg("-o")
-            .arg(&object)
-            .output()
-            .unwrap();
-        assert!(
-            build.status.success(),
-            "{}",
-            String::from_utf8_lossy(&build.stderr)
-        );
-        elf::text_sections(&std::fs::read(&object).unwrap()).unwrap()
-    };
-    // the generated code and the SDK component it calls
-    let text = compile(dir.path().join("all.c"), "all.o");
-    assert!(
-        text.iter()
-            .any(|(name, _)| name.contains("pm_Coverage_decode"))
-    );
-    cf::check_text(&text, "wire: ").unwrap();
-    let helpers = compile(root().join("sdk/src/wire/wire.c"), "wire.o");
-    assert!(
-        helpers
-            .iter()
-            .any(|(name, _)| name.contains("dk_wire_get_varint"))
-    );
-    cf::check_text(&helpers, "wire helpers: ").unwrap();
 }

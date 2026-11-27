@@ -1,6 +1,6 @@
 // The shared vectors of the query codec: protobuf-es makes the bytes, the generated C codec must decode and re-encode them
-// (packages/patchkit/tests/wire_roundtrip.rs) and protobuf-es must decode what the C codec encodes (tests/codec.test.ts).
-import { create, toBinary, toJson, type DescMessage, type MessageInitShape } from '@bufbuild/protobuf';
+// (packages/patchkit/tests/wire_roundtrip.rs).
+import { create, fromBinary, toBinary, toJson, type DescMessage, type MessageInitShape } from '@bufbuild/protobuf';
 import { CoverageSchema, ListReplySchema, ListRequestSchema, ProjectSchema, Mode } from './gen/project_manager_pb.js';
 
 export type Case = {
@@ -29,6 +29,14 @@ function ok(name: string, message: string, init: object, input?: string): Case {
   const msg = create(schema, init as MessageInitShape<DescMessage>);
   const out = hex(toBinary(schema, msg));
   return { name, message, input_hex: input ?? out, expect: 'ok', output_hex: out, json: toJson(schema, msg) };
+}
+
+/** The expected message is what protobuf-es itself decodes from `input` (a case where the input is not canonical). */
+function decoded(name: string, message: string, input: string): Case {
+  const schema = schemas[message] as DescMessage;
+  const msg = fromBinary(schema, Uint8Array.from(Buffer.from(input, 'hex')));
+  const out = hex(toBinary(schema, msg));
+  return { name, message, input_hex: input, expect: 'ok', output_hex: out, json: toJson(schema, msg) };
 }
 
 const refuse = (name: string, message: string, input: string): Case => ({
@@ -94,6 +102,9 @@ function randomCases(count: number): Case[] {
           count: u32(rand),
           label: text(rand, 5),
           tags: Array.from({ length: rand(4) }, () => text(rand, 4)),
+          deltas: Array.from({ length: rand(5) }, () => i32(rand)),
+          bits: Array.from({ length: rand(6) }, () => rand(2) === 1),
+          modes: Array.from({ length: rand(4) }, () => pick(rand, [Mode.OFF, Mode.SOFT, Mode.HARD, 9])),
         }),
       );
     }
@@ -146,6 +157,18 @@ export function cases(): Case[] {
     ok('coverage-levels-6', 'Coverage', { levels: [0, 1, 2, 3, 4, 5] }),
     ok('coverage-unpacked-levels', 'Coverage', { levels: [1, 2, 3] }, '200120022003'),
     ok('coverage-skips-unknown-in-nested', 'Coverage', { project: { slot: 1 } }, '2a06' + '0801' + '7801' + '7200'),
+    ok('coverage-deltas', 'Coverage', { deltas: [0, -1, 2 ** 31 - 1, -(2 ** 31)] }),
+    ok('coverage-deltas-4', 'Coverage', { deltas: [-1, -1, -1, -1] }),
+    ok('coverage-bits', 'Coverage', { bits: [true, false, true, true, false] }),
+    ok('coverage-modes', 'Coverage', { modes: [Mode.HARD, Mode.OFF, Mode.SOFT] }),
+    ok('coverage-modes-unknown-value', 'Coverage', { modes: [1, 9, 300] }),
+    ok('coverage-unpacked-deltas', 'Coverage', { deltas: [1, -2] }, '5001' + '50feffffffffffffffff01'),
+    ok('coverage-unpacked-bits', 'Coverage', { bits: [true, false, true] }, '580158005801'),
+    ok('coverage-unpacked-modes', 'Coverage', { modes: [Mode.SOFT, Mode.HARD] }, '60016002'),
+    decoded('request-varint-bits-above-32', 'ListRequest', '08' + 'ffffffff7f'),
+    decoded('request-varint-bit-32-only', 'ListRequest', '08' + '8080808010'),
+    decoded('coverage-int32-from-5-byte-varint', 'Coverage', '10' + 'ffffffff0f'),
+    decoded('coverage-int32-bits-above-32', 'Coverage', '10' + 'ffffffff7f'),
     ...randomCases(200),
     refuse('request-truncated-varint', 'ListRequest', '0880'),
     refuse('request-wrong-wire-type', 'ListRequest', '0a0100'),
@@ -164,6 +187,9 @@ export function cases(): Case[] {
     refuse('coverage-levels-7-packed', 'Coverage', '2207' + '01'.repeat(7)),
     refuse('coverage-levels-7-unpacked', 'Coverage', '2001'.repeat(7)),
     refuse('coverage-levels-packed-truncated', 'Coverage', '22' + '02' + '01' + '80'),
+    refuse('coverage-deltas-5', 'Coverage', '5205' + '01'.repeat(5)),
+    refuse('coverage-bits-6-unpacked', 'Coverage', '5801'.repeat(6)),
+    refuse('coverage-modes-4-packed', 'Coverage', '6204' + '01'.repeat(4)),
     refuse('coverage-tag-5', 'Coverage', '4a05' + '61'.repeat(5)),
     refuse('coverage-4-tags', 'Coverage', '4a0161'.repeat(4)),
     // protobuf merges a repeated singular message; the device refuses it (the decoder has no room to merge)

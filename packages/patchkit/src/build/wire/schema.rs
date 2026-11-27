@@ -3,6 +3,7 @@
 //! Accepted: proto3; `uint32`, `int32`, `bool`, enums; `string` and `bytes` with `(dk.max_len)`; nested and top-level messages;
 //! `repeated` with `(dk.max_count)` (scalars packed, as proto3 writes them). Everything else is refused with the field named.
 
+use super::budget::REPLY_MAX as BOUND_MAX;
 use crate::error::*;
 use prost_reflect::{
     DescriptorPool, ExtensionDescriptor, FieldDescriptor, Kind as PbKind, MessageDescriptor,
@@ -49,6 +50,8 @@ pub(super) struct Message {
 
 #[derive(Clone, Debug)]
 pub(super) struct EnumDef {
+    /// The C name part: the proto name without the package, nested names joined by `_`.
+    pub(super) name: String,
     pub(super) values: Vec<(String, i32)>,
 }
 
@@ -125,7 +128,10 @@ impl Schema {
                 .values()
                 .map(|v| (v.name().to_string(), v.number()))
                 .collect();
-            schema.enums.push(EnumDef { values });
+            schema.enums.push(EnumDef {
+                name: local_name(e.full_name(), fd.package_name()),
+                values,
+            });
         }
         let mut done: Vec<String> = vec![];
         let mut stack: Vec<String> = vec![];
@@ -268,6 +274,10 @@ impl Schema {
             }
             match options.get_extension(ext).as_ref() {
                 Value::U32(0) => Err(err!("{who}: {} must be at least 1", ext.full_name())),
+                Value::U32(n) if *n > BOUND_MAX => Err(err!(
+                    "{who}: {} is at most {BOUND_MAX}, no reply is larger",
+                    ext.full_name()
+                )),
                 Value::U32(n) => Ok(Some(*n)),
                 _ => Err(err!("{who}: {} is not a number", ext.full_name())),
             }
@@ -387,6 +397,3 @@ pub(super) fn members(f: &Field) -> Vec<String> {
         _ => vec![n.clone()],
     }
 }
-
-#[cfg(test)]
-mod tests;

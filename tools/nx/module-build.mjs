@@ -128,7 +128,7 @@ export const packTarget = (workspaceRoot, byId, m, devices) => {
 // A module with a `workbench.toml` keeps a generated `workbench/gen/settings.ts`; one with a `workbench/*.proto` keeps the protobuf-es files
 // and the methods list there. The check fails when one is missing or differs from what `patchkit workbench-ts` writes. It reads the
 // declaration files, everything in `workbench/` (the proto and the generated files), the SDK options schema, the generator of
-// packages/wire and the patchkit binary (the output of `patchkit:cli`).
+// packages/wire with its package.json (the protobuf-es version), the JS toolchain and the patchkit binary (the output of `patchkit:cli`).
 export const workbenchTsCheckTarget = (root) => ({
   executor: 'nx:run-commands',
   cache: true,
@@ -138,6 +138,8 @@ export const workbenchTsCheckTarget = (root) => ({
     `{workspaceRoot}/${root}/workbench/**/*`,
     '{workspaceRoot}/sdk/proto/**/*',
     '{workspaceRoot}/packages/wire/scripts/*.ts',
+    '{workspaceRoot}/packages/wire/package.json',
+    'jsToolchain',
     { dependentTasksOutputFiles: '**/*', transitive: true },
   ],
   dependsOn: ['patchkit:cli'],

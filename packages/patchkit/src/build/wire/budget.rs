@@ -32,7 +32,7 @@ pub(super) fn check(schema: &Schema) -> Result<()> {
                 "{who}: the reply can be {reply} bytes, at most {REPLY_MAX} fit in an answer; lower a max_len or max_count"
             ));
         }
-        let stack = structs[m.request] + structs[m.reply];
+        let stack = structs[m.request].saturating_add(structs[m.reply]);
         if stack > STACK_MAX {
             return Err(err!(
                 "{who}: the request and reply structs take {stack} bytes of stack, at most {STACK_MAX} are allowed; lower a max_len or max_count"

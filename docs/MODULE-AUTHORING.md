@@ -601,7 +601,7 @@ and other integer types, groups, a repeated `bytes`, an unbounded string, bytes 
 streaming method.
 
 Patchkit generates the C at build time (the same temporary include directory as `<workbench_descriptor.h>`). Include
-`<workbench_queries.h>`, which holds the structs (`<package>_<Message>`), the enum constants, `<PACKAGE>_<Message>_MAX_SIZE`,
+`<workbench_queries.h>`, which holds the structs (`<package>_<Message>`), the enum constants (`<PACKAGE>_<Enum>_<VALUE>`, the enum's nested name joined by `_`), `<package>_<Message>_MAX_SIZE` (lowercase package, e.g. `pm_Project_MAX_SIZE`),
 `DK_WORKBENCH_QUERY_COUNT` and `dk_workbench_queries[]` (`<dk/query.h>`), and write one handler per method. The name is the package, `_`, and the
 method name in snake case (`List` in package `pm`: `pm_list`):
 
@@ -610,7 +610,7 @@ int32_t pm_list(dk_module_ctx *ctx, const pm_ListRequest *request, pm_ListReply 
 ```
 
 The handler runs in the UI task. It fills `reply` (zeroed before the call) and returns 0, or a negative `DK_E_*` code that the page sees as
-a refusal. Call `dk_workbench_register_queries(ctx, dk_workbench_queries, DK_WORKBENCH_QUERY_COUNT)` in `init`, after `dk_workbench_register`.
+a refusal. Call `dk_workbench_register_queries(ctx, dk_workbench_queries, DK_WORKBENCH_QUERY_COUNT)` in `init`, after `dk_workbench_register`; the function comes with runtime 0.13.5.
 The generated call function decodes the request (`DK_E_FORMAT` when it is malformed, when a bound is broken, or when a singular message field
 occurs twice; unknown fields are skipped), calls the handler and encodes the reply into the runtime's buffer (`DK_E_TOO_BIG` when it does
 not fit). The device does not check strings for UTF-8: the page checks what it shows. The packer links the wire helpers
