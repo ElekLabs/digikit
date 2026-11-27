@@ -1,0 +1,22 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "@digi/module-ui",
+  "targets": {
+    "test-host": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "hostTests",
+        "{workspaceRoot}/vitest.host.config.ts",
+        "{workspaceRoot}/vitest.host/module-ui.json",
+        "{workspaceRoot}/runtime/core/vectors/workbench-vectors.json"
+      ],
+      "outputs": [],
+      "options": {
+        "forwardAllArgs": false,
+        "command": "pnpm exec vitest run --config vitest.host.config.ts --project module-ui",
+        "cwd": "."
+      }
+    }
+  }
+}

@@ -1,8 +1,18 @@
-import type { ModuleSettingsEndpoint, PublicField, PublicModuleSettings } from '@digi/dk-session';
+import {
+  createModuleClient,
+  type DescribedSchema,
+  type DynamicSettings,
+  type FileNameSetting,
+  type ModuleChannel,
+  type ModuleFileClient,
+  type ModulePageDefinition,
+} from '@digi/module-ui';
 import { For, Show, createSignal } from 'solid-js';
-import { bindModuleFiles, type ModuleFileClient } from '@digi/workbench-core/module-ui/module-files.ts';
-import { publicSettingsClient } from '@digi/workbench-core/module-ui/public-settings.ts';
-import type { ModulePage, SettingsClient } from '@digi/workbench-core/module-ui/module-page.ts';
+import { Dynamic } from 'solid-js/web';
+import { createDeviceModuleChannel } from '@digi/workbench-core/module-ui/device-module-channel.ts';
+import { deviceSettingsChannel } from '@digi/workbench-core/module-ui/device-settings.ts';
+import { bindModuleFiles } from '@digi/workbench-core/module-ui/module-files.ts';
+import type { ModulePage } from '@digi/workbench-core/module-ui/module-page.ts';
 import { errorLine } from '@digi/workbench-core/modules/backend.ts';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import type { ModuleFilesSpec } from '@digi/workbench-core/transfer/env.ts';
@@ -18,8 +28,8 @@ function FilePanel(props: {
   app: TransferApp;
   files: ModuleFileClient;
   current: () => boolean;
-  settings?: SettingsClient;
-  choices: Extract<PublicField, { kind: 'file-name' }>[];
+  settings?: DynamicSettings;
+  choices: FileNameSetting[];
 }) {
   const [busy, setBusy] = createSignal('');
   const [error, setError] = createSignal('');
@@ -81,13 +91,17 @@ function FilePanel(props: {
   );
 }
 
-export function moduleFilePage(
-  app: TransferApp,
-  id: string,
-  schema?: PublicModuleSettings,
-  openSettings?: (current: () => boolean) => ModuleSettingsEndpoint,
-): ModulePage {
-  const choices = (schema?.settings ?? []).filter((field) => field.kind === 'file-name');
+/** What a module's page is made of: its settings schema and channel (absent for a module with a file panel only), the page it ships (absent: the generic form). */
+export interface ModulePageParts {
+  schema?: DescribedSchema;
+  /** The channel of this page's mount; `current` ends with the mount and the instance. */
+  channel: (current: () => boolean) => ModuleChannel;
+  definition?: ModulePageDefinition;
+}
+
+export function moduleFilePage(app: TransferApp, id: string, parts: ModulePageParts): ModulePage {
+  const { schema, channel, definition } = parts;
+  const choices = (schema?.settings ?? []).filter((field): field is FileNameSetting => field.kind === 'file-name');
   const spec = Object.hasOwn(MODULE_FILES, id)
     ? MODULE_FILES[id]
     : choices.length
@@ -102,13 +116,14 @@ export function moduleFilePage(
     descriptor: {
       id,
       name: schema?.name ?? spec?.name ?? id,
-      settings: (schema?.settings ?? []).filter((field) => field.kind === 'text'),
-      operations: [],
+      schema: schema ?? { version: 1, settings: [] },
+      hasPage: definition !== undefined,
+      hasFiles: spec !== undefined,
     },
     open(current) {
-      const binding = app.target.bindSession();
-      const settings = schema && openSettings ? publicSettingsClient(schema, openSettings(current)) : undefined;
-      const files = bindModuleFiles(id, binding, current);
+      const client = createModuleClient(channel(current));
+      const settings: DynamicSettings | undefined = schema ? client.settings(schema) : undefined;
+      const { files } = client;
       return {
         settings,
         Panel: spec
@@ -124,11 +139,24 @@ export function moduleFilePage(
               />
             )
           : undefined,
+        Page: definition ? () => <Dynamic component={definition.Page} client={client} /> : undefined,
       };
     },
   };
 }
 
+/** The pages of the modules that have a file panel declared in module.toml: they show whether or not the module is loaded with settings. */
 export function moduleFilePages(app: TransferApp) {
-  return new Map(Object.keys(MODULE_FILES).map((id) => [id, moduleFilePage(app, id)]));
+  return new Map(
+    Object.keys(MODULE_FILES).map((id) => [
+      id,
+      moduleFilePage(app, id, {
+        channel: (current) =>
+          createDeviceModuleChannel({
+            settings: deviceSettingsChannel(id),
+            files: bindModuleFiles(id, app.target.bindSession(), current),
+          }),
+      }),
+    ]),
+  );
 }

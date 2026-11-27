@@ -162,6 +162,8 @@ export class DkError extends Error {
   /** The spec's status name (`E_FULL`) for a device error. */
   status?: string;
   freeBytes?: number;
+  /** The revision a module settings refusal carried. */
+  revision?: number;
   constructor(j: { error: string; kind: string; status?: string; free_bytes?: number | null }) {
     super(j.error);
     this.kind = j.kind;

@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.0",
+    "happy-dom": "21.0.4",
     "typescript": "5.9.3",
     "vite": "8.3.1",
     "vite-plugin-solid": "2.11.14",
@@ -28,6 +29,7 @@
     "solid-js": "1.9.15",
     "@digi/dk-session": "workspace:*",
     "@digi/devices": "workspace:*",
+    "@digi/module-ui": "workspace:*",
     "@digi/workbench-core": "workspace:*"
   },
   "type": "module"

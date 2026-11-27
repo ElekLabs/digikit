@@ -1,6 +1,9 @@
 import { createPreviewStores } from './module-store';
 import type { EmuRpc } from '@digi/workbench-core/host/host.ts';
-import { createPreviewModulePages } from './module-pages';
+import { bindModuleFiles } from '@digi/workbench-core/module-ui/module-files.ts';
+import { createPreviewChannels } from './module-channels';
+import { previewPageLoaders } from './module-page-loaders';
+import { previewSettingsSchemas } from './module-schemas';
 import { firmwarePort } from './firmware-mock';
 import { emulator } from './tauri-mock';
 import { createPreviewSymbols } from './symbols-mock';
@@ -21,9 +24,8 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
   const query = new URLSearchParams(location.search);
   const transferFixture = PARAMS.some((name) => query.has(name)) || query.has('lib');
   const page = query.get('page') ?? (transferFixture ? 'transfer' : undefined);
-  const modulePages = createPreviewModulePages();
   const fixture = createPreviewLibrary();
-  const stores = createPreviewStores(fixture, modulePages);
+  const stores = createPreviewStores(fixture);
   const base = createTauriHost();
   const rpc: EmuRpc = {
     async call<T>(method: string, params?: Record<string, unknown>, session?: number) {
@@ -66,7 +68,10 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
     apps: query.has('defmods') ? { ...apps, firmware: previewFirmware(apps) } : apps,
     options: {
       browserPreview: true,
-      modulePages,
+      moduleChannels: createPreviewChannels(previewSettingsSchemas(), ({ module, current }) =>
+        bindModuleFiles(module.name, apps.app.target.bindSession(), current),
+      ),
+      modulePageLoaders: previewPageLoaders,
       initialPage:
         page === 'transfer' || page === 'files' || page === 'firmware' || page === 'settings' ? page : undefined,
       ...(page === 'log'

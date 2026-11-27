@@ -1,11 +1,11 @@
-//! Version 1 registration payload and the declared settings keys.
+//! The registration payload (version 1: text and file names; version 2: also integers, booleans and choices) and the declared
+//! settings keys. A `Field` keeps offsets into the stored descriptor bytes, not the bounds of its kind.
 
+use super::cursor::Cursor;
+use super::kind::{extension, Kind, ACCEPT_BODY_MAX, TEXT_MAX};
 use dkrt_sdk::settings::{module_key, KEY_MAX};
 
 pub(super) const DESCRIPTOR_MAX: usize = 512;
-pub(super) const TEXT_MAX: usize = 64;
-const FILE_NAME_MAX: usize = 47;
-pub(super) const EXTENSION_MAX: usize = 16;
 // Each field takes at least seven bytes. The version, display name and count take at least four.
 pub(super) const FIELDS_MAX: usize = (DESCRIPTOR_MAX - 4) / 7;
 
@@ -14,8 +14,8 @@ pub(super) struct Field {
     start: u16,
     len: u8,
     pub(super) max: u8,
-    extension_start: u16,
-    extension_len: u8,
+    body: u16,
+    kind: Kind,
 }
 
 impl Field {
@@ -23,8 +23,8 @@ impl Field {
         start: 0,
         len: 0,
         max: 0,
-        extension_start: 0,
-        extension_len: 0,
+        body: 0,
+        kind: Kind::Text,
     };
 
     pub(super) fn key(self, descriptor: &[u8]) -> &[u8] {
@@ -32,9 +32,32 @@ impl Field {
         &descriptor[start..start + self.len as usize]
     }
 
+    pub(super) fn kind(self) -> Kind {
+        self.kind
+    }
+
+    fn body(self, descriptor: &[u8]) -> &[u8] {
+        &descriptor[self.body as usize..]
+    }
+
+    /// The declared extension of a file-name field; empty for every other kind.
     pub(super) fn extension(self, descriptor: &[u8]) -> &[u8] {
-        let start = self.extension_start as usize;
-        &descriptor[start..start + self.extension_len as usize]
+        match self.kind {
+            Kind::FileName => extension(self.body(descriptor)),
+            _ => &[],
+        }
+    }
+
+    /// The part of the body that `accepts` reads.
+    pub(super) fn accepted_body(self, descriptor: &[u8]) -> &[u8] {
+        let body = self.body(descriptor);
+        &body[..body.len().min(ACCEPT_BODY_MAX)]
+    }
+
+    /// Is `value` a stored value this field takes?
+    pub(super) fn accepts(self, descriptor: &[u8], value: &[u8]) -> bool {
+        self.kind
+            .accepts(self.accepted_body(descriptor), self.max, value)
     }
 }
 
@@ -53,66 +76,46 @@ impl Descriptor {
         count: 0,
     };
 
+    #[inline(never)]
     pub(super) fn parse(module: &[u8], bytes: &[u8]) -> Option<Self> {
-        if bytes.len() > DESCRIPTOR_MAX || bytes.first().copied() != Some(1) {
+        if bytes.len() > DESCRIPTOR_MAX {
             return None;
         }
-        let mut at = 1;
-        let name = take_text(bytes, &mut at)?;
-        if name.is_empty() {
+        let mut cursor = Cursor::new(bytes);
+        let version = cursor.byte().filter(|v| matches!(v, 1 | 2))?;
+        if cursor.text()?.is_empty() {
             return None;
         }
-        let count = *bytes.get(at)? as usize;
-        at += 1;
+        let count = cursor.byte()? as usize;
         if count == 0 || count > FIELDS_MAX {
             return None;
         }
         let mut fields = [Field::NONE; FIELDS_MAX];
         let mut stored = [0; KEY_MAX];
         for index in 0..count {
-            let start = (at + 1) as u16;
-            let key = take_bytes(bytes, &mut at)?;
+            let start = (cursor.at() + 1) as u16;
+            let key = cursor.string()?;
             module_key(module, key, &mut stored)?;
             if fields[..index].iter().any(|field| field.key(bytes) == key) {
                 return None;
             }
-            let label = take_text(bytes, &mut at)?;
-            let &[max, kind, apply] = bytes.get(at..at + 3)? else {
-                return None;
-            };
-            at += 3;
+            let label = cursor.text()?;
+            let [max, tag, apply] = cursor.array()?;
+            let kind = Kind::from_tag(tag).filter(|kind| kind.version() <= version)?;
             if label.is_empty() || max == 0 || max as usize > TEXT_MAX || apply > 1 {
                 return None;
             }
-            let mut field = Field {
+            let body = cursor.at() as u16;
+            kind.parse_body(&mut cursor, max)?;
+            fields[index] = Field {
                 start,
                 len: key.len() as u8,
                 max,
-                ..Field::NONE
+                body,
+                kind,
             };
-            match kind {
-                0 => (),
-                1 => {
-                    field.extension_start = (at + 1) as u16;
-                    let ext = take_bytes(bytes, &mut at)?;
-                    if !(1..=EXTENSION_MAX).contains(&ext.len())
-                        || !(ext.len() + 2..=FILE_NAME_MAX).contains(&(max as usize))
-                        || !ext
-                            .iter()
-                            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-                    {
-                        return None;
-                    }
-                    field.extension_len = ext.len() as u8;
-                    if take_text(bytes, &mut at)?.is_empty() {
-                        return None;
-                    }
-                }
-                _ => return None,
-            }
-            fields[index] = field;
         }
-        if at != bytes.len() {
+        if !cursor.done() {
             return None;
         }
         let mut raw = [0; DESCRIPTOR_MAX];
@@ -144,27 +147,5 @@ impl Descriptor {
     }
 }
 
-fn take_bytes<'a>(bytes: &'a [u8], at: &mut usize) -> Option<&'a [u8]> {
-    let size = *bytes.get(*at)? as usize;
-    *at += 1;
-    let text = bytes.get(*at..*at + size)?;
-    *at += size;
-    Some(text)
-}
-
-fn take_text<'a>(bytes: &'a [u8], at: &mut usize) -> Option<&'a str> {
-    core::str::from_utf8(take_bytes(bytes, at)?).ok()
-}
-
-/// A store leaf usable by `dk_data_path`, with a nonempty stem and the declared extension.
-pub(super) fn file_name_ok(leaf: &[u8], extension: &[u8]) -> bool {
-    let Some(dot) = leaf.iter().rposition(|&c| c == b'.') else {
-        return false;
-    };
-    dot != 0
-        && leaf[dot + 1..].eq_ignore_ascii_case(extension)
-        && !leaf.windows(2).any(|pair| pair == b"..")
-        && leaf
-            .iter()
-            .all(|c| (0x20..=0x7e).contains(c) && !matches!(c, b'/' | b'\\'))
-}
+#[cfg(test)]
+mod tests;

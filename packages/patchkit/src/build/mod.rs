@@ -27,6 +27,9 @@ pub mod show;
 pub mod test_source;
 pub mod toolchain;
 mod workbench;
+pub use workbench::TsFile;
+#[cfg(test)]
+pub(crate) use workbench::fixture as workbench_fixture;
 
 use crate::dko::Dko;
 use crate::error::*;
@@ -185,6 +188,25 @@ impl ModuleToml {
 fn manifest(moddir: &Path) -> Result<ModuleToml> {
     let p = moddir.join("module.toml");
     ModuleToml::parse(&toolchain::read_text(&p)?).map_err(|e| err!("{}: {e}", p.display()))
+}
+
+/// The generated TypeScript settings file of the module in `moddir`; `None` when it has no `workbench.toml`.
+pub fn workbench_ts(moddir: &Path) -> Result<Option<TsFile>> {
+    let manifest = manifest(moddir)?;
+    TsFile::read(moddir, manifest.id(), manifest.module.name.as_deref())
+}
+
+/// The least runtime a packed module needs for its Workbench settings descriptor: 0 without `workbench.toml` or with a version 1
+/// descriptor, `[runtime] workbench_typed` of sdk/sdk.toml for version 2.
+pub fn workbench_runtime_floor(moddir: &Path) -> Result<u32> {
+    let manifest = manifest(moddir)?;
+    workbench::runtime_floor(moddir, manifest.id(), manifest.module.name.as_deref())
+}
+
+/// The descriptor bytes patchkit generates for the Workbench settings of the module in `moddir`; `None` without `workbench.toml`.
+pub fn workbench_descriptor(moddir: &Path) -> Result<Option<Vec<u8>>> {
+    let manifest = manifest(moddir)?;
+    workbench::descriptor(moddir, manifest.id(), manifest.module.name.as_deref())
 }
 
 /// The object cache of a repository: `out/cache/dko`.

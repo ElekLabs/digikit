@@ -138,8 +138,19 @@ unsafe fn perform(
     revision: u32,
     value: &[u8],
 ) -> (i32, u32, Option<Vec<u8>>) {
+    perform_at(instance, ticket, verb, 0, revision, value)
+}
+
+unsafe fn perform_at(
+    instance: u32,
+    ticket: u32,
+    verb: u8,
+    field: u8,
+    revision: u32,
+    value: &[u8],
+) -> (i32, u32, Option<Vec<u8>>) {
     let mut out = [0; DESCRIPTOR_MAX];
-    let submit = request(verb, instance, ticket, 0, revision, value);
+    let submit = request(verb, instance, ticket, field, revision, value);
     assert_eq!(locked(|r| r.handle(&submit, &mut out)), Ok(0));
     tick();
     let poll = request(POLL, instance, ticket, 0, 0, b"");
@@ -298,4 +309,134 @@ fn workbench_file_edits_require_an_ascii_leaf_in_the_modules_own_data_directory(
         withdraw(0);
         settings::tests::teardown();
     }
+}
+
+#[test]
+fn typed_writes_are_checked_with_the_shared_vectors() {
+    let _guard = crate::test_lock::LOCK
+        .lock_with_package()
+        .unwrap_or_else(|e| e.into_inner());
+    let descriptors = vectors::descriptors();
+    let mut out = [0; DESCRIPTOR_MAX];
+    for value in vectors::values() {
+        let vector = descriptors
+            .iter()
+            .find(|d| d.name == value.descriptor)
+            .unwrap();
+        let mut reg = Registry::EMPTY;
+        reg.modules[0].descriptor =
+            Descriptor::parse(vector.module.as_bytes(), &vector.bytes).unwrap();
+        reg.publish(0);
+        let instance = reg.modules[0].instance;
+        let index = reg.modules[0]
+            .descriptor
+            .key_index(value.setting.as_bytes())
+            .unwrap();
+        let put = request(PUT, instance, 1, index as u8, 1, &value.bytes);
+        let expected = if value.valid { Ok(0) } else { Err(E_SET_VALUE) };
+        assert_eq!(reg.handle(&put, &mut out), expected, "{}", value.rule);
+    }
+}
+
+/// Enroll `descriptor` for module 0 and publish it; returns the instance. The caller retires and tears down.
+unsafe fn enroll(descriptor: &[u8]) -> u32 {
+    let ctx = entry::bind(0) as *mut u8;
+    files::init_begin(0);
+    let prev = crate::dlog::enter_module(0, crate::dlog::PHASE_INIT);
+    assert_eq!(
+        dk_workbench_register(ctx, descriptor.as_ptr(), descriptor.len() as u32),
+        OK
+    );
+    crate::dlog::leave_module(prev);
+    files::ready(0);
+    publish(0);
+    instance(0)
+}
+
+unsafe fn retire() {
+    withdraw(0);
+    files::retire(0);
+    entry::unbind(0);
+    crate::settings::tests::teardown();
+}
+
+#[test]
+fn stored_values_are_checked_on_read_with_the_shared_vectors() {
+    // The store takes any bytes: a value that the write path would refuse (an older file, another writer) still reads as invalid.
+    let _guard = crate::test_lock::LOCK
+        .lock_with_package()
+        .unwrap_or_else(|e| e.into_inner());
+    let values = vectors::values();
+    for vector in vectors::descriptors() {
+        unsafe {
+            crate::settings::tests::setup(false);
+            let instance = enroll(&vector.bytes);
+            let descriptor = Descriptor::parse(vector.module.as_bytes(), &vector.bytes).unwrap();
+            let mut ticket = 0;
+            for value in values.iter().filter(|v| v.descriptor == vector.name) {
+                let index = descriptor.key_index(value.setting.as_bytes()).unwrap();
+                let key = std::format!("{}\0", value.setting);
+                assert_eq!(
+                    entry::module_put(
+                        1,
+                        key.as_ptr(),
+                        value.bytes.as_ptr(),
+                        value.bytes.len() as u32
+                    ),
+                    OK
+                );
+                ticket += 1;
+                let (status, _, read) = perform_at(instance, ticket, GET, index as u8, 0, b"");
+                let expected = if value.valid {
+                    (OK, Some(value.bytes.clone()))
+                } else {
+                    (E_SET_VALUE, None)
+                };
+                assert_eq!((status, read), expected, "{}", value.rule);
+            }
+            retire();
+        }
+    }
+}
+
+#[test]
+fn a_stored_file_name_is_checked_on_read_against_the_declared_extension() {
+    let _guard = crate::test_lock::LOCK
+        .lock_with_package()
+        .unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        crate::settings::tests::setup(false);
+        let instance = enroll(FILE_SCHEMA);
+        for (ticket, (name, valid)) in [
+            (&b"intro.dkbs"[..], true),
+            (b"INTRO.DKBS", true),
+            (b"intro.txt", false),
+            (b"a/b.dkbs", false),
+            (b"..dkbs", false),
+            (b"\xff.dkbs", false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert_eq!(
+                entry::module_put(1, b"k\0".as_ptr(), name.as_ptr(), name.len() as u32),
+                OK
+            );
+            let (status, _, read) = perform(instance, ticket as u32 + 1, GET, 0, b"");
+            let expected = if valid {
+                (OK, Some(name.to_vec()))
+            } else {
+                (E_SET_VALUE, None)
+            };
+            assert_eq!((status, read), expected, "{name:?}");
+        }
+        retire();
+    }
+}
+
+#[test]
+fn typed_kinds_do_not_grow_the_registry() {
+    // Static RAM: bounds are read from the stored descriptor bytes, a field keeps offsets only. Unchanged by the typed kinds.
+    assert_eq!(core::mem::size_of::<Descriptor>(), 1092);
+    assert_eq!(core::mem::size_of::<Registry>(), 16656);
 }

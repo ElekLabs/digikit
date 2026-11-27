@@ -89,7 +89,7 @@ uint32_t dk_module_ctx_device(dk_module_ctx *ctx);
 /* The runtime version, packed major << 16 | minor << 8 | patch; 0 for a pointer that is not a context. Context: any. Since runtime 0.7.0. */
 uint32_t dk_module_ctx_runtime_version(dk_module_ctx *ctx);
 
-/* Register this content module's Workbench settings descriptor during init, once per load. The runtime copies the version 1 descriptor (up to 512 bytes); see the Workbench settings schema in the module authoring guide. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad descriptor, or DK_E_STATE if already registered. Workbench may read settings while a settings overlay is installed; use the device menu to edit them in that case. Context: init. Since runtime 0.11.4. */
+/* Register this content module's Workbench settings descriptor during init, once per load. The runtime copies the descriptor (up to 512 bytes; version 1 holds text and file-name settings, version 2 also integer, boolean and choice settings and needs runtime 0.13.4); see the Workbench settings schema in the module authoring guide. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad descriptor, or DK_E_STATE if already registered. Workbench may read settings while a settings overlay is installed; use the device menu to edit them in that case. Context: init. Since runtime 0.11.4. */
 int32_t dk_workbench_register(dk_module_ctx *ctx, const uint8_t *descriptor, uint32_t size);
 
 /* Open this module's settings: `*out` is the handle (the same one every time), the result 0. A negative result outside init (DK_E_NOT_FOUND) or for a bad context (DK_E_CONTRACT); `*out` is untouched then. Context: init. Since runtime 0.7.0. */

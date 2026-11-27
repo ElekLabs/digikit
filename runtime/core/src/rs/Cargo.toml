@@ -26,6 +26,7 @@ dkrt-test-support = { path = "../../test-support" }
 dkrt-lifecycle = { path = "../../lifecycle", features = ["fake"] }
 dkrt-svc-rt = { path = "../../svc-rt" }
 toml = "0.9.12"
+serde_json = "1"
 dkrt-svc-lfo = { path = "../../../../services/lfo" }
 dkrt-svc-fx = { path = "../../../../services/fx" }
 dkrt-svc-machines = { path = "../../../../services/machines" }

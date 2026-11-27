@@ -1,34 +1,118 @@
 # Workbench module pages
 
-Runtime 0.11.4 exposes public text and file-name settings. Boot screen uses this transport for its active animation. The host preview exercises a generated text form and a colocated Solid companion. The typed settings refactor, module operations and production companion registry below are follow-up work. [Development guide](../DEVELOPMENT.md)
+A loaded module can publish typed settings and a Solid page. Workbench shows the page under Modules in the sidebar while the module is loaded on the selected target. The first real user is a Project Manager module that shows the projects saved on the card. [Development guide](../DEVELOPMENT.md)
 
-## Discovery and ownership
+Status: runtime 0.11.4 has public `text` and `file-name` settings, used by Boot screen. The sidebar Modules group, the generic form (a control for every kind), the page registry (`workbench/index.tsx` with `definePage`), the channel factory (device and memory), Transfer Open and the page import rule exist; `tests/fixtures/modules/settings-a` is the first page. Everything below marked as a phase is open.
 
-The selected target owns one inventory of loaded module records. Transfer also lists files on the card. A page lives for one loaded instance and disappears on disconnect, unload or target change. An installed file alone cannot create a page. The sidebar creates one entry per loaded module with public settings, a supported standard panel, or a compatible custom companion.
+## Layers
 
-An author adds `workbench.toml` beside `module.toml`. Patchkit validates the public settings and generates the compact descriptor that the C module registers during init. UI source and labels belong to the module. Importing `dk_settings_open` identifies a storage user for an audit, including calls through linked SDK helpers. Only explicitly declared keys become editable.
+```text
+Module page (Solid, modules/<kind>/<author>/<name>/workbench/)
+  | imports only @digi/module-ui, service host packages and solid-js
+  v
+@digi/module-ui    ModuleClient: typed settings, scoped files, operations (phase 2)
+  |                memory client for preview and tests
+  v
+workbench-core     page registry, generic form, sidebar discovery (desktop and site)
+  v
+dk-session         MODULE_UI command, files protocol
+  v
+firmware           module -> service -> runtime
+```
 
-The selected target reports each loaded module's canonical author/name ID and, for a registered settings descriptor, its loaded instance token. Workbench describes the instance through the selected session. Transfer works with older runtimes and known file panels remain available for loaded modules. In the future production registry, the host will match a compiled companion by module ID, API version and contract fingerprint. It can still render supported public fields when no companion matches.
+- `@digi/module-ui` is the TypeScript contract of a module page, as the C SDK is the contract of module code. A page cannot reach Tauri, dk-session or workbench-core internals. oxlint enforces the import rule.
+- `ModuleChannel` is the boundary: the only interface that crosses to a sandboxed page. Every request is async and takes and returns structured-clone data; progress and other notifications are `ModuleChannelEvent` messages through `subscribe`. The same page then runs compiled into the app or inside a sandboxed iframe (section "Distribution"). The real channel is workbench-core over dk-session; the memory channel serves preview and tests.
+- `ModuleClient` (`createModuleClient(channel)`) is a page-side helper: typed settings (validation, scaling, revisions) and the files helper with its `progress` callback. It never crosses the boundary.
+- A page reaches device data only through its module: settings, the module's own files and the module's operations. A service's files and formats stay private to the service; the module asks the service through its SDK exports.
+
+## Discovery
+
+- The selected target owns one inventory of loaded module records. A page lives for one loaded instance and disappears on disconnect, unload or target change. An installed file alone creates no page.
+- The sidebar shows one entry per loaded module that has public settings, a known file panel or a registered page. A module without a matching page gets the generic form of its settings.
+- In Transfer, a loaded row that has a page gets an Open action. It navigates to the sidebar page. There is one page view.
 
 ## Typed public settings
 
-Keep the module's existing `dk_settings_get`, `dk_settings_put` and `dk_settings_remove` keys and storage. The descriptor tells Workbench how to present and validate each public key. A module with private binary values can expose keys with a compatible encoding or define a separate accessor when it needs one.
+The author declares settings in `workbench.toml` beside `module.toml`. Patchkit is the only parser of this file. From it, patchkit generates:
 
-| Type | Workbench control | Stored value |
+1. the compact descriptor that the module registers in init (`dk_workbench_register`),
+2. a C header with keys, bounds and typed inline getters over `dk_settings_get`,
+3. a TypeScript file with the settings type and schema for the page.
+
+The TOML reader in `packages/workbench-core/src/module-ui/descriptor.ts` is deleted. The TS decoder of the binary descriptor stays, because a device reports descriptors. It is checked against `expected_schema` in the shared vectors (`runtime/core/vectors/workbench-vectors.json`), which patchkit writes from the same declaration as the bytes (`UPDATE_VECTORS=1`); the patchkit encoder and the runtime parser check the bytes against the same file.
+
+| Type | Workbench control | Stored value | Schema fields |
+| --- | --- | --- | --- |
+| `text` | Text box | UTF-8 | `max_bytes` (1-64) |
+| `file-name` | Dropdown of files in the module's data directory | File name | `extension`, `max_bytes` (1-47), `reset_label` |
+| `integer` | Number input | i32, big-endian, 4 bytes | `min`, `max`, `step`, `decimals` (0-4), `unit` |
+| `boolean` | Toggle | u8, 0 or 1 | none |
+| `choice` | Dropdown of labels | u8 index | `choices` (1-32 labels) |
+
+- All settings also take `id`, `label` and `apply` (`immediate` or `next-restart`).
+- The ColdFire has no FPU, so there is no IEEE float type. `decimals` scales an integer for display: `decimals = 2` with `min = 0`, `max = 100` shows 0.00 to 1.00, and the module reads 0 to 100. A float type is added only when a module needs one.
+- The runtime checks every write on the UI task: length, type, range, step, choice index, UTF-8 and file names. It reads bounds from the registered descriptor bytes, so the registry's static RAM does not grow.
+- The store, DKM envelope and MODULE_UI verbs stay. `[workbench] version = 1` is the TOML format and does not change. The first byte of the binary descriptor stays 1 when a module uses only `text` and `file-name`, and is 2 when it uses a new type. Patchkit writes the new minimum runtime only for packs that use a new type. An older Workbench shows the known file panels of a version 2 module but not its settings form.
+
+Example:
+
+```toml
+[workbench]
+version = 1
+
+[[setting]]
+id = "gain"
+label = "Gain"
+type = "integer"
+min = 0
+max = 100
+decimals = 2
+unit = "dB"
+apply = "immediate"
+
+[[setting]]
+id = "mode"
+label = "Mode"
+type = "choice"
+choices = ["Off", "Soft", "Hard"]
+apply = "immediate"
+```
+
+Generated TypeScript and its use in a page:
+
+```ts
+export interface Settings { gain: number; mode: 'Off' | 'Soft' | 'Hard' }
+export const settings: SettingsSchema<Settings> = { /* ids, bounds, labels */ };
+
+const s = client.settings(settings);
+await s.put('gain', 0.75);       // checked against min, max, step and decimals before sending
+const mode = await s.get('mode');
+```
+
+Generated C:
+
+```c
+static inline int32_t settings_gain(dk_settings *s);   /* scaled: 75 = 0.75 */
+static inline uint8_t settings_mode(dk_settings *s);   /* SETTINGS_MODE_SOFT, ... */
+```
+
+### Cost
+
+Measured on the merge of origin/main (e154c975a) with this branch; `patchkit pack` for both devices (the sizes are equal on DT2 and DN2).
+
+| Item | Measured | Check |
 | --- | --- | --- |
-| `text` | Text box with a byte limit | UTF-8 text |
-| `file-name` | Dropdown of compatible files in the module's data directory | Filename |
-| `integer` (proposed) | Numeric input with whole-number and range validation | Decimal text |
+| `.dkm` size | settings-a 1268 -> 1520 bytes (image 564 -> 736, reloc 320 -> 360, import 192 -> 224, bss 136 unchanged). Boot screen 6020 -> 6020 bytes (no change: it stays a version 1 descriptor). Under the limit of 512 for the descriptor. | `.dkm` size of settings-a and Boot screen before and after |
+| Runtime code | Package `.text` 196424 -> 198420 bytes (+1996, about 2 KB; above the 0.5-1 KB estimate: three new types with their checks, the cursor and the getter job) | runtime object size before and after |
+| Runtime RAM | No change: `size_of::<Registry>()` is 16656 and `size_of::<Descriptor>()` 1092 on both sides (pinned by `typed_kinds_do_not_grow_the_registry`) | static size of `REGISTRY` |
+| CPU | None while Workbench is idle (the tick returns at an empty queue); one request per UI pass while it talks. Module reads cost the same as today. | none |
+| Page code | None on the device | none |
 
-Render text and file-name fields in one generated settings form with the same read, save and reset behavior. The file uploader remains a separate action and a successful upload refreshes the available choices. A custom panel should be able to use the module-scoped files and settings clients directly. The control composition can change in Workbench alone.
+settings-a grew by its three new settings and the settings getter call (one more import).
 
-For integers, extend the packer, runtime validator and Workbench decoder together. Specify the integer range and representation in the schema and enforce both on the runtime. Decimal UTF-8 text fits the existing settings transport. A previously stored binary integer needs an explicit conversion or a different key. Add the new type in a runtime patch release and make Patchkit write the new minimum runtime only for packs that use it. Preserve support for existing text and file-name descriptors. The store, DKM envelope and settings commands can stay as they are.
+## Boot screen
 
-An older Workbench rejects a descriptor containing an unknown field kind. For the first integer implementation, any descriptor containing an integer requires an updated Workbench to display its settings, including the text or file-name fields in that descriptor. Known file panels can still open.
-
-## Bootscreen
-
-Boot screen declares the animation setting beside its module manifest. Patchkit compiles it into the DKM. The device registers the descriptor when the module loads. Workbench lists choices through the module's existing files client.
+Boot screen keeps its `file-name` setting and stays a version 1 descriptor.
 
 ```toml
 [workbench]
@@ -44,90 +128,75 @@ max_bytes = 47
 apply = "next-restart"
 ```
 
-Uploading an animation leaves the saved choice alone. Save selects a file present in the module's data directory, or removes the setting when Stock is chosen. The runtime uses the same settings namespace as the device menu. With a project settings overlay installed, Workbench can display the effective choice and the device menu handles edits. File contents still pass DKBS validation at boot. If a selected file goes missing, boot falls back to the stock intro.
+Uploading an animation leaves the saved choice alone. Save selects a file present in the module's data directory, or removes the setting when Stock is chosen. File contents still pass DKBS validation at boot. If a selected file goes missing, boot falls back to the stock intro.
 
-## Shared module operations
+## Project Manager
 
-A loaded module can eventually expose named, typed operations beside its settings. The module owns the interface definition, the C handlers and any custom panel. Workbench supplies a client bound to the selected target and loaded instance. The runtime supplies a shared dispatcher and codec, with one copy of the codec on ColdFire. Modules supply operation metadata and handler code. A panel can use the same typed client with an in-memory implementation in preview and tests.
+`modules/tool/digikit/project-manager` is a content module of kind `tool`, like track-manager.
 
-Keep settings and panel metadata in `workbench.toml`. Evaluate a module-local `.proto` for the operation interface. It gives us a standard schema and can generate TypeScript message types with Protobuf-ES and bounded C messages with Nanopb. Digikit still owns the mapping from a stable operation identifier to a C handler, the SysEx transport, and dispatch on the UI task. Prefer generating the mapping from the schema so module authors only implement named functions with generated signatures.
+- Device side: a SETTINGS row PROJECT with the current project's number, name and status. It calls `dk_project_current` and `dk_project_status`. These imports make the project service a hard need, so Transfer uploads the service with the module and the boot plan loads it.
+- Services load only as hard needs of selected modules (`runtime/core/src/rs/src/package/loader/plan.rs` `find_providers`; the system package holds only the runtime and the DIGIKIT menu; Transfer's `serviceRefs` offers a service only for a module that needs it). On a user card the project service runs only while Project Manager, or another module that imports a project call, is loaded. Installing Project Manager turns on per-project settings for every module.
+- Workbench page: a list of all project slots by number and name, with a mark on the current project and on slots that carry digikit data. Selecting one shows its saved state (slot, name, save stamp, write counter), its module list with each module's state on the card (present, missing, hash differs), and the number of saved settings per module. The page is read-only: no delete, rename or load.
 
-### Project Manager example
-
-The project service owns project identity, storage and consistency. Its current public SDK provides `dk_project_current` and `dk_project_status`. Listing and renaming are future service extensions. The module's handler can delegate to the service once those semantics are defined.
-
-```proto
-syntax = "proto3";
-
-package project_manager.v1;
-
-service ProjectManager {
-  rpc RenameProject(RenameProjectRequest) returns (RenameProjectResponse);
-}
-
-message RenameProjectRequest {
-  uint32 slot = 1;
-  uint32 revision = 2;
-  string name = 3;
-}
-
-message RenameProjectResponse {
-  uint32 revision = 1;
-}
+```text
+Modules > Project Manager
++ Projects ------------+ + 012  DUB SKETCH ---------------------+
+| 003  INTRO           | | Saved     write 14, stamp 6A1F02C3   |
+| 012  DUB SKETCH      | | Modules   digikit/pluck   on card    |
+| 047  LIVE SET 2      | |           digikit/shot    missing    |
+|                      | | Settings  digikit/pluck   3 keys  >  |
++----------------------+ +--------------------------------------+
 ```
 
-The slot and revision form a project reference. The service issues the revision and rechecks it when it applies a rename. Cover slot reuse, concurrent changes, and context changes in the service. Confirm its name encoding and byte limit before defining the production message.
+Data path: page -> `ModuleClient` operation -> module handler -> project service export -> runtime. The `.dkp` format stays private to the service.
 
-```ts
-const renamed = await client.ops.renameProject({
-  slot: project.slot,
-  revision: project.revision,
-  name: draftName,
-});
-```
+- `list(cursor)`: the module calls a new service export over the service's slot scan. A page holds up to 16 summaries (slot, name, flags: current, has digikit data) and a continuation cursor.
+- `get(slot)`: the module calls a new service export that returns a bounded summary of one project: header fields, the module list with each module's state on the card, and the number of settings keys per module. It fits one reply; a longer module list pages by cursor.
+- Loading and renaming come later through the same path; the service owns their consistency (slot reuse, stamps, concurrent changes).
 
-The generated C dispatch code would decode the request, invoke the module's `pm_rename_project(ctx, request, response)` on the UI task, and encode the result. The response contains the updated service revision. The panel can then reread the affected page. List operations use bounded pages with a continuation cursor. For an LFO editor, the panel can send the shape asset through the shared files client and call a bounded operation to apply it.
+## Operations (phase 2)
 
-### Codec decision
+A loaded module can expose named, typed operations beside its settings. The module owns the definitions, the C handlers and its page. Workbench supplies a client bound to the selected target and instance. The runtime supplies one dispatcher and one codec on the ColdFire. Modules supply operation metadata and handlers.
 
-Keep the codec choice open. A scratch Nanopb 0.4.9.2 probe decoded the request above with a 16-byte name bound and encoded a revision reply. The host round trip accepted a 16-byte name and refused 17 bytes. With the repository's ColdFire compiler targeting MCF54418, the linked codec, descriptors and test handler used 7,742 bytes of code and read-only data and zero bytes of static writable data. The largest compiler-reported frame was 156 bytes. The maximum request and reply were 30 and 6 bytes before SysEx framing. The probe used `PB_BUFFER_ONLY`, `PB_NO_ERRMSG` and `PB_WITHOUT_64BIT`. Patchkit's instruction check passed after compiling with `-fno-jump-tables` to keep jump tables out of executable sections. [Nanopb documentation](https://jpa.kapsi.fi/nanopb/docs/)
+- Schema: operations are declared in `workbench.toml` with the setting types plus bounded lists of records. Patchkit generates the C request and response structs, the dispatch table and handler signatures, and the TypeScript types. The author implements named functions, for example `pm_list(ctx, request, response)`.
+- Codec: a tag-length-value format with field ids, generated as `sdk/sdk.toml` is today (`packages/patchkit/src/sdkgen.rs`), with shared vectors. Field ids give the same schema evolution as protobuf. Nanopb is not used for settings. It is the fallback for operations only if a measurement favours it: a scratch probe linked 7,742 bytes of codec, descriptors and handler per module, and it adds a third-party C codec, a Python generator and a host protobuf library.
+- Transport: the operation envelope extends the MODULE_UI command with capability negotiation and is versioned apart from the runtime release. The MIDI handler acknowledges with a ticket; the UI task rechecks the instance and runs the handler; the client polls with a deadline. A repeated request id within one live instance returns its original result within a bounded window. A stale ticket yields an explicit unknown outcome, and the client rereads state before another mutation. The device reports busy when its queue is full. Unloading cancels queued work before the module's code is released.
+- Budget: the protocol allows 160 request bytes and 879 reply bytes. Reserve up to 24 bytes for the envelope (operation, instance, request id, revision or cursor). A project-list page is at most 16 summaries of up to 32 bytes. Larger data uses the files API.
 
-Before choosing, compare this with a compact generated binary codec for the same bounded exchange. Measure the shared device code and per-module metadata separately. Use one ColdFire-only execution test to measure instruction counts and peak stack on valid and oversized inputs and confirm both codecs agree with their host clients. The scratch build established cross-compilation and instruction compatibility. ColdFire execution, CPU cost, peak stack and integration into the normal module packer still need verification.
+## Distribution
 
-## Compiled Workbench distribution
+- In a checkout, a page lives in the module folder. The page registry is generated by an Nx target from the module roots (`modules/`, `tests/fixtures/modules/`, `PATCHKIT_MODULES`) with lazy imports and declared inputs. In the Vite dev server a new or imported module folder appears under Modules after the registry refreshes.
+- The released desktop app and the site compile the in-tree pages into their bundles. A module installed after the release gets the generic form when that Workbench can decode its descriptor.
+- `.dkmod` import in Workbench (later): import extracts the module, builds its `.dkm` and pushes it with its services; the page stays local and is never sent to the device. In a checkout the extracted page joins the registry. In the released app the page is compiled once at import and runs in a sandboxed iframe through the message-based `ModuleClient`, because code from outside the app build must not get Tauri IPC (the CSP allows scripts from `'self'` only). The page source is the same in both cases.
+- The released app needs a library adapter for prebuilt DKM, DKS and port files in app resources; the repository-backed library stays for authoring. This packaging work is separate.
 
-The source files live with the module for authoring. The release build will compile bundled companions and embed their descriptors in frontend assets. The settings sample registry is a preview entry point only. A production registry will match a loaded module's ID and contract fingerprint to its compiled companion. A module installed after the app release can use standard controls when that Workbench can decode its descriptor. A new executable companion requires a Workbench update in this distribution model. Independent installation of companions and direct Workbench `.dkmod` import are deferred. The existing `.dkmod` authoring export can carry panel source. The device receives the compiled `.dkm` with its device code and descriptor.
+## Preview and tests
 
-The native backend also resolves Workbench Wasm assets through the repository root. Include the required Wasm assets in the release resource lookup. The development library currently calls `lib_build` and scans the repository's `out/modules/<device>/`. Before publishing a standalone catalog, package the prebuilt DKM, DKS and port files with a device-indexed manifest in app resources. Give the released desktop app a library adapter for those resources. The existing repository-backed adapter remains useful for authoring. Verify the published app's offline library and a bundled panel on a machine without the checkout. This packaging work is separate from compiling the frontend.
+`tests/fixtures/modules/settings-a/` stays the authoring example. Phase 1 adds one setting of each new type to it, or a second fixture if a distinct module identity is needed for a version 2 descriptor.
 
-## Transport and settings semantics
+- The preview seeds the sample as installed and loaded on the default simulated card, routes its instance to the memory client and uses the real sidebar discovery, generated form and page. One settings store per simulated target, kept for the target's life (device settings persist across module reloads); a fresh client and channel on each page open; channels are released on unload, disconnect or target change. The preview never inserts a menu item by hand.
+- `createMemoryModuleChannel(schema, options)` lives in `@digi/module-ui`: a `ModuleChannel` with values, a revision and files (module-owned operation handlers come in phase 2), with no Tauri, MIDI, filesystem or firmware dependency. It shares the pure validation code with the real client.
 
-Runtime 0.11.4 advertises `MODULE_UI` for describing a loaded instance and queuing or polling settings work. Operations should extend the module-addressed session with capability negotiation. Version the public operation contract independently of the runtime release. The MIDI handler must return promptly. The UI task rechecks the loaded instance and runs the module handler. Switching targets disposes the client and drops late replies. Unloading cancels queued work before releasing the module's code.
-
-The existing protocol allows 160 request bytes and 879 reply bytes. Budget up to 24 bytes per body for the new envelope, including operation, instance, request ID, revision or cursor. That leaves at least 136 request bytes and 855 reply bytes before encoding individual fields. A 47-byte Bootscreen leaf with a one-byte length fits in 72 bytes including the envelope. Limit a project-list page to 16 summaries of up to 32 encoded bytes each, or 536 bytes including envelope and cursor if the cursor fits the reserved header. Paginate descriptors and lists at complete record boundaries. V1 bounds public scalar/text fields to a single request. Larger assets use the file API. Select the exact field widths after checking one encoded example of each exchange on both device profiles.
-
-MIDI receipt can acknowledge a queued operation with a ticket. Poll for completion through the session with a deadline. A repeated request ID within the same live instance returns its original ticket/result within a bounded retention window. A stale or expired ticket yields an explicit unknown outcome, so clients reread state before offering another mutation. The device reports busy when its bounded queue is full.
-
-The runtime validates public setting types, bounds and owner and checks the edit revision on the UI task before writing. With a project settings overlay installed, Workbench can read the effective settings and edits stay in the device menu until write semantics for that scope are defined. Keep that separate from project operations. A lost operation reply can leave a service mutation committed, so the client should reread current state before retrying with a new request.
-
-## A sample for preview and unit tests
-
-Keep using `tests/fixtures/modules/settings-a/` as the authoring example. It declares a public `boot` text field, and its companion explains when a saved change applies. Its `readAtInit` operation is exercised by the preview fake. It is a candidate for the first real operation fixture once the shared dispatcher exists. Keep its settings proof commands and the settings-b wrapper working.
-
-Build the generic form and this actual panel against a small injected `ModuleClient`. For tests provide `createMemoryModuleClient(descriptor, handlers)` in Workbench test support with a map of values, a revision and module-owned operation handlers. Use the same generated descriptor, panel and registry entry as a real host. Put fixture-specific initial values and the startup-value handler beside the fixture. The memory adapter has no Tauri, Solid, MIDI, filesystem or firmware dependency. Share the pure validation and settings codecs with the real client. Device-side validation remains authoritative. A test can supply a rejecting or deferred operation for error and pending states.
-
-The preview already constructs its sessions per target in `apps/desktop/ui/preview/main.tsx` and derives loaded records from its simulated card in `module-store.ts`. Seed the sample as installed and loaded on the default simulated card. Keep the empty-card fixture empty. Route its instance to the memory adapter through the host's module-client factory. Use the real sidebar discovery, generated form and companion mount. Keep one settings backing map per simulated target, take the startup snapshot on simulated load, and issue a fresh scoped client on reload. Release it on unload or disconnect. Seeding the loaded inventory this way keeps Transfer and the sidebar consistent. The preview should never insert a menu item by hand. Ship fixture registrations only in preview and test builds.
-
-| Test owner | Observable behavior |
+| Test owner | Observable behaviour |
 | --- | --- |
-| Descriptor and form model units | Field validation, empty versus unset, edits and resets, revision conflicts, and a private field missing from discovery. |
-| Companion units | Give the real panel a small typed fake. For an interactive companion, verify its result and error states. Control promise completion directly. |
-| Target and registry units | A loaded sample gets one page, a card-only sample gets none, a missing companion leaves its standard form, and a late result cannot populate another target. |
-| Adapter contract | Run the same short behavior cases against the memory client and the real client over scripted replies. Exercise framing and ticket handling in the protocol adapter tests. |
-| Assembly and device | One assembly case for packed metadata and runtime registration. One device round trip for behavior only firmware can establish. Keep the desktop shell, project list and UI permutations out of device tests. |
+| Patchkit units | Each type's schema checks and encoding; version 1 kept for text and file-name only; shared vectors. |
+| Runtime units | Each type's write check (range, step, choice index, length); revision conflict; version 2 parse. |
+| `@digi/module-ui` units | Typed client: value scaling, client-side checks, empty versus unset. |
+| Workbench units | A loaded sample gets one page, a card-only sample none, a missing page leaves the generic form, a late result cannot reach another target, Transfer Open navigates. |
+| Project service units | List and get summaries from the slot scan and the bound image: paging, current mark, a slot without digikit data, a module list longer than one reply. |
+| Assembly | The packed version 2 settings fixture registers on both device profiles. |
+| Device | One round trip per new behaviour only firmware shows: a typed put and get on DN2 and DT2. Project Manager: the SETTINGS row and the service loaded as its need. |
 
-In the preview, save a boot value, reopen the page and verify the saved value, then reset it. Switch targets and confirm their values remain independent. This scenario also works as a demonstration for module authors.
+## Working rules
 
-## Acceptance for the protocol implementation
+- Test pyramid: unit tests with fakes, stubs and memory clients for logic; assembly tests for seams between built artifacts; device tests only for what firmware shows. Each assertion sits at the lowest layer that can see it.
+- Structure: one concept per file, named after its noun; methods are verbs; state is private and changes through the owner's methods; lifecycle (open, reload, release) belongs to one owner. Each rule lives once (DRY); shared vectors tie the Rust, C and TypeScript copies of a wire format together.
+- Every step: one worker with a self-contained brief and the first-pass checklist, then an independent review, then one fix round.
 
-Use host tests for descriptor generation, matching, codecs and generic form behavior. Cover unknown companions, versions, private fields and target switches. Use runtime and service units for stale instances, ownership, queue limits, duplicate requests and project revisions. The existing settings assembly case loads the real packed settings-a descriptor for both device profiles and checks that the instance becomes unavailable after unload. Add an equivalent assembly case for operation registration when it exists. Keep device proof focused on effects only the running firmware can show, such as applying a saved animation after restart or executing a queued operation on the UI task.
+## Phases
+
+1. Typed settings and page plumbing (about 1-1.5 days): new types in patchkit, runtime and TS; generated C and TS; `@digi/module-ui` with the memory client; generated page registry; Transfer Open; settings-a migrated; descriptor TOML reader deleted; cost table measured.
+2. Operations (about 2-3 days, medium confidence): envelope and dispatch on the UI task, generated codec and handler signatures, typed `ops` in `ModuleClient`, memory client handlers, one operation on the settings-a fixture.
+3. Project Manager, read-only (about 1-1.5 days): module with the SETTINGS row; service exports for list and get; `list` and `get` operations; the page.
+
+Later: `.dkmod` import in Workbench with the iframe sandbox; a generic device-side settings page under DIGIKIT driven by the same descriptor.
