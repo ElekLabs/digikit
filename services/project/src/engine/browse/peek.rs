@@ -1,6 +1,8 @@
 //! The cached summary of one other project (`dk_project_get`): the slot that was asked for last, and what its file held.
+use super::super::restore::ID_MAX;
 use super::super::scan::ScanResult;
-use super::super::{is_busy, plan, Env};
+use super::super::{bytes_equal, is_busy, plan, Env};
+use super::setting::{read_page, Page, ProjectSetting};
 use super::summary::ProjectSummary;
 use crate::dkp::{self, Image, AREA};
 use dkrt_sdk::E_NOT_FOUND;
@@ -35,12 +37,24 @@ pub enum PeekAnswer {
     Gone,
 }
 
+/// The most settings entries one read of another project's file keeps for `dk_project_settings` (the caller's `max` may be less).
+pub const PAGE_MAX: usize = 4;
+
 /// One summary: the last slot asked for. A request for another slot replaces it.
 pub struct PeekCache {
     slot: u32,
     state: PeekState,
     retry_at: u32,
     summary: ProjectSummary,
+    /// A settings page was asked for with the read: the module and the cursor, and what the read found.
+    asked: bool,
+    module_len: u8,
+    module: [u8; ID_MAX],
+    cursor: u32,
+    found: bool,
+    more: bool,
+    count: u8,
+    page: [ProjectSetting; PAGE_MAX],
 }
 
 impl PeekCache {
@@ -50,6 +64,14 @@ impl PeekCache {
             state: PeekState::Idle,
             retry_at: 0,
             summary: ProjectSummary::new(),
+            asked: false,
+            module_len: 0,
+            module: [0; ID_MAX],
+            cursor: 0,
+            found: false,
+            more: false,
+            count: 0,
+            page: [ProjectSetting::EMPTY; PAGE_MAX],
         }
     }
 
@@ -80,6 +102,36 @@ impl PeekCache {
     pub fn want(&mut self, slot: u32) {
         self.slot = slot;
         self.state = PeekState::Wanted;
+        self.asked = false;
+    }
+
+    /// `slot` is asked for with a page of the settings of `module` from `cursor`: the read of the file keeps that page too. `module` is at most `ID_MAX` bytes.
+    pub fn want_settings(&mut self, slot: u32, module: &[u8], cursor: u32) {
+        self.want(slot);
+        self.asked = true;
+        self.module_len = module.len() as u8;
+        let mut i = 0;
+        while i < module.len() {
+            self.module[i] = module[i];
+            i += 1;
+        }
+        self.cursor = cursor;
+    }
+
+    /// Does the kept page belong to this request?
+    pub fn holds_page(&self, module: &[u8], cursor: u32) -> bool {
+        self.asked
+            && self.cursor == cursor
+            && bytes_equal(&self.module[..self.module_len as usize], module)
+    }
+
+    /// The page the read kept: `None` when the file has no such module, else the entries and whether the module has more after them.
+    pub fn page(&self) -> Option<(&[ProjectSetting], bool)> {
+        if self.found {
+            Some((&self.page[..self.count as usize], self.more))
+        } else {
+            None
+        }
     }
 
     /// The files of `slot` changed: an answer for it is stale.
@@ -126,6 +178,18 @@ impl PeekCache {
             return Ok(());
         };
         self.summary.read_image(&buffer.0, self.slot, head.counter);
+        self.found = false;
+        self.count = 0;
+        if self.asked {
+            let module = &self.module[..self.module_len as usize];
+            if let Page::Entries { count, more } =
+                read_page(&buffer.0, module, self.cursor, &mut self.page)
+            {
+                self.found = true;
+                self.count = count as u8;
+                self.more = more;
+            }
+        }
         self.state = PeekState::Ready;
         Ok(())
     }

@@ -21,7 +21,7 @@ fn flags_of(r: &Rig, slot: u8) -> u8 {
 }
 
 /// A project file with a module list and entries of the owners (owner, bare key, value).
-fn file_full(
+pub(crate) fn file_full(
     slot: u8,
     name: &[u8],
     stamp: u32,
@@ -61,7 +61,7 @@ fn ids(s: &ProjectSummary) -> Vec<(Vec<u8>, u32, u8, u8)> {
 }
 
 /// A rig with the files of the project manager's cases: slot 20 (two modules, three settings of `a/x`) and slot 22 (no module).
-fn rig_with_files() -> Rig {
+pub(crate) fn rig_with_files() -> Rig {
     let mut r = Rig::new();
     r.rec(7, b"SONG", 0x77);
     r.rec(20, b"TWENTY", 0x2020);

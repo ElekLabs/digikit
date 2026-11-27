@@ -17,6 +17,7 @@ mod rename;
 mod rig;
 mod save;
 mod scope;
+mod settings;
 mod start;
 mod write;
 
