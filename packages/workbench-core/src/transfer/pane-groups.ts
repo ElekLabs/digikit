@@ -1,7 +1,8 @@
 // The groups of both Transfer panes and the service files behind them. "On your computer" and "On device" list the same groups (Machines, Effects,
 // LFO shapes, Tools); the device adds "Not in library" for a module only the card has. A service file is never a row: it shows in the
 // dependency popover of the modules that need it, and a service no module on the card needs is counted in the pane header (`unusedServices`).
-import type { Group, TransferRow, TransferView } from '../modules/dktransfer.ts';
+import type { Group } from '../modules/module-path.ts';
+import type { TransferRow, TransferView } from '../modules/dktransfer.ts';
 
 export const GROUPS: Group[] = ['Machines', 'Effects', 'LFO shapes', 'Tools'];
 /** The extra group of the device pane: a card-only module that no library module matches. */
