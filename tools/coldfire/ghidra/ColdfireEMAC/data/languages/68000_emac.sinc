@@ -2983,7 +2983,9 @@ accregload: ACC3	is ACC3 & acclsb=0 ; accmsb=1 		{ export ACC3; }
 m_eal: (regan) is mode=2 & regan			{ export *:4 regan; }
 m_eal: (regan)+ is mode=3 & regan			{ local tmp = regan; regan = regan + 4; export *:4 tmp; }
 m_eal: -(regan) is mode=4 & regan			{ regan = regan - 4; export *:4 regan; }
-m_eal: (d16,regan) is mode=5 & regan; d16		{ local tmp  = regan + d16; export *:4 tmp; }
+# EMAC-LANG: the displacement follows the EMAC extension word (CFPRM 6-6,
+# 6-31). Match its wl field without constraining it to consume that word.
+m_eal: (d16,regan) is mode=5 & regan; wl; d16	{ local tmp  = regan + d16; export *:4 tmp; }
 
 :maaac.l reg03y, reg9dn^scalefactor, accreg, accw	is (op=10 & reg9dn & reg03y & op6=0 & op8=0 & op45=0 ; fbit=0 & wl=1 & scalefactor & accw & odsize=1) ... & accreg ...
 {

@@ -281,9 +281,9 @@ def instruction_stream(image: Path, base: int, lst: dict) -> tuple[dict, list[in
     return stream, overlapped
 
 
-# Disagreements where the manual shows the oracle is wrong. Each is counted
-# and reported, but does not fail the check.
-def known_deviation(form: str, text: str, n: int, slen: int) -> str | None:
+# Older Ghidra dumps may predate the EMAC displacement fix. Count and report
+# their disagreement, but require the live SLEIGH decoder to agree.
+def listing_deviation(form: str, text: str, n: int, slen: int) -> str | None:
     if (
         form in ("mac_load", "msac_load")
         and re.search(r"\(-?0x[0-9a-f]+,a[0-7]\)", text)
@@ -322,7 +322,7 @@ def check_image(name: str, show: int) -> dict:
             continue
         if a in lst:
             gbytes, gtext = lst[a]
-            dev = known_deviation(form, text, n, len(gbytes))
+            dev = listing_deviation(form, text, n, len(gbytes))
             if n == len(gbytes):
                 stats["len_ghidra_ok"] += 1
             elif dev:
@@ -339,10 +339,6 @@ def check_image(name: str, show: int) -> dict:
                 ok = False
             else:
                 stats["text_ok"] += 1
-        elif known_deviation(form, text, n, slen):
-            known[str(known_deviation(form, text, n, slen))].append(
-                (a, n, text, smn + " " + sbody)
-            )
         else:
             bad["len_sleigh"].append((a, n, text, smn + " " + sbody))
             ok = False
