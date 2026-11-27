@@ -609,7 +609,7 @@ pub(super) fn clean() -> Clean {
         dsp::init_once();
         CALLED_NEED = [0; NEEDS_LEN];
         // the host image has the lfo table of added waves (a case of an image without it uninstalls it)
-        dkrt_svc_lfo_dks::image_table::host::install();
+        crate::package::handlers::lfo_tests::image_has_wave_table(true);
         // a case that ended early left the instance of the provider fixture started
         dkrt_fixture_local_ping::dk_svc_stop();
         crate::package::handlers::dks_decls::fx_stop();
@@ -1155,9 +1155,8 @@ fn a_closure_reload_of_the_lfo_service_passes_the_provider_rules() {
 #[test]
 fn an_image_without_the_wave_table_refuses_the_lfo_service_at_its_start() {
     let _g = clean();
-    dkrt_svc_lfo_dks::image_table::host::uninstall();
-    assert_eq!(dkrt_svc_lfo_dks::dk_svc_start().err(), Some(dkrt_sdk::E_NO_REGISTRY));
-    dkrt_svc_lfo_dks::dk_svc_stop();
+    crate::package::handlers::lfo_tests::image_has_wave_table(false);
+    assert_eq!(crate::package::handlers::lfo_tests::start_status(), Some(dkrt_sdk::E_NO_REGISTRY));
 }
 
 /// The package of `lfo.dks` among the providers the search found.

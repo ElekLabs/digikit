@@ -53,6 +53,22 @@ fn section(shapes: &[(u32, i16)]) -> Vec<u8> {
 /// table as `Registry::add` does at the commit of the loaded file, and leaves it as `Registry::remove` does at the unload; `fini` stops the owner (`dk_svc_stop`).
 pub(crate) struct Loaded;
 
+/// The host image has the lfo table of added waves (`present`) or has none (a stock image, or one patched without core/lfo-table).
+pub(crate) fn image_has_wave_table(present: bool) {
+    if present {
+        host::install();
+    } else {
+        host::uninstall();
+    }
+}
+
+/// The status of the start of the service file (`init`'s first step), then the owner is stopped: `None` when it started.
+pub(crate) fn start_status() -> Option<i32> {
+    let r = dk_svc_start().err();
+    dk_svc_stop();
+    r
+}
+
 /// The module record of the service file.
 const FILE_REC: usize = 0;
 
