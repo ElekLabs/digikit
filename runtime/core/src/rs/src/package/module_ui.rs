@@ -425,6 +425,12 @@ pub(crate) unsafe fn instance(rec: usize) -> u32 {
     locked(|registry| registry.modules[rec].instance)
 }
 
+/// The number of queries the record registered (tests: what Workbench discovery depends on).
+#[cfg(test)]
+pub(crate) unsafe fn query_count(rec: usize) -> usize {
+    locked(|registry| registry.modules[rec].queries.len())
+}
+
 pub(crate) unsafe fn setting_changed(rec: usize, key: &[u8]) {
     locked(|registry| registry.changed(rec, key))
 }

@@ -86,6 +86,11 @@ impl QueryTable {
         self.count == 0
     }
 
+    #[cfg(test)]
+    pub(super) fn len(&self) -> usize {
+        self.count as usize
+    }
+
     /// The function of `method`; `None` for a number the module did not register.
     pub(super) fn find(&self, method: u8) -> Option<CallFn> {
         let mut i = 0;

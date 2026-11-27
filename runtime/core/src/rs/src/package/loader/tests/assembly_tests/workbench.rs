@@ -241,6 +241,7 @@ fn the_packed_settings_fixture_registers_its_query_table_in_init() {
             assert_eq!((count, methods[0]), (1, 1), "{}: the packed table is the one method BootAtInit", dev.name);
             // the load fails when init's registration is refused, so loading is the proof that the table was accepted (the call itself runs ColdFire code: device-only)
             let (mut loader, instance) = load_settings_a(dev);
+            assert_discoverable(dev, "test/settings-a", SCHEMA, 1);
             let (runtime, handler, reply) = query_call(instance, 1, 1);
             assert_eq!((runtime, handler, reply), (OK, 0, std::vec![0xAB]), "{}: method 1 reaches the registered table", dev.name);
             assert_eq!(query_call(instance, 2, 2).0, dkrt_sdk::proto::E_MODULE_UI_METHOD, "{}: no method 2", dev.name);
@@ -253,6 +254,25 @@ fn the_packed_settings_fixture_registers_its_query_table_in_init() {
 const MANAGER_DESCRIPTOR: &[u8] = b"\x01\x0fProject manager\x00";
 
 const PROJECT_MANAGER: Fixture = Fixture { leaf: "project-manager", nx: "digikit/project-manager" };
+
+/// What Workbench discovery reads: the MODULES record carries a UI instance, DESCRIBE of that instance returns the descriptor, and the query table is registered.
+unsafe fn assert_discoverable(dev: Dev, leaf: &str, descriptor: &[u8], queries: usize) {
+    crate::hooks::command_run(CMD_MODULES, 1, null_mut(), [0].as_ptr(), 1);
+    assert_eq!(read_volatile(addr_of!(DKRT_UPLOAD_LAST)), OK);
+    let body = (addr_of!(RBODY) as *const u8).add(1);
+    let name = std::format!("{leaf}\0");
+    let at = slice::from_raw_parts(body, 400).windows(name.len()).position(|w| w == name.as_bytes());
+    assert!(at.is_some(), "{}: {leaf} is listed", dev.name);
+    let rec = (0..dkrt_abi::MAX_MODULES).find(|&rec| crate::package::module_ui::instance(rec) != 0).unwrap_or_else(|| panic!("{}: {leaf} has no UI instance", dev.name));
+    let instance = crate::package::module_ui::instance(rec).to_be_bytes();
+    assert!(slice::from_raw_parts(body, 400).windows(4).any(|w| w == instance), "{}: the module list reports the instance of {leaf}", dev.name);
+    assert_eq!(crate::package::module_ui::query_count(rec), queries, "{}: {leaf} query table", dev.name);
+    let mut describe = [0, rec as u8, 0, 0, 0, 0];
+    describe[2..].copy_from_slice(&instance);
+    crate::hooks::command_run(CMD_MODULE_UI, 2, null_mut(), describe.as_ptr(), describe.len());
+    assert_eq!(read_volatile(addr_of!(DKRT_UPLOAD_LAST)), OK, "{}: DESCRIBE {leaf}", dev.name);
+    assert_eq!(slice::from_raw_parts(body, descriptor.len()), descriptor);
+}
 
 #[test]
 fn the_packed_project_manager_registers_a_descriptor_without_settings_and_two_queries() {
@@ -268,7 +288,11 @@ fn the_packed_project_manager_registers_a_descriptor_without_settings_and_two_qu
             // init's own calls are the ones listed here: the host runs no module code. The load fails when the runtime refuses either registration.
             l.m.init_calls = std::vec![Builder::Workbench { offset, len: MANAGER_DESCRIPTOR.len() }, Builder::Queries { count, methods }];
             let run = boot_run(&mut l, &plan, &[&PROJECT_MANAGER], false);
-            assert_eq!(run.verdict(0), Verdict::Accepted, "{}: {:?}", dev.name, run.refusal(0));
+            // `verdict` reads Accepted for a load that failed in `init`: the refusal is the check
+            assert!(run.refusal(0).is_none(), "{}: {:?}", dev.name, run.refusal(0));
+            assert_discoverable(*dev, PROJECT_MANAGER.leaf, MANAGER_DESCRIPTOR, 2);
+            // the boot run has no unload: give the registry back so the next device registers again
+            crate::package::module_ui::withdraw(0);
         }
         let _ = clean_state();
     }
