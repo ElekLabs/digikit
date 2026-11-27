@@ -27,7 +27,7 @@ import { sendKey, trackRouteSuite } from './fx-track-route-support.ts';
 // send row words of the table (table.rs), the settings value of a send amount and the route byte (services/fx/src/fxsend/tests.rs), and the gain law of
 // the send hook (runtime/platform/fx/tests/fx-send.rig.test.ts).
 
-trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send'], base: true }, (t) => {
+trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 'send2'], base: true }, (t) => {
   const { device, context, triggerFrame, base, pcm, locks, sym, chain, amounts, capacity, settings, pageTwo } = t;
   const boot = t.booter('sine');
   test('preserves stock pixels, stock PCM and master effects without a send amount', async () => {
@@ -83,10 +83,10 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send'],
           'send knobs affect only their Sound word, track DSP amounts and settings, with squared PCM gain',
         );
         {
-          const { runtime, state } = await boot('send', [SINE, FX], 'send');
+          const { runtime, state } = await boot('send', [SINE, FX, `${FX}-2`], 'send2');
           const { session } = runtime;
           const { profile, artifacts } = context;
-          expect(state.results).toEqual([0, 0]);
+          expect(state.results).toEqual([0, 0, 0]);
           expect((await chain(runtime))[0]![0]).not.toBe(0xffffffff);
           const classes = profile.value_classes;
           // the value class words of the stock class table: the send knob has no p-lock control, the stock send template has one
@@ -94,7 +94,7 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send'],
           expect((await word(session, classes + 0x44 * profile.fx.send_template)) & 9, 'stock send lock control').toBe(
             0,
           );
-          await capacity(runtime, 1);
+          await capacity(runtime, Math.min(2, context.sendSlots));
           await selectSine(runtime, profile);
           await runtime.ui.tap('FX', { until: { ms: 400, why: REDRAW } });
           const page1 = await shot(session, artifacts, 'send-page1');
@@ -116,6 +116,17 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send'],
           ).toEqual([0x14 / 2 + profile.fx.send_indices[0]!]);
           await runtime.ui.wait({ ms: 300, why: SETTLE });
           expect(await amounts(runtime)).toEqual([40, ...Array(15).fill(0)]);
+          if (context.sendSlots >= 2) {
+            // the second effect's amount reaches its own send-cell row word (the table gives it row 1), and the first row keeps its 40
+            await setAmount(runtime, profile, 'ENC B', 0, 30, 1);
+            await runtime.ui.wait({ ms: 300, why: SETTLE });
+            expect((await amounts(runtime, 1))[0], 'the second send cell reaches the second row').toBe(30);
+            expect((await amounts(runtime, 0))[0]).toBe(40);
+            // back to 0: the PCM law below is that of the first effect alone
+            await setAmount(runtime, profile, 'ENC B', 0, 0, 1);
+            await runtime.ui.wait({ ms: 300, why: SETTLE });
+            expect((await amounts(runtime, 1))[0]).toBe(0);
+          }
           await pageTwo(runtime);
           const at40 = await shot(session, artifacts, 'send-page2-track1-40');
           await selectTrack(runtime, 2);

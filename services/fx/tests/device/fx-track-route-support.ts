@@ -23,7 +23,12 @@ export const sendKey = `fx/send/${FX}`;
 const sineCard = { selection: ['modules/m0.dkm'] };
 const masterCard = { selection: ['modules/m0.dkm', 'modules/m1.dkm'] };
 const sendCard = { ...masterCard, settings: [[routeKey(FX), '01']] as [string, string][] };
-const CARDS = { sine: sineCard, master: masterCard, send: sendCard };
+// two send effects: the second one takes the second send cell of the table
+const send2Card = {
+  selection: ['modules/m0.dkm', 'modules/m1.dkm', 'modules/m2.dkm'],
+  settings: [routeKey(FX), routeKey(`${FX}-2`)].map((key): [string, string] => [key, '01']),
+};
+const CARDS = { sine: sineCard, master: masterCard, send: sendCard, send2: send2Card };
 type Preset = keyof typeof CARDS;
 
 interface StoreDump {

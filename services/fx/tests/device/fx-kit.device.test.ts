@@ -29,9 +29,9 @@ import { emulatorDk } from '@digi/regression/runtime/waits.ts';
 
 // The effect pages' reaction in the firmware's kit and project paths, in two tests per device:
 // 1. the signed knob of test/dyn-fx-gain-bipolar: the row words after a turn, the MIX endpoints, kit save and load, one PCM compare of the gain;
-// 2. the kit and project values of test/dyn-fx-gain: round trips, another pattern's kit object, no transient zero in a load, the storage record the hooks write.
+// 2. the kit and project values of test/dyn-fx-gain (with test/dyn-fx-gain-b as the second effect): round trips, another pattern's kit object, no transient zero in a load, the storage record the hooks write, and the seeding of rows 0 and 1 from their effect's defaults after a reorder.
 // The host proves the rest: the page row, the strings and the parameter records, the signed knob's raw range with its default in the middle, the defaults and ids
-// tables of a reorder (services/fx/tests/contract.rs), the send amounts (fx-track-route and fxsend/tests.rs), and the gain law of the bias and of MIX (the rig of
+// tables of a reorder (services/fx/tests/contract.rs; the assembler hook that reads them runs only in test 2), the send amounts (fx-track-route and fxsend/tests.rs), and the gain law of the bias and of MIX (the rig of
 // tests/fixtures/modules/dyn-fx-gain-bipolar).
 
 const BIPOLAR = 'test/dyn-fx-gain-bipolar';
@@ -191,8 +191,11 @@ for (const device of DEVICES) {
   });
 }
 
+const GAIN_B = 'test/dyn-fx-gain-b';
 const MARK = 0x46a7;
-const defaultsOne = [0x3200, ...Array<null>(6).fill(null), 0x7f00];
+const defaultsAB = [0x3200, ...Array<null>(6).fill(null), 0x7f00, 0x1900, ...Array<null>(6).fill(null), 0x4000];
+const defaultsBA = [...defaultsAB.slice(8, 16), ...defaultsAB.slice(0, 8)];
+const defaultsOne = defaultsAB.slice(0, 8);
 const isDefault = (got: number[], want: (number | null)[]) =>
   want.every((value, i) => value === null || Math.abs(got[i]! - value) <= 1);
 const expectedRecord = (ids: number[], values: number[], size: number) => {
@@ -208,14 +211,14 @@ for (const device of DEVICES) {
       image: {
         name: 'fx-kit-persist',
         modules: rootsOf('rt-dynfx'),
-        inventory: [SINE, GAIN],
+        inventory: [SINE, GAIN, GAIN_B],
         symbols: ['DKRT_BOOT', 'fx.rows'],
         policy: 'fx-kit',
       },
       initial: full ? 'stock' : 'effects',
       presets: {
         stock: { selection: ['modules/m0.dkm'] },
-        effects: { selection: ['modules/m0.dkm', 'modules/m1.dkm'] },
+        effects: { selection: ['modules/m0.dkm', 'modules/m1.dkm', 'modules/m2.dkm'] },
       },
       // The relative PCM comparisons below retain the legacy audibility oracle.
       requireAudible: false,
@@ -317,11 +320,12 @@ for (const device of DEVICES) {
           await ui().loadKit(1, 'k1');
           expect(Math.abs((await stock()) - stockK1)).toBeLessThanOrEqual(0x40);
           expect(await stock()).not.toBe(moved);
-          await restart(['modules/m0.dkm', 'modules/m1.dkm'], 'effects', [SINE, GAIN]);
-        } else await inspect([SINE, GAIN], 'effects-boot');
+          await restart(['modules/m0.dkm', 'modules/m1.dkm', 'modules/m2.dkm'], 'effects', [SINE, GAIN, GAIN_B]);
+        } else await inspect([SINE, GAIN, GAIN_B], 'effects-boot');
         const effectIds = await ids();
         expect(effectIds[0]).toBe(0x4625);
-        expect(effectIds.slice(1)).toEqual(Array(count - 1).fill(0));
+        expect(effectIds[1], 'the second effect has its own id').not.toBe(0);
+        expect(effectIds.slice(2)).toEqual(Array(count - 2).fill(0));
         console.info(
           `fx service counters: ${(await Promise.all(['fxp_ninit', 'fxp_nload', 'fxp_nsave', 'fxp_nsound'].map(async (n) => `${n}=${await cell(n)}`))).join(' ')}`,
         );
@@ -436,6 +440,29 @@ for (const device of DEVICES) {
         expect([...projectValues.keys()].map((index) => projectGot[index])).toEqual([...projectValues.values()]);
         expect(await rowWords()).toEqual(projectWords);
         noZero('project', projectSeen);
+        // the load hook seeds a row from the defaults of its effect, found by id: after a reorder (B, A) a kit without a record gives row 0 the defaults of B and row 1 those of A.
+        // The table is host-tested (contract.rs); the assembler hook that reads it runs only here.
+        if (full) {
+          await restart(['modules/m0.dkm', 'modules/m2.dkm', 'modules/m1.dkm'], 'swap', [SINE, GAIN_B, GAIN]);
+          expect((await ids()).slice(0, 3)).toEqual([effectIds[1], effectIds[0], 0]);
+          await selectSine(runtime, profile);
+        } else {
+          const defs = sym('fxp_defs');
+          const a = await halfwords(defs, 8);
+          const b = await halfwords(defs + 16, 8);
+          await poke16(sym('fxp_ids'), effectIds[1]!);
+          await poke16(sym('fxp_ids') + 2, effectIds[0]!);
+          for (let i = 0; i < 8; i++) {
+            await poke16(defs + 2 * i, b[i]!);
+            await poke16(defs + 16 + 2 * i, a[i]!);
+          }
+          expect((await ids()).slice(0, 3)).toEqual([effectIds[1], effectIds[0], 0]);
+        }
+        const swapped = await ui().loadKit(2, 'swap');
+        const swappedValues = await values();
+        expect(isDefault(swappedValues.slice(0, 16), defaultsBA), 'rows 0 and 1 are seeded by their effect after the reorder').toBe(true);
+        expect(swappedValues[0]).not.toBe(saved[0]);
+        noZero('swap', swapped.seen);
         await context.evidence(runtime, 'persistence-complete');
       } finally {
         for (const dk of protocols) dk.cancelPending();
