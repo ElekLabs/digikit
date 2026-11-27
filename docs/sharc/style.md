@@ -15,7 +15,7 @@ One `.s` file per module (later, one per SDK kernel in a DSP folder under `sdk`)
 3. Module `#define` constants: `PK_STATE`, `PK_VOICES` (prefix with the module's two or three letters).
 4. `.SECTION/PM seg_pmco;` code, then `.GLOBAL` and `.EXTERN` lines.
 5. Private helpers first, entry points last or first, each with a header comment: inputs, outputs, clobbers.
-6. `.SECTION/DM seg_dmda;` data: `.VAR` tables, then the descriptor (`_xx_desc`) at the end.
+6. `.SECTION/DM seg_dmda;` data: single `.VAR` words, then the descriptor (`_xx_desc`) at the end. Use `.PKHEX` for tables (section 8).
 
 Label rules:
 - Public: `_xx_render`, `_xx_note_on`, `_xx_desc`. Private: `_xx_name`. Loop labels: `_xx_name_loop`, `_xx_name_end`.
@@ -211,3 +211,19 @@ After the loop, write F1 (not F0) to the state so rounding drift does not accumu
   (section 5).
 - `dk_machine.inc` provides `DK_IN_W_*` (word offsets) and `DK_DESC_*`. It has no names for register roles or
   state words; that is left to each module.
+
+## 8. Assembler pitfalls
+
+- **Use `.PKHEX` for loaded tables instead of `.VAR` arrays.** For example, `.PKHEX _tab, 0000803f00000040;`
+  emits the little-endian bytes for two 32-bit floats, 1.0 and 2.0. Load the symbol address into an I register
+  and read through it. See [finding 20](../findings/20-patch-toolchains.md#assembler-facts-found-writing-coredsp-voice-and-digikitpluck-patchkit-42-d).
+- **Load arithmetic constants into a register.** The pinned assembler rejects `R1 = R1 + 112` and
+  `F1 = F1 + 1.0`. Write `R2 = 112` followed by `R1 = R1 + R2`. Immediate shift counts are a separate
+  instruction form, for example `R1 = LSHIFT R0 BY -6`.
+- **Count each `Fn` and `Rn` pair as one register in clobber lists.** A macro that writes `F4` also destroys
+  `R4`, which holds the state pointer at entry. Use register numbers in clobber lists and move any live value
+  to a free register from the [SDK register contract](../../sdk/dsp/REGISTERS.md).
+- **Do not rely on `FIX` to saturate.** With ALUSAT off, the DT2 measurement in
+  [finding 103](../findings/103-dsp-facts-on-a-digitakt-ii.md) returned `0xFFFFFFFF` for out-of-range floats,
+  regardless of sign. Clamp the float before conversion if saturation is the intended result. `TRUNC` was
+  not checked by that silicon probe.
