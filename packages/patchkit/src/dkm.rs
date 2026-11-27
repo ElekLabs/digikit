@@ -1266,7 +1266,7 @@ impl Dkm {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::dko::*;
 
@@ -1298,7 +1298,7 @@ mod tests {
     }
     /// text: `jsr imp.l; jsr f.l; rts` plus a data pointer to bss and to an import with an addend, and the `dk_module` record (init, fini, tick, menu) at data offset 8
     /// with `init` and `tick` set. Carries the build's ISA check record.
-    fn object() -> Dko {
+    pub(crate) fn object() -> Dko {
         let mut o = unstamped();
         o.stamp_isa();
         o

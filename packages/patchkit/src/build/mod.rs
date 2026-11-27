@@ -28,6 +28,8 @@ pub mod test_source;
 pub mod toolchain;
 mod workbench;
 pub use workbench::TsFile;
+#[cfg(test)]
+pub(crate) use workbench::fixture as workbench_fixture;
 
 use crate::dko::Dko;
 use crate::error::*;

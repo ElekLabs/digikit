@@ -2,7 +2,7 @@
 //! settings keys. A `Field` keeps offsets into the stored descriptor bytes, not the bounds of its kind.
 
 use super::cursor::Cursor;
-use super::kind::{extension, Kind, TEXT_MAX};
+use super::kind::{extension, Kind, ACCEPT_BODY_MAX, TEXT_MAX};
 use dkrt_sdk::settings::{module_key, KEY_MAX};
 
 pub(super) const DESCRIPTOR_MAX: usize = 512;
@@ -48,9 +48,16 @@ impl Field {
         }
     }
 
+    /// The part of the body that `accepts` reads.
+    pub(super) fn accepted_body(self, descriptor: &[u8]) -> &[u8] {
+        let body = self.body(descriptor);
+        &body[..body.len().min(ACCEPT_BODY_MAX)]
+    }
+
     /// Is `value` a stored value this field takes?
     pub(super) fn accepts(self, descriptor: &[u8], value: &[u8]) -> bool {
-        self.kind.accepts(self.body(descriptor), self.max, value)
+        self.kind
+            .accepts(self.accepted_body(descriptor), self.max, value)
     }
 }
 
@@ -69,6 +76,7 @@ impl Descriptor {
         count: 0,
     };
 
+    #[inline(never)]
     pub(super) fn parse(module: &[u8], bytes: &[u8]) -> Option<Self> {
         if bytes.len() > DESCRIPTOR_MAX {
             return None;

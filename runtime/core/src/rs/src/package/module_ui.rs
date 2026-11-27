@@ -3,9 +3,11 @@
 
 mod cursor;
 mod descriptor;
+mod job;
 mod kind;
 
 use self::descriptor::{Descriptor, DESCRIPTOR_MAX, FIELDS_MAX};
+use self::job::Job;
 use self::kind::{Kind, TEXT_MAX};
 use super::loader::records;
 use super::resident::{platform, settings, store, transport};
@@ -364,16 +366,16 @@ pub(crate) unsafe fn command(seq: u32, _buf: *mut u8, body: *const u8, len: usiz
     }
 }
 
-unsafe fn read_setting(rec: usize, key: &[u8], cap: u8, kind: Kind, revision: u32) -> Outcome {
+unsafe fn read_setting(job: &Job) -> Outcome {
     let mut outcome = Outcome {
-        revision,
+        revision: job.revision,
         ..Outcome::EMPTY
     };
     let n = settings::module_get(
-        rec as u32 + 1,
-        key.as_ptr(),
+        job.rec as u32 + 1,
+        job.key.as_ptr(),
         outcome.value.as_mut_ptr(),
-        cap as u32,
+        job.max as u32,
     );
     if n == E_SET_NOKEY {
         return outcome;
@@ -383,7 +385,7 @@ unsafe fn read_setting(rec: usize, key: &[u8], cap: u8, kind: Kind, revision: u3
     } else if let Some(stored) = outcome
         .value
         .get(..n as usize)
-        .filter(|stored| !kind.is_text() || core::str::from_utf8(stored).is_ok())
+        .filter(|stored| job.accepts(stored))
     {
         outcome.len = stored.len() as u8;
         outcome.present = true;
@@ -405,23 +407,19 @@ pub(crate) unsafe fn tick() {
         let slot = &registry.modules[rec];
         let request = slot.pending;
         let field = slot.descriptor.field(request.index)?;
-        let bytes = slot.descriptor.bytes();
-        let raw_key = field.key(bytes);
-        let mut key = [0; KEY_MAX + 1];
-        key[..raw_key.len()].copy_from_slice(raw_key);
-        Some((
+        Some(Job::new(
             rec,
             request,
-            key,
-            field.max,
-            field.kind(),
+            field,
+            slot.descriptor.bytes(),
             slot.revision(request.index),
         ))
     });
-    let Some((rec, request, key, cap, kind, revision)) = job else {
+    let Some(job) = job else {
         return;
     };
-    let outcome = apply(rec, request, &key, cap, kind, revision);
+    let rec = job.rec;
+    let outcome = apply(job);
     locked(|registry| registry.modules[rec].complete(outcome));
 }
 
@@ -451,15 +449,9 @@ unsafe fn check_file(rec: usize, leaf: &[u8]) -> Result<(), i32> {
     Ok(())
 }
 
-unsafe fn apply(
-    rec: usize,
-    request: Request,
-    key: &[u8],
-    cap: u8,
-    kind: Kind,
-    revision: u32,
-) -> Outcome {
-    let mut before = read_setting(rec, key, cap, kind, revision);
+unsafe fn apply(mut job: Job) -> Outcome {
+    let (rec, request) = (job.rec, job.request);
+    let mut before = read_setting(&job);
     if request.verb == GET {
         return before;
     }
@@ -467,7 +459,7 @@ unsafe fn apply(
         before.result = E_MODULE_UI_SCOPE;
         return before;
     }
-    if request.revision != revision {
+    if request.revision != job.revision {
         before.result = E_MODULE_UI_CONFLICT;
         return before;
     }
@@ -476,7 +468,7 @@ unsafe fn apply(
     }
     let client = rec as u32 + 1;
     let result = if request.verb == PUT {
-        if kind == Kind::FileName {
+        if job.kind == Kind::FileName {
             if let Err(status) = check_file(rec, request.value()) {
                 before.result = status;
                 return before;
@@ -487,7 +479,7 @@ unsafe fn apply(
         }
         entry::module_put(
             client,
-            key.as_ptr(),
+            job.key.as_ptr(),
             request.value.as_ptr(),
             request.len as u32,
         )
@@ -495,14 +487,14 @@ unsafe fn apply(
         if !before.present && before.result == OK {
             return before;
         }
-        entry::module_remove(client, key.as_ptr())
+        entry::module_remove(client, job.key.as_ptr())
     };
     if result != OK {
         before.result = result;
         return before;
     }
-    let revision = locked(|registry| registry.modules[rec].revision(request.index));
-    read_setting(rec, key, cap, kind, revision)
+    job.revision = locked(|registry| registry.modules[rec].revision(request.index));
+    read_setting(&job)
 }
 
 #[cfg(test)]

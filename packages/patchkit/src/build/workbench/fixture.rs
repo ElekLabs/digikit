@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-pub(super) const DECLARATION: &str = r#"
+pub(crate) const DECLARATION: &str = r#"
 [workbench]
 version = 1
 component = "workbench/Panel.tsx"

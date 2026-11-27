@@ -6,6 +6,9 @@ use super::cursor::Cursor;
 pub(super) const TEXT_MAX: usize = 64;
 pub(super) const EXTENSION_MAX: usize = 16;
 const FILE_NAME_MAX: usize = 47;
+/// The most of a kind body that `accepts` reads: the integer bounds (three words), the file-name extension string.
+pub(super) const ACCEPT_BODY_MAX: usize = 1 + EXTENSION_MAX;
+const _: () = assert!(ACCEPT_BODY_MAX >= 12);
 const DECIMALS_MAX: u8 = 4;
 const CHOICES_MAX: u8 = 32;
 
@@ -46,6 +49,7 @@ impl Kind {
     }
 
     /// Check the body at the cursor for a field with stored length `max` and move past it.
+    #[inline(never)]
     pub(super) fn parse_body(self, cursor: &mut Cursor, max: u8) -> Option<()> {
         // Two small matches, not one of five arms: the compiler turns a dense match into a jump table of 16-bit offsets in the
         // code, which the object's ISA check reads as instructions and refuses.

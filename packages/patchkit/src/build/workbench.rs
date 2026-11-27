@@ -6,7 +6,7 @@ mod c_header;
 mod declaration;
 mod descriptor;
 #[cfg(test)]
-mod fixture;
+pub(crate) mod fixture;
 mod header;
 mod ident;
 mod kind;
