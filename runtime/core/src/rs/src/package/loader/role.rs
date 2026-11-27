@@ -577,7 +577,7 @@ pub fn role_ok(role: u32, keys: &Keys) -> Result<(), i32> {
     // the entries the table has, one bit per tag
     let mut has = 0u32;
     let mut t = tag::NEEDS;
-    while t <= tag::SERVICE_IMPORTS {
+    while t <= tag::PAYLOADS {
         if keys.count(t) != 0 {
             has |= 1 << t;
         }
@@ -622,7 +622,7 @@ mod tests {
     use std::vec::Vec;
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[], callback_order: None, service_imports: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[], callback_order: None, service_imports: &[], payloads: &[] };
 
     fn bytes(t: &Table) -> Vec<u8> {
         let mut b = vec![0u8; dkneeds::keys::table_size(t)];

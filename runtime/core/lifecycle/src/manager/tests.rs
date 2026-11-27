@@ -7,6 +7,7 @@ use crate::fake::{manager, Call, FakeManager, Pkg, Probe};
 use crate::{LifecycleError, PackageId};
 use std::vec::Vec;
 
+mod attach;
 mod bring_up;
 mod reload;
 mod resources;

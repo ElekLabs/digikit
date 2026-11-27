@@ -2,6 +2,7 @@ use super::carried_state::CarriedState;
 use super::{RtColdFire, RtHost, RtInstallers, RtLinker, RtPlacer, RtSharc};
 use crate::package::loader::discover::PATH_CAP;
 use crate::package::loader::package::{Entries, Flight};
+use crate::package::loader::PayloadWalk;
 use crate::package::loader::{Images, Loader, Registry};
 use dkrt_abi::module::LOG_NAME;
 use crate::package::admission::Admission;
@@ -41,6 +42,8 @@ pub struct Session<P: PackagePlatform, M: Images, R: Registry> {
     pub(super) entries_of: Option<PackageId>,
     /// The store path of the module at each selection index (NUL terminated, valid while the seams live; null: none).
     pub(super) modules: [*const u8; dkrt_abi::MAX_MODULES],
+    /// Where the attach walk of each package stands (the payloads of an attach that answered `Pending`).
+    pub(super) payloads: PayloadWalk,
     /// The packages whose `stop` answered `E_BUSY`: `free` asks again.
     pub(super) stop_busy: [bool; REC_MAX],
     /// The packages whose memory `free` could not release (a file or I/O step of the record still runs).
@@ -111,6 +114,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Session<P, M, R> {
         addr_of_mut!((*out).entries).write(ENTRIES);
         addr_of_mut!((*out).entries_of).write(None);
         addr_of_mut!((*out).modules).write([core::ptr::null(); dkrt_abi::MAX_MODULES]);
+        addr_of_mut!((*out).payloads).write(PayloadWalk::new());
         addr_of_mut!((*out).stop_busy).write([false; REC_MAX]);
         addr_of_mut!((*out).retained).write([false; REC_MAX]);
         addr_of_mut!((*out).dsp_wanted).write([false; REC_MAX]);

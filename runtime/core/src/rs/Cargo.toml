@@ -37,6 +37,7 @@ dkrt-svc-shortcuts-dks = { path = "../../../../services/shortcuts/dks" }
 dkrt-svc-samples-dks = { path = "../../../../services/samples/dks" }
 dkrt-svc-project-dks = { path = "../../../../services/project/dks" }
 dkrt-fixture-local-ping = { path = "../../../../tests/fixtures/modules/local-ping" }
+dkrt-fixture-local-payload = { path = "../../../../tests/fixtures/modules/local-payload" }
 dkrt-fixture-local-step = { path = "../../../../tests/fixtures/modules/local-step" }
 
 # This crate sits inside the repository's cargo workspace but is built on its own (`patchkit build`).

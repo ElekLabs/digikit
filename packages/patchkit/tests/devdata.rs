@@ -734,6 +734,8 @@ fn the_patch_sets_are_the_rt021_flash_modules() {
             want.push("core/platform");
             // the SETTINGS hook of the menu, the controls and the views of modules (the DIGIKIT menu in the system package is drawn by it)
             want.push("core/ui");
+            // the LFO waves as data in the image (core/lfo-table): every set of both devices
+            want.push("core/lfo-table");
             // the sample pool: both Digitakt II sets have it; the Digitone II flashes without it until the SPI wire-size decision
             if dev.short == "dt2" || set == "emulator" {
                 want.push("core/sample-pool");

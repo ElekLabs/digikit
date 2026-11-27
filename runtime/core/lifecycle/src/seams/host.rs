@@ -28,11 +28,19 @@ pub trait ProviderHost {
     /// `consumer` came up, once, after every one of its `services` is up (in the order of [`attach_rank`](ProviderHost::attach_rank), ties by id; none for a package that
     /// needs no service): the services receive its records. The host runs the whole walk, so that a record's place among the others in the file is kept across services (the
     /// rows the services share are numbered in that order). An error refuses the consumer and leaves nothing attached: the host undoes what the walk did.
-    fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), Status>;
+    ///
+    /// `Ok(Step::Pending)` means the walk is not over (a service takes a payload over more than one UI pass): the manager calls `attach` again for the same consumer on later
+    /// passes (`PackageManager::step`) until it answers `Done` or an error, and the host keeps where it stands. Only the first call of a consumer is made inside its
+    /// bring-up, while the staged file is valid.
+    fn attach(
+        &mut self,
+        consumer: PackageId,
+        services: &[PackageId],
+    ) -> Result<dkrt_abi::provider::Step, Status>;
 
-    /// `consumer` goes down: its `services` free everything they hold for it (the walk of `attach` backwards). Called for a consumer that `attach` answered `Ok` for; repeating it
-    /// is harmless.
-    fn detach(&mut self, consumer: PackageId, services: &[PackageId]);
+    /// `consumer` goes down: its `services` free everything they hold for it (the walk of `attach` backwards). Called for a consumer that `attach` answered `Ok` for (`Done` or
+    /// `Pending`); repeating it is harmless. `Step::Pending` means a service is not done giving back (a payload retire): the take-down waits and calls `detach` again.
+    fn detach(&mut self, consumer: PackageId, services: &[PackageId]) -> dkrt_abi::provider::Step;
 
     /// Whether `package` may go down now (the service's `can_stop`).
     fn can_stop(&mut self, package: PackageId) -> Result<(), Status>;

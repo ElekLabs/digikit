@@ -3,7 +3,8 @@
 //! (`SVC_ABI_FILES`): a part table is versioned by its `PartRef`.
 //!
 //! - `contract`: [`Provider`], the lifecycle of one service object.
-//! - `parts`: the optional parts [`Records`], [`DspPart`], [`Ticker`], [`Query`], [`Describe`], [`State`].
+//! - `parts`: the optional parts [`Records`], [`DspPart`], [`Ticker`], [`Query`], [`Describe`], [`State`], [`Payloads`].
+//! - `step`: [`Step`], the answer of a call that may take more than one UI pass.
 //! - `tables`: the function table of each part, version 1, built from an owner object with generic thunks.
 //! - `handle`: [`ProviderHandle`], a row resolved against the versions the core knows, with its instance: the calls of the core.
 //! - `consumer`: [`Consumer`] and [`ConsumerId`], what `attach` and `detach` receive.
@@ -19,6 +20,7 @@ mod handle;
 mod parts;
 mod row;
 mod status;
+mod step;
 mod tables;
 mod word_sink;
 
@@ -27,12 +29,14 @@ pub use contract::Provider;
 pub use declarations::{Declarations, Limit, MAX_ENTRIES, MAX_RESOURCES};
 pub use enter::{Enter, Plain};
 pub use handle::ProviderHandle;
-pub use parts::{Describe, DspPart, Query, Records, Reentry, State, Ticker};
+pub use parts::{Describe, DspPart, Payloads, Query, Records, Reentry, State, Ticker};
 pub use row::{
     check, name_hash, CheckedRow, PartLookup, PartRef, ProviderRow, PART_DESCRIBE, PART_DSP,
-    PART_LIFECYCLE, PART_QUERY, PART_RECORDS, PART_STATE, PART_TICK, PROVIDER_ABI,
+    PART_LIFECYCLE, PART_PAYLOADS, PART_QUERY, PART_RECORDS, PART_STATE, PART_TICK, PROVIDER_ABI,
 };
 pub(crate) use status::code;
 pub use status::Status;
+pub(crate) use step::step_code;
+pub use step::Step;
 pub use tables::*;
 pub use word_sink::WordSink;

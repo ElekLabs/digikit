@@ -421,3 +421,140 @@ fn a_state_part_version_newer_than_the_core_knows_is_refused_with_the_abi_status
     ]);
     assert_eq!(resolve(r, instance(0)).err(), Some(E_SVC_ABI));
 }
+
+/// The payload functions of a hand-built table: `check` refuses a kind over 9, `install` answers `Pending` for kind 1 on its first call, `Done` for kind 2 and a refusal for
+/// kind 3 (and tells whether the body came in `LAST_BODY`: its first byte and length, or 0x100 for none), `retire` answers Pending until the owner is 5.
+static LAST_BODY: AtomicU32 = AtomicU32::new(0);
+unsafe extern "C" fn payload_check(
+    _: *mut c_void,
+    _: *const c_void,
+    kind: u32,
+    _: *const u8,
+    _: u32,
+    _: u8,
+) -> i32 {
+    if kind > 9 {
+        -4
+    } else {
+        0
+    }
+}
+unsafe extern "C" fn payload_install(
+    _: *mut c_void,
+    _: *const c_void,
+    kind: u32,
+    body: *const u8,
+    len: u32,
+    has_body: bool,
+    _: u8,
+) -> i32 {
+    LAST_BODY.store(
+        if has_body && len != 0 {
+            (*body as u32) | len << 16
+        } else if has_body {
+            0x200
+        } else {
+            0x100
+        },
+        Ordering::SeqCst,
+    );
+    match kind {
+        1 => Step::PENDING,
+        2 => 0,
+        _ => -6,
+    }
+}
+unsafe extern "C" fn payload_retire(_: *mut c_void, _: *const c_void, who: u8) -> i32 {
+    if who == 5 {
+        0
+    } else {
+        Step::PENDING
+    }
+}
+
+fn with_payloads() -> ProviderHandle {
+    let t: &'static PayloadsV1 = Box::leak(Box::new(PayloadsV1 {
+        check: payload_check,
+        install: payload_install,
+        retire: payload_retire,
+    }));
+    resolve(
+        row(std::vec![
+            part(PART_LIFECYCLE, 1, lifecycle()),
+            part(PART_PAYLOADS, 1, t),
+        ]),
+        instance(0),
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_service_without_the_payloads_part_cannot_take_a_payload() {
+    let h = resolve(
+        row(std::vec![part(PART_LIFECYCLE, 1, lifecycle())]),
+        instance(0),
+    )
+    .unwrap();
+    let core = core::ptr::null();
+    assert!(!h.has_payloads());
+    unsafe {
+        assert_eq!(h.payload_check(core, 1, &[1], 1), dkrt_sdk::E_MISSING);
+        assert_eq!(
+            h.payload_install(core, 1, Some(&[1]), 1),
+            Err(dkrt_sdk::E_MISSING)
+        );
+        // nothing was installed, so there is nothing to give back
+        assert_eq!(h.payload_retire(core, 1), Step::Done);
+    }
+}
+
+#[test]
+fn an_install_answers_a_step_or_a_refusal_and_the_body_comes_on_the_first_call_only() {
+    let h = with_payloads();
+    let core = core::ptr::null();
+    assert!(h.has_payloads());
+    unsafe {
+        assert_eq!(h.payload_check(core, 2, &[1], 1), 0);
+        assert_eq!(h.payload_check(core, 10, &[1], 1), -4);
+        assert_eq!(
+            h.payload_install(core, 1, Some(&[7, 8, 9]), 1),
+            Ok(Step::Pending)
+        );
+        assert_eq!(LAST_BODY.load(Ordering::SeqCst), 7 | 3 << 16);
+        // the second call has no body
+        assert_eq!(h.payload_install(core, 1, None, 1), Ok(Step::Pending));
+        assert_eq!(LAST_BODY.load(Ordering::SeqCst), 0x100);
+        assert_eq!(h.payload_install(core, 2, Some(&[]), 1), Ok(Step::Done));
+        assert_eq!(h.payload_install(core, 3, Some(&[1]), 1), Err(-6));
+        // retire is asked again until the service says it is done
+        assert_eq!(h.payload_retire(core, 4), Step::Pending);
+        assert_eq!(h.payload_retire(core, 5), Step::Done);
+    }
+}
+
+#[test]
+fn a_payloads_part_version_newer_than_the_core_knows_is_refused_with_the_abi_status() {
+    let t: &'static PayloadsV1 = Box::leak(Box::new(PayloadsV1 {
+        check: payload_check,
+        install: payload_install,
+        retire: payload_retire,
+    }));
+    let r = row(std::vec![
+        part(PART_LIFECYCLE, 1, lifecycle()),
+        PartRef::new(
+            PART_PAYLOADS,
+            PAYLOADS_NEWEST + 1,
+            t as *const _ as *const ()
+        ),
+    ]);
+    assert_eq!(resolve(r, instance(0)).err(), Some(E_SVC_ABI));
+}
+
+#[test]
+fn a_step_travels_as_a_code() {
+    assert_eq!(Step::of_code(Step::Done.code()), Ok(Step::Done));
+    assert_eq!(Step::of_code(Step::Pending.code()), Ok(Step::Pending));
+    assert_eq!(Step::of_code(-3), Err(-3));
+    // a positive code that is no step is a refusal, never a step
+    assert!(Step::of_code(2).is_err());
+}

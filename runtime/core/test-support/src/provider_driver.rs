@@ -8,11 +8,11 @@ use crate::FakeCore;
 use core::ffi::c_void;
 use dkrt_abi::dsp::{DspSec, Job};
 use dkrt_abi::provider::{
-    Describe, DescribeV1, DspPart, DspV1, LifecycleV1, PartRef, Provider, ProviderHandle,
-    ProviderRow, Query, QueryV1, Records, RecordsV1, State, StateV1, Status, TickV1, Ticker,
-    DESCRIBE_NEWEST, DSP_NEWEST, LIFECYCLE_NEWEST, PART_DESCRIBE, PART_DSP, PART_LIFECYCLE,
-    PART_QUERY, PART_RECORDS, PART_STATE, PART_TICK, QUERY_NEWEST, RECORDS_NEWEST, STATE_NEWEST,
-    TICK_NEWEST,
+    Describe, DescribeV1, DspPart, DspV1, LifecycleV1, PartRef, Payloads, PayloadsV1, Provider,
+    ProviderHandle, ProviderRow, Query, QueryV1, Records, RecordsV1, State, StateV1, Status,
+    TickV1, Ticker, DESCRIBE_NEWEST, DSP_NEWEST, LIFECYCLE_NEWEST, PART_DESCRIBE, PART_DSP,
+    PART_LIFECYCLE, PART_PAYLOADS, PART_QUERY, PART_RECORDS, PART_STATE, PART_TICK,
+    PAYLOADS_NEWEST, QUERY_NEWEST, RECORDS_NEWEST, STATE_NEWEST, TICK_NEWEST,
 };
 use dkrt_abi::service::{
     ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, Problem, RowWrite, SettleCtx, TableFault,
@@ -108,6 +108,18 @@ impl<P: Provider<FakeCore> + 'static> RowBuilder<P> {
             PART_QUERY,
             QUERY_NEWEST,
             leak(QueryV1::of::<P>()),
+        ));
+        self
+    }
+
+    pub fn payloads(mut self) -> Self
+    where
+        P: Payloads<FakeCore>,
+    {
+        self.parts.push(PartRef::new(
+            PART_PAYLOADS,
+            PAYLOADS_NEWEST,
+            leak(PayloadsV1::of::<P, FakeCore>()),
         ));
         self
     }
@@ -421,5 +433,89 @@ impl<R: Recipe> Driver for ProviderDriver<R> {
         write: bool,
     ) -> Option<RowWrite> {
         self.handle().dsp_row_step(cptr(core), rec, want, write)
+    }
+}
+
+#[cfg(test)]
+mod payload_tests {
+    use super::*;
+    use dkrt_abi::provider::{ConsumerId, Payloads, Step};
+
+    /// An owner that takes a payload over three calls (two `Pending`), keeps the first body it saw and refuses kind 9.
+    #[derive(Default)]
+    struct Slow {
+        calls: u32,
+        first_body: Vec<u8>,
+        later_bodies: u32,
+        retired: Vec<u8>,
+    }
+
+    impl Provider<FakeCore> for Slow {
+        fn start_in(_: &FakeCore, slot: &mut core::mem::MaybeUninit<Slow>) -> Result<(), Status> {
+            slot.write(Slow::default());
+            Ok(())
+        }
+    }
+
+    impl Payloads<FakeCore> for Slow {
+        fn check(
+            &mut self,
+            _: &FakeCore,
+            kind: u16,
+            _: &[u8],
+            _: ConsumerId,
+        ) -> Result<(), Status> {
+            if kind == 9 {
+                Err(dkrt_sdk::E_FORMAT)
+            } else {
+                Ok(())
+            }
+        }
+        fn install(
+            &mut self,
+            _: &FakeCore,
+            _: u16,
+            body: Option<&[u8]>,
+            _: ConsumerId,
+        ) -> Result<Step, Status> {
+            match body {
+                Some(b) => self.first_body = b.to_vec(),
+                None => self.later_bodies += 1,
+            }
+            self.calls += 1;
+            Ok(if self.calls < 3 {
+                Step::Pending
+            } else {
+                Step::Done
+            })
+        }
+        fn retire(&mut self, _: &FakeCore, who: ConsumerId) -> Step {
+            self.retired.push(who.get());
+            Step::Done
+        }
+    }
+
+    #[test]
+    fn a_payload_goes_through_the_part_table_with_its_body_on_the_first_call_only() {
+        let core = FakeCore::new();
+        let started = RowBuilder::<Slow>::new("slow")
+            .payloads()
+            .start(&core)
+            .unwrap();
+        let h = &started.handle;
+        assert!(h.has_payloads());
+        let c = cptr(&core);
+        unsafe {
+            assert_eq!(h.payload_check(c, 1, b"x", 4), 0);
+            assert_eq!(h.payload_check(c, 9, b"x", 4), dkrt_sdk::E_FORMAT);
+            assert_eq!(h.payload_install(c, 1, Some(b"abc"), 4), Ok(Step::Pending));
+            assert_eq!(h.payload_install(c, 1, None, 4), Ok(Step::Pending));
+            assert_eq!(h.payload_install(c, 1, None, 4), Ok(Step::Done));
+            assert_eq!(h.payload_retire(c, 4), Step::Done);
+            let slow = &*(h.instance() as *const Slow);
+            assert_eq!(slow.first_body, b"abc");
+            assert_eq!(slow.later_bodies, 2);
+            assert_eq!(slow.retired, [4]);
+        }
     }
 }
