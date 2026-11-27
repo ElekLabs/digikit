@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pollUntil, waitClock } from '@digi/test-support';
-import { expect } from 'vitest';
+import { expect, test } from 'vitest';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
@@ -311,8 +311,10 @@ runtimeTests('RELOAD swaps a code-only module and a machine without a boot, and 
 runtimeTests('RELOAD between two builds of a machine that differ in one constant plays the pitch of the build just loaded, cycle after cycle', expectReloadPitchSoak, { dsp: 'sharc' });
 
 const PROJECT_BLOCKS = 4000;
+/** The project case is DT2 only (`trackType` reads a Digitakt II track object); the file's other tests run on both devices. */
+const PROJECT_DEVICE = 'dt2';
 
-describeOn('dt2', `DT2 ${FIRMWARE.dt2} reload: a project that uses the reloaded machine`, () => {
+describeOn(PROJECT_DEVICE, `DT2 ${FIRMWARE.dt2} reload: a project that uses the reloaded machine`, () => {
   const run = cardRig('dt2', 'reload-project', {
     dsp: 'sharc',
     roots: RT,
