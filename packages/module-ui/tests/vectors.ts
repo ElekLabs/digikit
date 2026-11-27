@@ -1,6 +1,6 @@
 // The shared Workbench vectors. `expected_schema` is the `schema` constant patchkit generates for the case's TOML.
 import { readFileSync } from 'node:fs';
-import type { DescribedSchema, SettingsSchema } from '../src/index.ts';
+import type { DescribedSchema } from '../src/index.ts';
 
 export interface DescriptorCase {
   name: string;
@@ -8,7 +8,7 @@ export interface DescriptorCase {
   module_name: string;
   toml: string;
   bytes_hex: string;
-  expected_schema: SettingsSchema;
+  expected_schema: DescribedSchema;
 }
 export interface ValueCase {
   descriptor: string;
@@ -23,8 +23,8 @@ export const vectors = JSON.parse(readFileSync(file, 'utf8')) as { descriptors: 
 
 export const bytesOf = (hex: string) => Uint8Array.from(hex.match(/../g) ?? [], (h) => parseInt(h, 16));
 
-/** What a device's descriptor decodes to: the generated schema without the module id (a descriptor has none), under the module's name. */
+/** What a device's descriptor decodes to: the generated schema without the module id (a descriptor has none). */
 export function describedSchema(c: DescriptorCase): DescribedSchema {
   const { module: _module, ...rest } = c.expected_schema;
-  return { ...rest, name: c.module_name };
+  return rest;
 }

@@ -37,8 +37,8 @@ describe('createMemoryModuleChannel', () => {
     expect(inspect.files.get('a.dkbs')).toEqual(Uint8Array.of(7));
     expect(Object.keys(channel)).not.toContain('store');
   });
-  it('reports the schema it was given under a name', async () => {
-    const { channel } = createMemoryModuleChannel(schema, { name: 'Typed' });
+  it('reports the schema it was given under its own name', async () => {
+    const { channel } = createMemoryModuleChannel(schema);
     expect(await channel.describeSettings()).toMatchObject({ name: 'Typed', version: 2 });
   });
   it('fails every call with unavailable once the instance is gone', async () => {

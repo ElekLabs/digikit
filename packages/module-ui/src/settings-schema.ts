@@ -1,8 +1,9 @@
 import type { Setting } from './setting.ts';
 
-/** The shape of the generated `schema` constant (a descriptor decoded from a device has the same shape plus `name`). */
+/** The shape of the generated `schema` constant: the module id and name from module.toml, and the settings. A descriptor a device reports has no id. */
 export interface SettingsSchema {
   readonly module?: string;
+  readonly name?: string;
   readonly version: 1 | 2;
   readonly settings: readonly Setting[];
 }

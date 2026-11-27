@@ -13,7 +13,7 @@ export interface MemoryCall {
 }
 
 export interface MemoryOptions {
-  /** The module name `describeSettings` reports. The default is the schema's module id. */
+  /** The module name `describeSettings` reports. The default is the schema's name, then its module id. */
   name?: string;
   /** Display values stored before the first call, by setting id. */
   initial?: Record<string, string | number | boolean>;
@@ -62,7 +62,7 @@ export function createMemoryModuleChannel(
     const refused = await admit(call);
     if (refused) throw new Error(refused.message);
   }
-  const described: DescribedSchema = { ...structuredClone(schema), name: options.name ?? schema.module ?? 'Module' };
+  const described: DescribedSchema = { ...structuredClone(schema), name: options.name ?? schema.name ?? schema.module ?? 'Module' };
   const channel: ModuleChannel = {
     describeSettings: async () => structuredClone(described),
     getSetting: (id) => guarded({ method: 'get', id }, () => store.read(id)),

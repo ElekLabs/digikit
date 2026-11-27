@@ -1,6 +1,7 @@
 // A schema in the shape `patchkit workbench-ts` generates (`as const`).
 export const schema = {
   module: 'test/typed',
+  name: 'Typed',
   version: 2,
   settings: [
     {
