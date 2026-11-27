@@ -326,6 +326,15 @@ fn bit_instructions() {
 }
 
 #[test]
+fn btst_immediate_destination_takes_illegal_vector() {
+    // Dynamic BTST does not take an immediate destination (CFPRM3 p.4-25).
+    let (mut cpu, mut ram) = machine(&[0x033c, 0x0085]);
+    cpu.step(&mut ram).unwrap();
+    assert_eq!(cpu.pc, 0x4000 + 0x10 * vector::ILLEGAL as u32);
+    assert_eq!(ram.read32(0x8000 - 4).unwrap(), 0x1000); // PC of the fault
+}
+
+#[test]
 fn movem_store_and_load_ind_and_disp() {
     // movem.l d0-d1,(a0) ; movem.l (0,a0),d2-d3 -- ColdFire's MOVEM addresses
     // only (An) and (d16,An) (CFPRM p.115-116's ea table has no

@@ -92,6 +92,7 @@
       "inputs": [
         "hostTests",
         "^hostTests",
+        "{workspaceRoot}/vitest.host/regression-host.json",
         "{workspaceRoot}/config/emulator.json",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/runtime/core/vectors/**/*",

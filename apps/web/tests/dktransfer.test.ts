@@ -23,17 +23,16 @@ import {
   PROGRESS_EVENTS,
   buildView,
   deleteFiles,
-  groupOf,
   hasHeaderTable,
   install,
   libraryModule,
   migrateModuleFolders,
-  modulePath,
   refreshServices,
   restartDevice,
   uploadProgress,
   type InstallDeps,
 } from '@digi/workbench-core/modules/dktransfer.ts';
+import { groupOf, modulePath } from '@digi/workbench-core/modules/module-path.ts';
 import { setFitReader } from '@digi/workbench-core/modules/fit.ts';
 import {
   nameHash,

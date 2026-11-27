@@ -107,6 +107,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// task can be parked out of it, so the closure reload cannot take it down safely (`E_BOOT_ONLY`: a restart reloads the service). A hook the port file does not list is no
     /// interrupt entry here (the load refuses it elsewhere).
     unsafe fn interrupt_entered(&self, keys: &Keys) -> bool {
+        #[cfg(test)]
+        if self.irq_guard_off {
+            return false;
+        }
         let Some((port, ..)) = self.port_keys() else {
             return false;
         };
@@ -188,13 +192,21 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
     }
 
+    /// An arena block for the state a reload carries (`CarriedState`), and its release.
+    pub(crate) unsafe fn arena_alloc(&mut self, n: u32) -> Option<Block> {
+        self.m.alloc(n)
+    }
+    pub(crate) unsafe fn arena_free(&mut self, addr: dkrt_abi::dev_addr::DevAddr) {
+        self.m.free(addr)
+    }
+
     /// What the records of `members` (a closure: a service and its consumers) hold that its reload gives back before the files load again: (arena bytes of the image blocks and
     /// record blocks, DSP area bytes), as `own_use` counts them for one module.
     pub(crate) unsafe fn closure_own(&self, members: &[usize]) -> (u32, u32) {
         let block = |n: u32| if n == 0 { 0 } else { dkneeds::arena_block(n).unwrap_or(n) };
         let mut own = (0u32, 0u32);
         for &rec in members {
-            let (a, d) = if rec < MAX_MODULES { super::live::own_use(rec) } else { (block(records::module(rec).size), dsp::ds().mod_len[rec]) };
+            let (a, d) = if !records::is_service_rec(rec) { super::live::own_use(rec) } else { (block(records::module(rec).size), dsp::ds().mod_len[rec]) };
             own = (own.0 + a, own.1 + d);
         }
         own

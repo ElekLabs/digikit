@@ -1,0 +1,6 @@
+{
+  "name": "sharc-rig-conformance",
+  "dir": "packages/sharc-rig-kit",
+  "include": "conformance/*.test.ts",
+  "testTimeout": 7200000
+}

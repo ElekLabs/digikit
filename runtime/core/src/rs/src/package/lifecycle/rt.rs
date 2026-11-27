@@ -1,3 +1,4 @@
+use super::reload_state::ReloadState;
 use super::{RtHost, RtInstallers, RtLinker, RtManifest, RtPlacer, Session};
 use super::codes::code_of;
 use crate::package::dsp;
@@ -8,14 +9,21 @@ use dkrt_abi::package::PackageId;
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::MAX_MODULES;
-use dkrt_lifecycle::{LifecycleError, PackageManager, Refusal, Report};
+use super::RtTrace;
+use dkrt_lifecycle::{LifecycleError, PackageManager, Refusal, Report, Traced};
 use dkrt_sdk::sel::Record;
 use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::*;
 
 /// The package manager of the runtime over its seams.
-pub type Manager<P, M, R> = PackageManager<RtManifest<P, M, R>, RtPlacer<P, M, R>, RtLinker<P, M, R>, RtInstallers<P, M, R>, RtHost<P, M, R>>;
+pub type Manager<P, M, R> = PackageManager<
+    RtManifest<P, M, R>,
+    Traced<RtPlacer<P, M, R>, RtTrace<P, M, R>>,
+    Traced<RtLinker<P, M, R>, RtTrace<P, M, R>>,
+    Traced<RtInstallers<P, M, R>, RtTrace<P, M, R>>,
+    Traced<RtHost<P, M, R>, RtTrace<P, M, R>>,
+>;
 
 /// The runtime's package lifecycle: the session the seams share and the manager over them. It lives for the whole run: the boot brings the selection up through it, the live job loads,
 /// unloads and reloads modules through it, and the DSP loader reports a failed DSP part to it. It must not move once `init` has run (the seams point into the session).
@@ -26,10 +34,9 @@ pub struct Rt<P: PackagePlatform, M: Images, R: Registry> {
     up: bool,
     /// The take-down of a DSP part whose restore answered busy (a task below the UI task is not parked): the DSP load stays pending and a later UI pass finishes it.
     dsp_down: DspDown,
-    /// The reload of a service waits for a busy restore (`Rt::reload_closure`): the live job asks again on its next pass, and `dsp_step` leaves the manager's pending take-down to it.
-    pub(super) reloading: bool,
-    /// A reload of a service took a member down before it ended with a refusal.
-    pub(super) reload_torn: bool,
+    /// Where the reload of a service stands (`Rt::reload_closure`): whether the live job must ask again (`dsp_step` then leaves the manager's pending take-down to it) and whether a
+    /// member went down.
+    pub(super) reload: ReloadState,
 }
 
 /// A DSP part's take-down that waits for a busy restore (`Rt::take_down_dsp`): the record, its boot index, the failure code, the passes spent, and whether the load in flight
@@ -64,8 +71,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         Session::init(addr_of_mut!((*out).session), loader);
         addr_of_mut!((*out).up).write(false);
         addr_of_mut!((*out).dsp_down).write(DspDown::NONE);
-        addr_of_mut!((*out).reloading).write(false);
-        addr_of_mut!((*out).reload_torn).write(false);
+        addr_of_mut!((*out).reload).write(ReloadState::Idle);
     }
 
     /// The lifecycle over `loader`, by value (host tests; nothing is started yet, so it may move until `boot`).
@@ -88,7 +94,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             self.session.modules[k] = p.unwrap_or(core::ptr::null());
         }
         let manifest = RtManifest::of(&mut self.session, modules);
-        let (placer, linker, installers, host) = self.session.seams();
+        let (placer, linker, installers, host) = super::traced_seams(&mut self.session);
         self.up = false;
         PackageManager::init(self.manager.as_mut_ptr(), manifest, placer, linker, installers, host)?;
         self.up = true;
@@ -142,6 +148,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         for k in 0..count.min(MAX_MODULES) {
             paths[k] = Some(rec.paths[k].as_ptr());
         }
+        let op = self.next_op();
+        self.enter_op(op);
         let init = self.init(&paths, count);
         self.session.begin_boot(caps, count);
         for k in 0..count {
@@ -182,6 +190,22 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         }
         self.report_boot(rec, report);
         crate::package::boot_idx::set(u32::MAX);
+        self.leave_op();
+    }
+
+    /// Number a new operation (a boot or a live job): its events carry the number once it is entered.
+    pub unsafe fn next_op(&mut self) -> u32 {
+        self.loader().next_op()
+    }
+
+    /// Operation `op` runs now: the events of the manager's seams and of the installer's gate carry its number until `leave_op`.
+    pub unsafe fn enter_op(&mut self, op: u32) {
+        self.loader().enter_op(op);
+    }
+
+    /// The running operation ended.
+    pub unsafe fn leave_op(&mut self) {
+        self.loader().leave_op();
     }
 
     /// The name hash of the service package `service` provides (0 when it provides none).
@@ -469,7 +493,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// timeout `dsp_down` is cleared while the manager keeps its pending take-down and retries it silently (acceptable: the retained state ends the session).
     pub unsafe fn dsp_step(&mut self, l: ServiceTable) {
         if let Some(m) = self.mgr() {
-            if m.restore_pending().is_some() && !self.reloading {
+            if m.restore_pending().is_some() && !self.reload.is_waiting() {
                 let r = m.retry_pending();
                 if self.dsp_down.live {
                     let mut w = self.dsp_down;

@@ -105,7 +105,7 @@ A `runtimeAcceptance` record of a device test of the runtime loading and lifecyc
 | Command | What runs |
 | --- | --- |
 | `mise run test:changed` | `nx affected` against `DIGI_GATE_BASE` (default `main`) over the targets `lint`, `fmt-check`, `typecheck`, `test-host`, `python-checks` and `objects-check` (about 25 s uncached; `patchkit` is affected by edits of its own files, of core module sources, manifests or toolchain inputs, so a stale committed `.dko.json` fails here). Does not run Rust, module builds or devices. |
-| `pnpm test:host` | The Vitest projects of `vitest.host.projects.json` except `web-wasm` (the Nx `test-host` set): control-client, test-support, dk-session, web-transfer, desktop-host, regression-host, module-tests, nx-host, dkbs. One worker by default; `-- --maxWorkers N` changes it. |
+| `pnpm test:host` | The Vitest projects of `vitest.host/*.json` except `web-wasm` (the Nx `test-host` set): control-client, test-support, dk-session, web-transfer, desktop-host, regression-host, module-tests, nx-host, dkbs. One worker by default; `-- --maxWorkers N` changes it. |
 | `pnpm verify:host` | oxlint, Prettier check, host Vitest, typecheck of control-client, dk-session, test-support, regression and desktop. Stops at the first failure. |
 | `pnpm --filter @digi/web test-wasm` | The Vitest project `web-wasm` (`tests/*.wasm.test.ts`, 120 s limit per test). Needs `public/*.wasm` (`@digi/web:test-wasm` builds it). Cases that need firmware skip when absent. |
 | `mise run lint:py` | `ruff check` and `ruff format --check` over the pyproject include list. |
@@ -451,7 +451,7 @@ A module keeps its tests in its own `tests/` folder. Content modules use `module
 
 - `test_*.py`, also in subfolders: pytest files. The basename is unique across the repository (prefix it with the module name). A helper
   next to the test is imported by name. Use `Path(__file__).parents[1]` for the module folder.
-- `*.test.ts`: Vitest project `module-tests` of `vitest.host.projects.json` (`pnpm test:host`), found recursively under the module roots.
+- `*.test.ts`: Vitest project `module-tests` (`vitest.host/module-tests.json`) (`pnpm test:host`), found recursively under the module roots.
 - `*.device.test.ts`: device tests, registered in the owner's `project.json` (`metadata.runtimeAcceptance`, files relative to that
   project root) and run by Vitest's `runtime` project. Runtime acceptance is split by concern: `core/runtime-tests` (the package: reload, live, missing; `runtime/core/tests/project.json`),
   `core/runtime-boot-tests`, `core/runtime-transfer-tests`, `core/runtime-diag-tests`, `core/runtime-platform-tests`,
@@ -1249,12 +1249,36 @@ Digest tools are inputs through their result, not their source text: `tools/nx/d
 edit invalidates only the targets whose definition changes. `UPDATE_GOLDENS` is a cache input of module device
 targets and `gate-stock:stock`.
 
-The system package: `core/runtime:package` reads `build/package.dko.json` as a `dependentTasksOutputFiles` of `core/runtime:build-objects` (which declares the object as an output and runs first), never as a tracked file: Nx hashes a tracked file before `build-objects` rewrites it, so a source edit would reach the package one run late. The hand-written input lists of `core/runtime` (`rust-tests`, `test-assembly`) name every crate of the `dkrt` closure (`Cargo.toml` of `runtime/core/src/rs`) as a `production` project, `dkrt-lifecycle` and `dkrt-svc-rt` included, plus the dev-only `services/*/dks` and `local-*` fixture crates as file globs; a new path dependency is added there. `patchkit` leaves dev-dependencies out of an object's source hash, so an edit of a dev-only crate (`dkrt-svc-rt`) reruns the tests and leaves the package cached.
+The system package: `core/runtime:package` reads `build/package.dko.json` and the menu's `[package_part]` object `runtime/apps/digikit-menu/build/digikit-menu.dko.json` as `dependentTasksOutputFiles` of `core/runtime:build-objects` and `core/digikit-menu:build-objects` (a core module whose only object is a `[package_part]` has a `build-objects` target too, and that target declares the part as an output). Before, the menu object was a tracked input that nothing rebuilt: an edit of `menu.c` left the package and every device key unchanged until someone ran `patchkit build`. Proof: an edit of `menu.c` changes `system.dksp` on the first `core/runtime:package` run. Both objects are read through the producing target (which declares the object as an output and runs first), never as a tracked file: Nx hashes a tracked file before `build-objects` rewrites it, so a source edit would reach the package one run late. The hand-written input lists of `core/runtime` (`rust-tests`, `test-assembly`) name every crate of the `dkrt` closure (`Cargo.toml` of `runtime/core/src/rs`) as a `production` project, `dkrt-lifecycle` and `dkrt-svc-rt` included, plus the dev-only `services/*/dks` and `local-*` fixture crates as file globs; a new path dependency is added there. `patchkit` leaves dev-dependencies out of an object's source hash, so an edit of a dev-only crate (`dkrt-svc-rt`) reruns the tests and leaves the package cached.
 
 A package or a harness file that no test imports is not an input: an edit to `packages/dk-session/src/samples.ts`
 leaves a target that does not import it cached. Merge and narrow keys also leave out the driver packages (`DRIVER_ROOTS`), even when imported, except the files that hold device facts (protocol, log layout, emulator launch, key codes; `DRIVER_SUBJECT_FILES`). Files read by path are described in "What a device test's cache key contains". `digi-control:daemons` declares the daemon
 sources (`SOURCE_GLOBS` of `tools/devtools/emud_key.py`) as inputs. The binary is keyed by content, and these
 inputs make a source edit select every task that consumes `dist/daemons.json`.
+
+### JS tool inputs and the Vitest project list
+
+The named input `jsToolchain` (`nx.json`) holds the Node and pnpm versions, the environment switches, `pnpm-workspace.yaml`
+and `nx.json`, and `externalDependencies` for the packages that targets execute: vitest, typescript, vite, `@types/node`,
+smol-toml, `@napi-rs/canvas` and solid-js. It holds no lockfile and no root `package.json`. Nx hashes an external dependency from its
+lockfile entry and those of its dependencies, so a version change of one of these packages re-keys every target that uses
+the input, and a lockfile change that only adds or edits workspace importers (a new package, another project's dependency)
+re-keys none. Targets with `^production` also hash the npm packages of their project and its dependencies through the project
+graph (checked with `show target inputs @digi/web:test-wasm --json` and `@digi/web:check`: `@astrojs/check`, `astro`,
+`@astrojs/solid-js`, `solid-js` are in the `external` list); an app target without `^` lists the app's own packages itself (web
+`test-host` names `astro` and `@astrojs/solid-js`; desktop names them once as the project's named input `desktopPackages`).
+A cached target that runs no npm package (Cargo, patchkit, gate scripts) sets `{ "externalDependencies": [] }`: without any
+`externalDependencies` entry Nx hashes every external dependency, and any npm bump re-keys it. A wrapper script counts: a target that runs `tools/nx/rust-env.mjs` lists `smol-toml`, which that script imports. `jsLintTooling` (`package.json` for the
+`lint` and `fmt:check` scripts, oxlint, prettier and their plugins) is an input of the `lint` and `fmt-check` targets only. A
+package that a target executes and that is in none of these lists must be added to the target's inputs as
+`{ "externalDependencies": [...] }`; `pnpm nx:pilot show target inputs PROJECT:TARGET --json` lists the `external` packages that a target hashes.
+
+Each Vitest project is one file, `vitest.host/NAME.json`, which `vitest.host.config.ts` reads. A project's Nx target lists its own
+file as an input (`hostTests` does not hold them), so adding a project or editing an entry re-keys only that project's tests;
+`vitest.host.config.ts` is an input of all host tests. To add a project, add its file and name it in the target's inputs: no shared file changes.
+`node tools/nx/check-vitest-host.mjs` (the Nx target `workspace:vitest-host`, a dependency of `lint`) reads the resolved project graph,
+so targets that `tools/nx/*.mjs` generate count too, and fails when a target that runs `--project NAME` lacks
+`{workspaceRoot}/vitest.host/NAME.json`, lists another project's file, or when a file has no target.
 
 ### What a device test's cache key contains
 

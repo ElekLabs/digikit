@@ -11,6 +11,7 @@
 // - A gap (the oldest kept event is newer than the anchor in the same boot: the ring dropped events we had not read) is reported as `lost`, never thrown.
 import { LOG_KIND } from './gen_proto.ts';
 import type { DkInfoFull, DkLogEvent, DkSession, Quick } from './dkupload-core.ts';
+import { nameHash } from './lifecycle-event.ts';
 import { runtimeEvent, type RuntimeEvent } from './runtime-log.ts';
 import { BOOT_WAIT_MS, type Clock, type WaitRecord } from './waits.ts';
 
@@ -353,6 +354,15 @@ export class RuntimeEvents {
   }
   untilModLoad(name: string, opts?: WaitOpts) {
     return this.until('MOD_LOAD', (e) => e.fields.name === name, { withinMs: 30_000, ...opts });
+  }
+  /** A step of the package lifecycle of the file `file` (its path or name): `phase` of `step`, such as `begin` of `place` (LIFECYCLE events; they come only while a debug module listens). */
+  untilLifecycle(file: string, step: string, phase: 'begin' | 'end' | 'note', opts?: WaitOpts) {
+    const hash = nameHash(file).toString(16).padStart(8, '0');
+    return this.until(
+      'LIFECYCLE',
+      (e) => e.fields.hash === hash && e.fields.step === step && e.fields.phase === phase,
+      { withinMs: 30_000, ...opts },
+    );
   }
   untilModDsp(index: number, opts?: WaitOpts) {
     return this.until('MOD_DSP', (e) => e.fields.index === index, { withinMs: 30_000, ...opts });

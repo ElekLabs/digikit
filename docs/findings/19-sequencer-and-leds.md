@@ -34,10 +34,10 @@ routine itself. (This also explains finding 04's "PLAY reaches the scheduler onc
 
 Fix **[D]**: `Time::service_with` (packages/emulator/machine/src/time.rs) offers the highest-level forced, unmasked INTC source
 above the live IPL (`IntcBank::forced_candidate`, skipping vector 191), after PIT and DTIM, with the existing
-`blocked` / `idle_window` caches covering it. It is behind `DIGI_INTC_FORCE=1` (default off) because it changes
-every PCM that involves the sequencer: with it on, the pins `exactness-100m`, `trig1-noqa-40m`, `trig1-taps` and
-`trig1-tap-release` change (`idle`, `trig1-hold`, `kb-chord16` have no pin); with it off all pins and the 61
-oracles pass. **Changing the default needs Em's approval and new pins.**
+`blocked` / `idle_window` caches covering it. In this initial experiment it was opt-in (`DIGI_INTC_FORCE=1`) because it
+changed sequencer PCM: `exactness-100m`, `trig1-noqa-40m`, `trig1-taps` and `trig1-tap-release` changed
+(`idle`, `trig1-hold`, `kb-chord16` had no pin). With it off all pins and the 61 oracles passed. See the dated follow-up
+below for the default change.
 
 Result with `DIGI_INTC_FORCE=1` **[D]**: INTFRCH0 reads 0; the step playhead runs on the trig LEDs (0x11 on the
 current step, 0x71 on programmed trigs, 16.5M instructions per step on average, 17.6/13.2 alternating = swing);

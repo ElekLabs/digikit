@@ -1,0 +1,6 @@
+{
+  "name": "module-rig",
+  "dir": ".",
+  "include": "{{modules,runtime,services,tests/fixtures/modules}/**/tests,sdk/tests/dsp}/*.rig.test.ts",
+  "testTimeout": 600000
+}

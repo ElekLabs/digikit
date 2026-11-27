@@ -20,8 +20,7 @@ fn a_service_reload_checks_drains_reloads_the_closure_in_one_call_and_ends_with_
     let mut s = service_script();
     s.quiesce_busy = 2;
     s.service_busy = 3;
-    // the menus are asked once, before the call: a menu built after it is the closure's own business (it is down)
-    s.menu_after = 1;
+    // the job asks the menus on every pass of the UNLOAD step; the owner stops saying yes once the call has its room (`ReloadState::is_called`)
     assert_eq!(run(&mut s), (2, OK, step::DONE));
     let at = |name: &str| first(&s, name);
     assert!(at("find") < at("refusal") && at("refusal") < at("check") && at("check") < at("quiesce") && at("quiesce") < at("reload service"));
@@ -33,6 +32,33 @@ fn a_service_reload_checks_drains_reloads_the_closure_in_one_call_and_ends_with_
         assert!(!s.log.contains(&gone), "a service reload has no `{gone}` step of its own: {:?}", s.log);
     }
     assert!(s.torn_seen, "the closure was taken down and is back: the state says it was reloaded");
+}
+
+#[test]
+fn a_service_that_is_busy_gets_the_refusals_asked_again_until_it_is_not() {
+    let mut s = service_script();
+    s.refusal_busy = 3;
+    assert_eq!(run(&mut s), (2, OK, step::DONE));
+    assert_eq!(s.log.iter().filter(|l| **l == "refusal").count(), 4, "three busy answers, then the one that passes");
+    assert_eq!(s.log.iter().filter(|l| **l == "check").count(), 1, "the file is checked once the refusals pass");
+    assert!(s.log.contains(&"reload service"));
+}
+
+#[test]
+fn a_service_that_stays_busy_ends_the_job_busy_with_nothing_changed() {
+    let mut s = service_script();
+    s.refusal_busy = u32::MAX;
+    assert_eq!(run(&mut s), (2, E_BUSY, step::DONE));
+    changed_nothing(&s, "a service busy until the timeout");
+    assert!(s.log.iter().filter(|l| **l == "refusal").count() > 50, "it asked on every pass until the wait ran out");
+}
+
+#[test]
+fn a_busy_module_refusal_is_not_asked_again() {
+    let mut s = Script::new();
+    s.refusal_busy = 1;
+    assert_eq!(run(&mut s).1, E_BUSY);
+    assert_eq!(s.log.iter().filter(|l| **l == "refusal").count(), 1);
 }
 
 #[test]

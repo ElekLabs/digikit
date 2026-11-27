@@ -7,7 +7,8 @@
 import { fmtVersion } from '@digi/dk-session';
 import { formatBytes } from '../modules/backend.ts';
 import { fitsNow, type Caps } from '../modules/fit.ts';
-import type { CardServiceRef, Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
+import type { CardServiceRef, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
+import type { Group } from '../modules/module-path.ts';
 import { PROVIDER_MAX } from '../modules/services.ts';
 import type { ServiceRef, ServiceRefusal } from '../modules/services.ts';
 import { GROUPS, groupRows, isSystemRow, portLine, unusedServices, type RowGroup } from './pane-groups.ts';
