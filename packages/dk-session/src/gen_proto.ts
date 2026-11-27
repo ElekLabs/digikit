@@ -381,6 +381,7 @@ export const LOG_KIND = {
   VIEW_CHANGED: 64,
   VALUE_CHANGED: 65,
   LIFECYCLE: 66,
+  STATE_CARRIED: 67,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -449,6 +450,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   64: ['VIEW_CHANGED', ['old_view', 'view', 'old_class', 'class', 'generation']],
   65: ['VALUE_CHANGED', ['scope', 'key', 'old', 'new', 'generation']],
   66: ['LIFECYCLE', ['op', 'name_hash', 'info', 'status', 'detail']],
+  67: ['STATE_CARRIED', ['op', 'name_hash', 'outcome', 'version', 'len']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

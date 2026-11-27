@@ -3,6 +3,7 @@
 //! services number the keys again before the first consumer starts (`ProviderHost::services_up`), and nothing here has a rollback: a failure after the take-down leaves the
 //! closure down (the job reports it as torn).
 use super::codes::code_of;
+use super::service_copy::ServiceCopy;
 use super::rt::Rt;
 use crate::package::admission::Admission;
 use crate::package::loader::{records, Images, PhaseKind, Registry, TABLE_MAX};
@@ -103,6 +104,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         for &r in &members[..n] {
             self.loader().reload_abort(r);
         }
+        self.session.carried.release_all(self.loader());
         true
     }
 
@@ -115,6 +117,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     pub fn reload_reset(&mut self) {
         self.reloading = false;
         self.reload_torn = false;
+        unsafe { self.session.carried.release_all(self.loader()) };
     }
 
     /// Reload service record `rec` from the file at `path` with its consumers (`Loader::provider_prepare`, then `PackageManager::reload`), called once per UI pass by the live job.
@@ -166,6 +169,18 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         if r != OK {
             return r;
         }
+        // the state the old copies hand over gets its room before anything is taken down: a full arena is a refusal, as it is for any other check
+        let carry = self.session.carried.reserve(members, ServiceCopy::of, l);
+        if carry != OK {
+            l.provider_table_restore(rec, &old[..old_len]);
+            return carry;
+        }
+        let mut live = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+        let k = caps.len().min(CAP_MAX);
+        live[..k].copy_from_slice(&caps[..k]);
+        // the blocks stay taken until the new copies are up: they are not part of what the reload gives back
+        hold_in(&mut live[..k], self.session.carried.held_bytes());
+        let caps = &live[..k];
         for &r in members {
             // a consumer comes back from the file it came from; the path pointer a live load gave is the job's buffer, which holds this job's path now
             if r < MAX_MODULES {
@@ -188,6 +203,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             }
             Err(e) => Err(e),
         };
+        if m.restore_pending().is_none() {
+            // the new copies took what they take (or the reload ended before the take-down): nothing waits for the bytes
+            self.session.carried.release_all(l);
+        }
         let down = members.iter().any(|&r| !m.live().contains(PackageId(r as u8))) || m.restore_pending().is_some();
         if out.is_ok() && !down && self.closure_retained(rec) {
             // up again, but an old copy's memory is not back yet: the job asks again
@@ -232,6 +251,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let Some(m) = self.mgr() else {
             return E_NOT_FOUND;
         };
+        if m.restore_pending().is_none() {
+            self.session.carried.release_all(self.loader());
+        }
         match out {
             Ok(_) => {
                 self.reloading = false;
@@ -256,6 +278,16 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 }
                 code
             }
+        }
+    }
+}
+
+/// `caps` with `held` more arena bytes in use (the state blocks of a reload): the arena's `used` and its largest free block.
+fn hold_in(caps: &mut [DkrtCap], held: u32) {
+    for c in caps.iter_mut() {
+        if c.kind == dkrt_sdk::proto::CAPK_ARENA as u32 {
+            c.used = c.used.saturating_add(held);
+            c.largest = c.largest.saturating_sub(held);
         }
     }
 }

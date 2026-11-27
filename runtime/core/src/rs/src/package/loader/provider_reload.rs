@@ -192,6 +192,14 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
     }
 
+    /// An arena block for the state a reload carries (`CarriedState`), and its release.
+    pub(crate) unsafe fn arena_alloc(&mut self, n: u32) -> Option<Block> {
+        self.m.alloc(n)
+    }
+    pub(crate) unsafe fn arena_free(&mut self, addr: dkrt_abi::dev_addr::DevAddr) {
+        self.m.free(addr)
+    }
+
     /// What the records of `members` (a closure: a service and its consumers) hold that its reload gives back before the files load again: (arena bytes of the image blocks and
     /// record blocks, DSP area bytes), as `own_use` counts them for one module.
     pub(crate) unsafe fn closure_own(&self, members: &[usize]) -> (u32, u32) {

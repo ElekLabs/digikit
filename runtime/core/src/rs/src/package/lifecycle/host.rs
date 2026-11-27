@@ -1,3 +1,5 @@
+use super::carried_state::Donor;
+use super::service_copy::ServiceCopy;
 use super::session::Handle;
 use crate::package::handlers::services;
 use crate::package::loader::{Images, Registry};
@@ -95,6 +97,31 @@ impl<P: PackagePlatform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R
         match unsafe { services().can_stop() } {
             OK => Ok(()),
             status => Err(status),
+        }
+    }
+
+    fn export_state(&mut self, package: PackageId) {
+        unsafe {
+            let (s, _) = self.0.get();
+            if let Some(copy) = ServiceCopy::of(package.0 as usize) {
+                s.carried.export(package.0 as usize, &copy);
+            }
+        }
+    }
+
+    fn import_state(&mut self, package: PackageId) -> Result<(), Status> {
+        unsafe {
+            let (s, _) = self.0.get();
+            let Some(copy) = ServiceCopy::of(package.0 as usize) else {
+                return Ok(());
+            };
+            let (status, outcome) = s.carried.import(package.0 as usize, &copy);
+            super::trace::emit_state(copy.name(), &outcome);
+            if status == OK {
+                Ok(())
+            } else {
+                Err(status)
+            }
         }
     }
 

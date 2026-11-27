@@ -1892,6 +1892,15 @@ id = 66
 name = "LIFECYCLE"
 args = ["op", "name_hash", "info", "status", "detail"]
 
+# The state a reload of a service handed to its next copy, or did not (docs/INSTRUMENTATION.md "Lifecycle events"; one event for each service of the reload that had bytes). `op`: the operation number of the
+# `LIFECYCLE` events of the same reload. `name_hash`: FNV-1a of the service's name. `outcome`: 0 the bytes went to the new copy, 1 dropped (the new copy has another name), 2 dropped (the
+# old layout is outside what the new copy accepts), 3 dropped (the new copy has no state part); a dropped copy got `import(None)` when it has the part. `version`: the layout of the old bytes.
+# `len`: their length in bytes.
+[[log.kind]]
+id = 67
+name = "STATE_CARRIED"
+args = ["op", "name_hash", "outcome", "version", "len"]
+
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
 phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (runtime/core/abi/src/service.rs)
 polls = 4                            # the poll slots, owner 0x200 | i: POLLS of runtime/core/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file

@@ -10,6 +10,7 @@
 //! - `rt`: [`Rt`], the manager over the seams for the whole run: the boot's load and its report, the live job's load, unload and reload of a module, the DSP step.
 //! - `trace`: [`RtTrace`], the lifecycle events of the seams over the event log, and the emit function the live job and the installer's gate use.
 //! - `reload`: the reload of a service and its consumers, one call of the live job (`Rt::reload_closure`).
+//! - `carried_state`: [`CarriedState`], the state a reload of a service hands to its next copy.
 //! - `codes`: the load status of each manager refusal (the codes the loader gave before).
 //! - `manifest`: [`RtManifest`], the header tables of the selected packages and the services they need.
 //!
@@ -19,6 +20,7 @@
 //! The unit tests of the seams are `loader/tests/seam_tests.rs` and the assembly tests over the real packed files are `assembly_tests` here (the graph from the
 //! tables) and `loader/tests/manager_assembly_tests.rs` (the manager over the seams): both need the loader's own fakes and fields, which only its tests see.
 
+mod carried_state;
 mod codes;
 mod host;
 mod install;
@@ -27,6 +29,7 @@ mod manifest;
 mod placer;
 mod reload;
 mod rt;
+mod service_copy;
 mod session;
 mod trace;
 

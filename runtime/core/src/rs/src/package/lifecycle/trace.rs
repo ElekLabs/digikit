@@ -56,6 +56,17 @@ pub(crate) unsafe fn emit(phase: Phase, step: Step, package: PackageId, name_has
     dlog::ev(logk::LIFECYCLE, dlog::INFO, [read_volatile(addr_of!(OP)), name_hash, info, status as u32, detail]);
 }
 
+/// Log what the state handoff did for the service named `name_hash` (`STATE_CARRIED`): nothing for a service that started fresh.
+pub(crate) unsafe fn emit_state(name_hash: u32, outcome: &super::carried_state::Outcome) {
+    use super::carried_state::Outcome;
+    let (code, version, len) = match *outcome {
+        Outcome::Fresh => return,
+        Outcome::Carried { version, len } => (0, version, len),
+        Outcome::Dropped { why, version, len } => (why as u32, version, len),
+    };
+    dlog::ev(logk::STATE_CARRIED, dlog::INFO, [read_volatile(addr_of!(OP)), name_hash, code, version as u32, len]);
+}
+
 /// The trace of one manager's seams: it finds the file name of a package through the session the seams share.
 pub(crate) struct RtTrace<P: PackagePlatform, M: Images, R: Registry>(Handle<P, M, R>);
 
