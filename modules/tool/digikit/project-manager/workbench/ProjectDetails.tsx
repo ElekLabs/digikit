@@ -1,7 +1,7 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from 'solid-js';
 import type { ModuleClient } from '@digi/module-ui';
 import { ProjectManager, type GetReply } from './gen/project_manager_pb.js';
-import { hex32, projectTitle, queryErrorText, slotNumber } from './project-text';
+import { hex32, queryErrorText, slotNumber } from './project-text';
 
 /** How long to wait before asking again for a project the device is still reading. */
 export const LOADING_RETRY_MS = 200;

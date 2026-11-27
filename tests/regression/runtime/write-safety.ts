@@ -206,7 +206,8 @@ export function dmaHoles(plan: RuntimePlan): [number, number][] {
     const key = Object.keys(plan.symbols).find(
       (k) => k.startsWith('core/runtime@') && new RegExp(`storage_adapter\\d+${leaf}$`).test(k),
     );
-    if (key !== undefined) holes.push([plan.symbols[key], size]);
+    const at = key === undefined ? undefined : plan.symbols[key];
+    if (at !== undefined) holes.push([at, size]);
   };
   listing('FP', 512);
   listing('SCRATCH', 4096);
