@@ -3,7 +3,6 @@ import { pollUntil } from '@digi/test-support';
 import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
 import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { sendCc } from '@digi/regression/runtime/midi.ts';
-import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { bootWith, shapeWords, SHAPE_A } from './lfo-cards.ts';
 import {
   BAD,
@@ -32,12 +31,12 @@ import {
  * No SHARC: the LFO tick is a ColdFire interrupt (vector 191) that the zero-DSP session paces itself (`enable_zero_dsp_timing`: the SSI0 request chain at 96 kHz forces the
  * vector from the DMA 50 completion), so it runs at 1500 Hz. The image is the emulator patch set; the lfo service installs its hooks when it loads.
  *
- * Five cases, one boot of the runtime each (the last takes over the runtime of the one before it):
+ * Five cases, one boot of the runtime each:
  * - stock: no lfo service runs: waves 0 to 5 are the stock shapes (item 7);
  * - table: with `lfo.dks` and the RAMP shape loaded, WAVE reaches 7 and the output follows the shape's table, not TRI (item 1);
  * - start phase: on a note in MODE TRG the shape starts at the phase of SPH (item 4); each note takes a voice slot (with voice rotation the next slot, with one voice per track slot 0), whose phase is checked exactly;
  * - number kept: a restart with the same module keeps the wave number in `lfo.shapes` and the output follows the table again (item 5);
- * - reload: `RELOAD services/lfo.dks` on that runtime answers OK, the shape table is republished and the output follows it again (the order of the steps and the refusals are host tests).
+ * - reload: `RELOAD services/lfo.dks` answers 0, the shape table is republished and the output follows it again (the order of the steps and the refusals are host tests).
  * The hook install and the unload (MODULES and CAPACITY as before) are shown by the table case here and by `module-load`; the refusals are assembly tests.
  */
 const READS = 100;
@@ -47,9 +46,6 @@ const describeFit = (name: string, fits: Record<string, Fit>) =>
   `${name}: ${Object.entries(fits)
     .map(([k, f]) => `${k} ${f.err.toFixed(3)}`)
     .join(', ')}`;
-
-/** The runtime that the 'number kept' case leaves running, for the reload case that follows it. */
-let kept: TestRuntime | undefined;
 
 cardRigs(
   'lfo shapes: output',
@@ -173,12 +169,10 @@ cardRigs(
       const shape = fitShape(samples, (p) => evalTable(RAMP_SAMPLES, p));
       expect(shape.err, `the shape answers to its number after the restart (fit ${shape.err.toFixed(3)}; samples ${describeSamples(samples)})`).toBeLessThan(OK);
       await rt2.session.expectNoFault('wave number kept');
-      kept = rt2;
     }, 900_000);
 
     test('reload: RELOAD services/lfo.dks answers OK and the output follows the shape table again', async () => {
-      const rt = kept;
-      if (rt === undefined) throw new Error("the 'number kept' case runs first and leaves the runtime");
+      const rt = await bootWith(h, 'reload', [SHAPE_A]);
       const before = await shapeWords(h, rt);
       const rig = new LfoRig(rt);
       const dest = await rig.run();
