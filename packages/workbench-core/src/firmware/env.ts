@@ -49,7 +49,7 @@ export interface FirmwareEnv {
    * `device-introblank` with the Custom boot screen toggle.
    */
   prepare(stock: Uint8Array, restore: boolean, set?: string): Promise<PreparedFlash>;
-  /** The desktop build’s system package, read before sending a runtime image. */
+  /** This build's system package, read before sending a runtime image. */
   systemPackage?(): Promise<SystemPackage>;
   /** The Rust sender (`flash::Sender`) for this many messages: the pacing has one source of truth. */
   sender(total: number): Promise<FlashSender>;

@@ -228,6 +228,22 @@ pub unsafe extern "C" fn pk_apply(
     set(apply_bundle(fw, bundle, &ids))
 }
 
+/// System package installation actions as JSON in `pk_plan_*`, or a refusal in `pk_err_*`.
+#[unsafe(no_mangle)]
+pub extern "C" fn pk_system_package_plan(
+    repair: i32,
+    module_support: i32,
+    verified_package_on_card: i32,
+) -> i32 {
+    set(crate::syspkg::install_plan(
+        repair != 0,
+        module_support != 0,
+        verified_package_on_card != 0,
+    )
+    .map_err(|e| err!("{e}"))
+    .and_then(|actions| Ok((vec![], serde_json::to_string(actions)?))))
+}
+
 /// Identify an image; the JSON is in `pk_plan_*`.
 ///
 /// # Safety

@@ -1,6 +1,7 @@
 // A thin, host-neutral wrapper over patchkit.wasm (packages/patchkit/src/wasm.rs). Used by the patch
 // worker in the browser and by the node tests, so both run the same code. Everything stays in memory:
 // the firmware is never sent anywhere. Written without TS-only runtime syntax so node can import it.
+import type { SystemPackageAction, SystemPackagePlanInput } from '../runtime/activate-system-package';
 
 export interface CheckModule {
   id: string;
@@ -159,6 +160,7 @@ interface Exports {
   pk_check(...a: number[]): number;
   pk_verify(...a: number[]): number;
   pk_prepare(...a: number[]): number;
+  pk_system_package_plan(repair: number, moduleSupport: number, verifiedPackageOnCard: number): number;
   pk_sender_new(total: number): number;
   pk_sender_next(handle: number, nowMs: number): number;
   pk_sender_fail(handle: number): void;
@@ -181,7 +183,7 @@ interface Exports {
 }
 
 /** What the apps use of PatchKit (the wasm behind it is `PatchKit.create`); a test gives a stub of it where real wasm is not needed. */
-export type PatchKitLike = Pick<PatchKit, 'check' | 'prepare' | 'sender' | 'rpcFlash' | 'apply'>;
+export type PatchKitLike = Pick<PatchKit, 'check' | 'prepare' | 'sender' | 'rpcFlash' | 'apply' | 'systemPackagePlan'>;
 
 export class PatchKit {
   private x: Exports;
@@ -242,6 +244,13 @@ export class PatchKit {
     } finally {
       this.free(m);
     }
+  }
+
+  /** The same install order and refusals as the native system package installer. */
+  systemPackagePlan(input: SystemPackagePlanInput): SystemPackageAction[] {
+    const { repair, moduleSupport, verifiedPackageOnCard } = input;
+    if (this.x.pk_system_package_plan(+repair, +moduleSupport, +verifiedPackageOnCard) !== 0) this.fail();
+    return JSON.parse(this.plan()) as SystemPackageAction[];
   }
 
   /** A sender for `total` messages: the Rust `flash::Sender`, so the pacing has one source of truth. Call `free` when done. */

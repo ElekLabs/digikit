@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'vitest';
 import { H_ROLE, TABLE_VERSION } from '@digi/dk-session';
-import { groupOf } from '@digi/workbench-core/modules/dktransfer.ts';
+import { groupOf } from '@digi/workbench-core/modules/module-path.ts';
 import { DkNeeds } from '@digi/workbench-core/modules/dkneeds.ts';
 import type { Needs } from '@digi/workbench-core/modules/fit.ts';
 import { py, readBytes, wasmPath, workDir } from './support/patchkit-env.ts';
