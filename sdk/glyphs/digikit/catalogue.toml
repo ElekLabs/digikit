@@ -1,0 +1,6 @@
+# One entry per glyph the set should have. `v1 = true` marks a glyph the first release needs.
+# [[glyph]]
+# id = "control/knob"
+# group = "control"
+# v1 = true
+# note = "unipolar parameter value"

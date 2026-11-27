@@ -1,0 +1,9 @@
+name = "digikit"
+title = "digikit glyphs"
+description = "Icons and value glyphs for digikit screens"
+
+# Placeholder size classes, to be replaced by measured values.
+[sizes]
+inline = [7, 7]
+icon = [9, 9]
+knob = [13, 13]

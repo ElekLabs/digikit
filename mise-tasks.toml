@@ -129,6 +129,10 @@ description = "Prepare the MIDI and USB bridges and Transfer service packs for d
 run = "node packages/dkbs/cli/bootscreen.mjs"
 description = "Boot screen authoring without a device: mise run bootscreen (no arguments: gallery of the examples in a browser, --no-open skips the browser) | -- pack SRC.mjs | sheet SRC.mjs | dev SRC.mjs | put SRC.mjs [--port SUB] [--bin PATH] (pack, then send to the device)"
 
+["glyphs"]
+run = "node packages/dkglyph/cli/glyphs.mjs"
+description = "Glyph authoring without a device: mise run glyphs -- check [SET] (errors, warnings, coverage) | -- sheet [SET] [-o PNG] | -- dev [SET] [--no-open] [--port N] (live preview); SET defaults to sdk/glyphs/digikit"
+
 # --- scenarios (tests/scenarios/README.md) ---
 
 ["scenario:build"]
