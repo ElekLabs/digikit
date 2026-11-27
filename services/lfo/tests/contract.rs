@@ -208,6 +208,7 @@ fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
         }
     }
     let _reset = Reset;
+    let _image = host::install();
     for p in ALL.iter().filter(|p| p.dyn_types > 0) {
         provider_contract::<LfoRecipe>(&fixture(p.id));
     }
@@ -216,7 +217,7 @@ fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
 #[test]
 fn the_row_reaches_the_object_through_the_owner_guard() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    host::install();
+    let _image = host::install();
     file::dk_svc_start().expect("start");
     dkrt_test_support::contract::row_is_guarded(
         file::dk_svc_row(),
@@ -233,7 +234,7 @@ fn the_row_reaches_the_object_through_the_owner_guard() {
 fn an_lfo_page_hook_fired_inside_a_part_call_never_enters_the_owner() {
     use dkrt_test_support::hook_context::HookContext;
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    host::install();
+    let _image = host::install();
     file::dk_svc_start().expect("start");
     let hold = |f: &mut dyn FnMut()| {
         DK_SVC_OWNER.run((), |_| f());
@@ -252,6 +253,5 @@ fn an_lfo_page_hook_fired_inside_a_part_call_never_enters_the_owner() {
 #[test]
 fn the_file_does_not_start_on_an_image_without_the_wave_table() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    host::uninstall();
     assert_eq!(file::dk_svc_start().err(), Some(dkrt_sdk::E_NO_REGISTRY));
 }
