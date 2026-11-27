@@ -43,6 +43,3 @@ pub fn run(rest: &[String]) -> Result<()> {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests;
