@@ -11,6 +11,7 @@
 
 typedef struct {
     uint8_t method;
-    int32_t (*call)(dk_module_ctx *, const uint8_t *in, uint32_t in_len, uint8_t *out, uint32_t *out_len);
+    int32_t (*call)(dk_module_ctx *, const uint8_t *in, uint32_t in_len, uint8_t *out,
+                    uint32_t *out_len);
 } dk_workbench_query;
 #endif

@@ -52,7 +52,13 @@ fn the_arguments_are_checked() {
     let dir = module();
     assert!(run(&root(), &[]).is_err());
     assert!(run(&root(), &["--write".into()]).is_err());
-    assert!(run(&root(), &[dir.path().display().to_string(), "--bogus".into()]).is_err());
+    assert!(
+        run(
+            &root(),
+            &[dir.path().display().to_string(), "--bogus".into()]
+        )
+        .is_err()
+    );
     let mut both = args(dir.path(), "--write");
     both.push("--check".into());
     assert!(run(&root(), &both).is_err());
