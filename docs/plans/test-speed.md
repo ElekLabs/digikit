@@ -157,7 +157,7 @@ Highest payoff first. Each step states its proof.
     `tools/nx/retry.mjs` classifies the failed run's output: `no new boot within N s`, `no new boot: not seen within N ms of emulated time`,
     `runtime lifecycle deadline exceeded`, `emulator closed the connection` and `remote release timed out`. A run with an assertion failure is never
     retried, and neither is a second failure. A retry prints `emu-slot: RETRY <target>: load symptom ...` in the task output and appends to
-    `retries.jsonl` in the gate trace dir; the gate summary prints `retried (n)` with target, symptom and outcome. Proof: `tools/nx/tests/retry.test.ts`.
+    `retries.jsonl` in the gate trace dir; the gate summary prints `retried (n)` with target, symptom and outcome.
 14. [x] **Longest device tasks first.** Dropped: Nx 24 already sorts ready tasks by historical duration, longest first, as its third sort key (`node_modules/nx/dist/src/tasks-runner/tasks-schedule.js:166-177`). A fresh lane has no history, which is a small effect at most.
 15. [ ] **Machine-readable gate result.** Next to `trace.json` in `out/runs/gate/<stamp>/`, write `result.json`: the failed targets, each with its
     symptom class (from `tools/nx/retry.mjs`, or `other`), its log path, and whether a retry ran and passed (read from `retries.jsonl`). Tools and

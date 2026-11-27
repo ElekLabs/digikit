@@ -191,8 +191,16 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       : ['pnpm', ['nx:pilot', ...command]];
   const commands = [tier?.runMany ? ['run-many', ...args] : ['affected', ...args]];
   if (tier?.cachedRustTests) {
-    // run-many over the tag: `affected` has no --projects and hands the flag to cargo. A project whose inputs did not change replays.
-    commands.push(['run-many', '-t', 'rust-tests', '--projects', 'tag:rust-cached']);
+    // Affected against the gate base, limited to the cached crates by excluding the others (`--projects` would reach cargo through `affected`).
+    commands.push([
+      'affected',
+      '--base',
+      process.env.DIGI_GATE_BASE,
+      '-t',
+      'rust-tests',
+      '--exclude',
+      '!tag:rust-cached',
+    ]);
   }
   console.log(`gate: ${commands[0][0]} ${tier ? 'over the tier targets' : 'with the given arguments'}`);
   // The device tests the changed files select by ownership and the fixed smoke set: test-subset.mjs plans the run (it runs it itself, with the
