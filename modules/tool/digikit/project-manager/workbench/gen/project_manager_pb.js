@@ -9,7 +9,7 @@ import { file_dk_options } from "@digi/wire/dk/options_pb.js";
  * Describes the file project_manager.proto.
  */
 export const file_project_manager = /*@__PURE__*/
-  fileDesc("ChVwcm9qZWN0X21hbmFnZXIucHJvdG8SD3Byb2plY3RfbWFuYWdlciIhCgtMaXN0UmVxdWVzdBISCgpmaXJzdF9zbG90GAEgASgNImQKB1Byb2plY3QSDAoEc2xvdBgBIAEoDRISCgRuYW1lGAIgASgJQgTI8xgQEg8KB2N1cnJlbnQYAyABKAgSEAoIaGFzX2RhdGEYBCABKAgSFAoMZGF0YV91bmtub3duGAUgASgIIkgKCUxpc3RSZXBseRItCgVpdGVtcxgBIAMoCzIYLnByb2plY3RfbWFuYWdlci5Qcm9qZWN0QgTQ8xgQEgwKBG5leHQYAiABKA0iGgoKR2V0UmVxdWVzdBIMCgRzbG90GAEgASgNIkoKBk1vZHVsZRIQCgJpZBgBIAEoCUIEyPMYHxIMCgRoYXNoGAIgASgNEhAKCHNldHRpbmdzGAMgASgNEg4KBmxvYWRlZBgEIAEoCCKcAQoIR2V0UmVwbHkSDwoHbG9hZGluZxgBIAEoCBINCgVmb3VuZBgCIAEoCBIMCgRzbG90GAMgASgNEhIKBG5hbWUYBCABKAlCBMjzGBASDQoFc3RhbXAYBSABKA0SDwoHY291bnRlchgGIAEoDRIuCgdtb2R1bGVzGAcgAygLMhcucHJvamVjdF9tYW5hZ2VyLk1vZHVsZUIE0PMYCDKRAQoOUHJvamVjdE1hbmFnZXISQAoETGlzdBIcLnByb2plY3RfbWFuYWdlci5MaXN0UmVxdWVzdBoaLnByb2plY3RfbWFuYWdlci5MaXN0UmVwbHkSPQoDR2V0EhsucHJvamVjdF9tYW5hZ2VyLkdldFJlcXVlc3QaGS5wcm9qZWN0X21hbmFnZXIuR2V0UmVwbHliBnByb3RvMw", [file_dk_options]);
+  fileDesc("ChVwcm9qZWN0X21hbmFnZXIucHJvdG8SD3Byb2plY3RfbWFuYWdlciIhCgtMaXN0UmVxdWVzdBISCgpmaXJzdF9zbG90GAEgASgNImQKB1Byb2plY3QSDAoEc2xvdBgBIAEoDRISCgRuYW1lGAIgASgJQgTI8xgQEg8KB2N1cnJlbnQYAyABKAgSEAoIaGFzX2RhdGEYBCABKAgSFAoMZGF0YV91bmtub3duGAUgASgIIkgKCUxpc3RSZXBseRItCgVpdGVtcxgBIAMoCzIYLnByb2plY3RfbWFuYWdlci5Qcm9qZWN0QgTQ8xgQEgwKBG5leHQYAiABKA0iGgoKR2V0UmVxdWVzdBIMCgRzbG90GAEgASgNIkoKBk1vZHVsZRIQCgJpZBgBIAEoCUIEyPMYHxIMCgRoYXNoGAIgASgNEhAKCHNldHRpbmdzGAMgASgNEg4KBmxvYWRlZBgEIAEoCCKcAQoIR2V0UmVwbHkSDwoHbG9hZGluZxgBIAEoCBINCgVmb3VuZBgCIAEoCBIMCgRzbG90GAMgASgNEhIKBG5hbWUYBCABKAlCBMjzGBASDQoFc3RhbXAYBSABKA0SDwoHY291bnRlchgGIAEoDRIuCgdtb2R1bGVzGAcgAygLMhcucHJvamVjdF9tYW5hZ2VyLk1vZHVsZUIE0PMYCCJZChJHZXRTZXR0aW5nc1JlcXVlc3QSDAoEc2xvdBgBIAEoDRIUCgZtb2R1bGUYAiABKAlCBMjzGB8SDwoHdmVyc2lvbhgDIAEoDRIOCgZjdXJzb3IYBCABKA0iRwoHU2V0dGluZxIRCgNrZXkYASABKAlCBMjzGC8SEwoFdmFsdWUYAiABKAxCBMjzGEASFAoMdmFsdWVfbGVuZ3RoGAMgASgNIoIBChBHZXRTZXR0aW5nc1JlcGx5Eg8KB2xvYWRpbmcYASABKAgSDwoHY2hhbmdlZBgCIAEoCBINCgVmb3VuZBgDIAEoCBIvCgdlbnRyaWVzGAQgAygLMhgucHJvamVjdF9tYW5hZ2VyLlNldHRpbmdCBNDzGAQSDAoEbmV4dBgFIAEoDTLoAQoOUHJvamVjdE1hbmFnZXISQAoETGlzdBIcLnByb2plY3RfbWFuYWdlci5MaXN0UmVxdWVzdBoaLnByb2plY3RfbWFuYWdlci5MaXN0UmVwbHkSPQoDR2V0EhsucHJvamVjdF9tYW5hZ2VyLkdldFJlcXVlc3QaGS5wcm9qZWN0X21hbmFnZXIuR2V0UmVwbHkSVQoLR2V0U2V0dGluZ3MSIy5wcm9qZWN0X21hbmFnZXIuR2V0U2V0dGluZ3NSZXF1ZXN0GiEucHJvamVjdF9tYW5hZ2VyLkdldFNldHRpbmdzUmVwbHliBnByb3RvMw", [file_dk_options]);
 
 /**
  * Describes the message project_manager.ListRequest.
@@ -52,6 +52,27 @@ export const ModuleSchema = /*@__PURE__*/
  */
 export const GetReplySchema = /*@__PURE__*/
   messageDesc(file_project_manager, 5);
+
+/**
+ * Describes the message project_manager.GetSettingsRequest.
+ * Use `create(GetSettingsRequestSchema)` to create a new message.
+ */
+export const GetSettingsRequestSchema = /*@__PURE__*/
+  messageDesc(file_project_manager, 6);
+
+/**
+ * Describes the message project_manager.Setting.
+ * Use `create(SettingSchema)` to create a new message.
+ */
+export const SettingSchema = /*@__PURE__*/
+  messageDesc(file_project_manager, 7);
+
+/**
+ * Describes the message project_manager.GetSettingsReply.
+ * Use `create(GetSettingsReplySchema)` to create a new message.
+ */
+export const GetSettingsReplySchema = /*@__PURE__*/
+  messageDesc(file_project_manager, 8);
 
 /**
  * Read-only views of the firmware's projects. The device holds at most 128 projects (slots 0 to 127).

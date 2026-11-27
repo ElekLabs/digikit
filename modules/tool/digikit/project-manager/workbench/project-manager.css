@@ -108,3 +108,21 @@
     animation: none;
   }
 }
+.pm-details .rows li.pm-module {
+  cursor: pointer;
+}
+.pm-details .rows li.pm-setting {
+  padding-left: 26px;
+  cursor: default;
+}
+.pm-value {
+  flex: 2 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+.pm-value.hex {
+  color: var(--ink-3);
+}

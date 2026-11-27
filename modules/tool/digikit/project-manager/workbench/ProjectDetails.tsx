@@ -1,6 +1,7 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from 'solid-js';
 import type { ModuleClient } from '@digi/module-ui';
 import { ProjectManager, type GetReply } from './gen/project_manager_pb.js';
+import ProjectSettings from './ProjectSettings';
 import { hex32, queryErrorText, slotNumber } from './project-text';
 
 /** How long to wait before asking again for a project the device is still reading. */
@@ -14,11 +15,14 @@ export default function ProjectDetails(props: { client: ModuleClient; slot: numb
   // oxlint-disable-next-line solid/reactivity -- the client belongs to the page and does not change while it is open
   const service = props.client.service(ProjectManager);
   const [shown, setShown] = createSignal<Shown>({ state: 'loading' });
+  // the module whose saved settings are open, and how many times the project was read again because it changed
+  const [open, setOpen] = createSignal<string>();
+  const [reads, setReads] = createSignal(0);
 
   createEffect(
     on(
-      () => props.slot,
-      (slot) => {
+      [() => props.slot, reads],
+      ([slot]) => {
         let active = true;
         let timer: ReturnType<typeof setTimeout> | undefined;
         onCleanup(() => {
@@ -38,6 +42,14 @@ export default function ProjectDetails(props: { client: ModuleClient; slot: numb
         };
         void ask();
       },
+    ),
+  );
+  // another project: nothing is open
+  createEffect(
+    on(
+      () => props.slot,
+      () => setOpen(undefined),
+      { defer: true },
     ),
   );
 
@@ -92,9 +104,15 @@ export default function ProjectDetails(props: { client: ModuleClient; slot: numb
                 <ul class="rows">
                   <For each={reply().modules}>
                     {(module) => (
-                      <li>
+                      <>
+                      <li class="pm-module" classList={{ sel: open() === module.id }} onClick={() => setOpen((now) => (now === module.id ? undefined : module.id))}>
+                        <span class="twisty" aria-hidden="true">
+                          {open() === module.id ? '▾' : '▸'}
+                        </span>
                         <span class="name">
-                          <span class="nm">{module.id}</span>
+                          <button type="button" class="nm pm-project" aria-expanded={open() === module.id}>
+                            {module.id}
+                          </button>
                           <span class="rtag" classList={{ ok: module.loaded }}>
                             {module.loaded ? 'loaded' : 'not loaded'}
                           </span>
@@ -103,6 +121,25 @@ export default function ProjectDetails(props: { client: ModuleClient; slot: numb
                           {module.settings} {module.settings === 1 ? 'setting' : 'settings'}
                         </span>
                       </li>
+                      <Show when={open() === module.id}>
+                        <Show
+                          when={module.settings > 0}
+                          fallback={
+                            <li class="pm-setting">
+                              <span class="empty">No settings saved.</span>
+                            </li>
+                          }
+                        >
+                          <ProjectSettings
+                            client={props.client}
+                            slot={reply().slot}
+                            module={module.id}
+                            version={reply().counter}
+                            onChanged={() => setReads((n) => n + 1)}
+                          />
+                        </Show>
+                      </Show>
+                      </>
                     )}
                   </For>
                 </ul>
