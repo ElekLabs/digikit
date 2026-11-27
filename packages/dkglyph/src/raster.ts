@@ -5,6 +5,8 @@ export interface PlotBox {
   h: number;
   /** When set, sample at t = i / period instead of i / (w - 1). */
   period?: number;
+  /** dotted: a secondary copy of a curve (ghost, previous state, dry signal). Even columns only, no vertical joins. */
+  dotted?: boolean;
 }
 
 /** A 1-bit pixel grid with integer coordinates. Drawing outside is clipped and counted. */
@@ -130,7 +132,7 @@ export class Raster {
    * breaks and 45 degree runs stay one pixel per column. With box.period, t = i / period.
    */
   plot(fn: (t: number) => number, box: PlotBox, on: 0 | 1 = 1): this {
-    const { x0, y0, w, h, period } = box;
+    const { x0, y0, w, h, period, dotted } = box;
     const ys: number[] = [];
     for (let i = 0; i < w; i += 1) {
       const t = period !== undefined ? i / period : w === 1 ? 0 : i / (w - 1);
@@ -139,6 +141,10 @@ export class Raster {
     }
     for (let i = 0; i < w; i += 1) {
       const y = ys[i]!;
+      if (dotted) {
+        if (i % 2 === 0) this.px(x0 + i, y, on);
+        continue;
+      }
       const reach = (n: number): number => (Math.abs(n - y) < 2 ? y : Math.round((n + y) / 2));
       const from = i === 0 ? y : reach(ys[i - 1]!);
       const to = i === w - 1 ? y : reach(ys[i + 1]!);

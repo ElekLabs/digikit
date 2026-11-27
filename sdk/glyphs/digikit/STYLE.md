@@ -15,9 +15,10 @@ Rules for every glyph in this set. An agent that draws a glyph reads this file f
 | `knob` | 17x17 | Value glyph in a parameter slot (one of 8 slots, x pitch 26, y pitch 27) | Stock knob ring, dotted empty slot |
 | `icon` | 9x9 | Menu row icon, list markers, module kinds | Stock settings menu icons (about 9x8) |
 | `inline` | 7x5 | Inside a text line, beside 5 px caps | Stock tempo and lock marks |
+| `digit` | 3x5 | Digits in label tiles and value readouts | Stock 5 px UI font |
 | `panel` | 51x17 | Wide picture: filter response, envelope, waveform | Stock filter graph (51x17) |
 
-A glyph uses one class. The empty outer ring per class is in `set.toml` `[margins]`: `knob` and `panel` keep 1 px empty (a ring knob may touch the cell edge as the stock knob does); `icon` and `inline` use the full cell, because the context gives the inverted border (the 11 px selection bar around a 9 px icon, the bar padding around 5 px text).
+A glyph uses one class. The empty outer ring per class is in `set.toml` `[margins]`: `knob` and `panel` keep 1 px empty (a ring knob may touch the cell edge as the stock knob does); `icon`, `inline` and `digit` use the full cell, because the context gives the inverted border (the 11 px selection bar around a 9 px icon, the bar padding around 5 px text).
 
 ## Strokes and shapes
 
@@ -25,6 +26,8 @@ A glyph uses one class. The empty outer ring per class is in `set.toml` `[margin
 - Use whole-pixel geometry from the raster helpers (`line`, `arc`, `circle`, `plot`, `rect`, `frame`). Never draw with anti-aliasing.
 - Lines at 45 degrees and axis-aligned lines read best. Avoid slopes between 1:3 and 3:1 except in curves.
 - Dotted lines (every other pixel) mean secondary: guides, scale ticks, empty slots, ghosts of the previous state.
+- A dotted copy of a curve (ghost, previous state, dry signal, second voice) uses `plot(fn, { ...box, dotted: true })`: even columns only, no joins. Never hand-roll a dotted curve.
+- Markers on a curve (trigger point, start phase) are a 3x2 solid triangle pointing down at the point, just above the curve (rows `###` and `.#.`), or a 3x3 hollow node on the curve. Never a T shape.
 - Corners of filled bars and frames larger than 5 px are cut by one pixel (as the stock selection bar).
 - Solid fill vs outline: a filled shape means "active, on, present"; the same shape as an outline means "inactive, off, empty".
 - Small node squares are 3x3 with a hollow centre (stock envelope nodes).
@@ -44,6 +47,7 @@ A glyph uses one class. The empty outer ring per class is in `set.toml` `[margin
   - Unipolar: no tick. Bipolar: a dotted tick at 12 o'clock inside the ring (pixels at rows 1 and 3 of column 8), and 3 px `-` and `+` marks at row 15 beside the bottom gap.
   - Frames: 25 for 0..127 (one frame per distinct pointer position; the build merges identical frames).
 - Other value glyphs (fader, bar, pan, tune, width, amount) follow the same rule: one moving element on a fixed, mostly dotted scale.
+- Bipolar value tiles that are not knobs (bend, curve, depth, freq shift) have no ring and no `-`/`+` marks; v = 0 is the neutral picture.
 - Value glyphs that change a shape (pulse width, fold, resonance, curve) draw the shape itself at the value; keep the frame on the same baseline so the shape morphs in place.
 
 ## State glyphs (toggles and enums)
@@ -60,6 +64,7 @@ A glyph uses one class. The empty outer ring per class is in `set.toml` `[margin
 - Draw with `plot(fn)` across the full content width so every waveform shares stroke and baseline.
 - A waveform shows one period, starting at the zero crossing unless the shape has none (ramp, saw).
 - In a knob tile, a waveform uses the box x 1..15, y 4..12 (15 columns, 9 rows, centre row 8) with `period: 16`, so 45 degree slopes are exact; the shared box is `BOX` in `wave/shape.mjs`.
+- Draw the character, not the samples: when 15 columns cannot show a feature (a ripple, a second hump, a third harmonic), exaggerate it or adjust the period until it reads at 1x, and keep the shape recognisable as the module's shape.
 - Random or noise shapes are fixed patterns (seeded), never random per build.
 
 ## Families

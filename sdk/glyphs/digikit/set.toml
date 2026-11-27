@@ -5,6 +5,7 @@ description = "Icons and value glyphs for digikit screens"
 # Placeholder size classes, to be replaced by measured values.
 [sizes]
 inline = [7, 5]
+digit = [3, 5]
 icon = [9, 9]
 knob = [17, 17]
 panel = [51, 17]
@@ -15,4 +16,5 @@ panel = [51, 17]
 knob = 1
 icon = 0
 inline = 0
+digit = 0
 panel = 1

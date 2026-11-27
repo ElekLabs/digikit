@@ -14,3 +14,7 @@ export function seeded(seed) {
     return s / 4294967296;
   };
 }
+// Plot by column: fn(i) gives the level (-1..1) of column i (0 = leftmost column of the box).
+export function colPlot(p, fn, box = BOX) {
+  p.plot((t) => fn(Math.round(t * box.w)), { ...box, period: box.w });
+}

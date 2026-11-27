@@ -10,3 +10,8 @@ export function lowPass(p) {
   p.line(10, 4, 11, 4);
   p.line(11, 4, 15, 12);
 }
+
+// Shared by the filter shapes beyond lp/hp/bp: a flat response line at `row`, with the dotted baseline.
+export function poly(p, pts) {
+  for (let i = 1; i < pts.length; i += 1) p.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+}

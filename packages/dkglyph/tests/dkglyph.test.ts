@@ -66,6 +66,13 @@ describe('Raster', () => {
     for (let x = 0; x < 9; x += 1) expect(p.get(x, x)).toBe(1);
   });
 
+  it('plots a dotted constant on even columns only', () => {
+    const p = new Raster(9, 3);
+    p.plot(() => 0, { x0: 0, y0: 0, w: 9, h: 3, dotted: true });
+    expect(p.toRows()[1]).toBe('#.#.#.#.#');
+    expect(p.count()).toBe(5);
+  });
+
   it('counts clipped pixels instead of drawing them', () => {
     const p = new Raster(4, 4);
     p.line(-2, 0, 5, 0);
