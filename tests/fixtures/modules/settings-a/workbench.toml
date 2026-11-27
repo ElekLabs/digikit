@@ -1,12 +1,34 @@
 [workbench]
 version = 1
-component = "workbench/Panel.tsx"
 
 [[setting]]
 id = "boot"
 label = "Boot value"
 type = "text"
 max_bytes = 16
+
+[[setting]]
+id = "gain"
+label = "Gain"
+type = "integer"
+min = 0
+max = 100
+decimals = 2
+unit = "dB"
+default = 50
+
+[[setting]]
+id = "enabled"
+label = "Enabled"
+type = "boolean"
+default = true
+
+[[setting]]
+id = "mode"
+label = "Mode"
+type = "choice"
+choices = ["Off", "Soft", "Hard"]
+default = "Soft"
 
 [[operation]]
 id = "readAtInit"

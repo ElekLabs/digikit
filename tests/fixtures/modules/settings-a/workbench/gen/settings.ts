@@ -2,12 +2,18 @@
 export const schema = {
   module: 'test/settings-a',
   name: 'Boot settings',
-  version: 1,
+  version: 2,
   settings: [
     { id: 'boot', label: 'Boot value', kind: 'text', apply: 'immediate', maxBytes: 16 },
+    { id: 'gain', label: 'Gain', kind: 'integer', apply: 'immediate', min: 0, max: 100, step: 1, decimals: 2, unit: 'dB', default: 50 },
+    { id: 'enabled', label: 'Enabled', kind: 'boolean', apply: 'immediate', default: true },
+    { id: 'mode', label: 'Mode', kind: 'choice', apply: 'immediate', choices: ['Off', 'Soft', 'Hard'], default: 'Soft' },
   ],
 } as const;
 
 export interface Settings {
   boot: string | null;
+  gain: number;
+  enabled: boolean;
+  mode: 'Off' | 'Soft' | 'Hard';
 }

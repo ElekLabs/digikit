@@ -203,6 +203,12 @@ pub fn workbench_runtime_floor(moddir: &Path) -> Result<u32> {
     workbench::runtime_floor(moddir, manifest.id(), manifest.module.name.as_deref())
 }
 
+/// The descriptor bytes patchkit generates for the Workbench settings of the module in `moddir`; `None` without `workbench.toml`.
+pub fn workbench_descriptor(moddir: &Path) -> Result<Option<Vec<u8>>> {
+    let manifest = manifest(moddir)?;
+    workbench::descriptor(moddir, manifest.id(), manifest.module.name.as_deref())
+}
+
 /// The object cache of a repository: `out/cache/dko`.
 pub fn cache_dir(root: &Path) -> PathBuf {
     root.join("out/cache/dko")
