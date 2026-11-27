@@ -703,8 +703,6 @@
   "tests/fixtures/modules/intro-ticks/module.toml": 2,
   "tests/fixtures/modules/lfo-shape-b/module.toml": 2,
   "tests/fixtures/modules/lfo-shape/module.toml": 2,
-  "tests/fixtures/modules/local-payload-user/module.toml": 2,
-  "tests/fixtures/modules/local-payload/module.toml": 2,
   "tests/fixtures/modules/local-ping-old-user/module.toml": 2,
   "tests/fixtures/modules/local-ping-user-b/module.toml": 2,
   "tests/fixtures/modules/local-ping-user/module.toml": 2,
