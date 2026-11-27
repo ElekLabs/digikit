@@ -21,14 +21,15 @@ pub(super) enum Kind {
 
 impl Kind {
     pub(super) fn from_tag(tag: u8) -> Option<Self> {
-        Some(match tag {
-            0 => Self::Text,
-            1 => Self::FileName,
-            2 => Self::Integer,
-            3 => Self::Boolean,
-            4 => Self::Choice,
-            _ => return None,
-        })
+        // The tags in order: a table in data, not a match the compiler turns into a jump table in the code.
+        const ALL: [Kind; 5] = [
+            Kind::Text,
+            Kind::FileName,
+            Kind::Integer,
+            Kind::Boolean,
+            Kind::Choice,
+        ];
+        ALL.get(tag as usize).copied()
     }
 
     /// The least descriptor version that holds this kind.
@@ -46,8 +47,17 @@ impl Kind {
 
     /// Check the body at the cursor for a field with stored length `max` and move past it.
     pub(super) fn parse_body(self, cursor: &mut Cursor, max: u8) -> Option<()> {
+        // Two small matches, not one of five arms: the compiler turns a dense match into a jump table of 16-bit offsets in the
+        // code, which the object's ISA check reads as instructions and refuses.
+        if self.is_text() {
+            self.parse_text_body(cursor, max)
+        } else {
+            self.parse_typed_body(cursor, max)
+        }
+    }
+
+    fn parse_text_body(self, cursor: &mut Cursor, max: u8) -> Option<()> {
         match self {
-            Self::Text => (1..=TEXT_MAX).contains(&(max as usize)).then_some(()),
             Self::FileName => {
                 let ext = cursor.string()?;
                 let valid = (1..=EXTENSION_MAX).contains(&ext.len())
@@ -57,6 +67,12 @@ impl Kind {
                         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
                 (valid && !cursor.text()?.is_empty()).then_some(())
             }
+            _ => (1..=TEXT_MAX).contains(&(max as usize)).then_some(()),
+        }
+    }
+
+    fn parse_typed_body(self, cursor: &mut Cursor, max: u8) -> Option<()> {
+        match self {
             Self::Integer => {
                 let min = i32::from_be_bytes(cursor.array()?);
                 let top = i32::from_be_bytes(cursor.array()?);
@@ -67,13 +83,13 @@ impl Kind {
                 (max == 4
                     && step != 0
                     && min < top
-                    && (i64::from(top) - i64::from(min)) % i64::from(step) == 0
+                    && steps_from(min, top, step)
                     && decimals <= DECIMALS_MAX
                     && on_range(min, top, step, default))
                 .then_some(())
             }
             Self::Boolean => (max == 1 && cursor.byte()? <= 1).then_some(()),
-            Self::Choice => {
+            _ => {
                 let [count, default] = cursor.array()?;
                 if max != 1 || !(1..=CHOICES_MAX).contains(&count) || default >= count {
                     return None;
@@ -91,14 +107,21 @@ impl Kind {
     /// Is `value` a stored value of a field of this kind? `body` is the descriptor from the start of the field's body: the
     /// bounds are read from it, so the registry keeps no copy of them.
     pub(super) fn accepts(self, body: &[u8], max: u8, value: &[u8]) -> bool {
+        if self.is_text() {
+            self.accepts_text(body, max, value)
+        } else {
+            self.accepts_typed(body, value)
+        }
+    }
+
+    fn accepts_text(self, body: &[u8], max: u8, value: &[u8]) -> bool {
+        value.len() <= max as usize
+            && core::str::from_utf8(value).is_ok()
+            && (self != Self::FileName || file_name_ok(value, extension(body)))
+    }
+
+    fn accepts_typed(self, body: &[u8], value: &[u8]) -> bool {
         match self {
-            Self::Text => value.len() <= max as usize && core::str::from_utf8(value).is_ok(),
-            Self::FileName => {
-                let ext = extension(body);
-                value.len() <= max as usize
-                    && core::str::from_utf8(value).is_ok()
-                    && file_name_ok(value, ext)
-            }
             Self::Integer => (|| {
                 let mut bounds = Cursor::new(body);
                 let min = i32::from_be_bytes(bounds.array()?);
@@ -109,9 +132,7 @@ impl Kind {
             })()
             .unwrap_or(false),
             Self::Boolean => matches!(value, [0 | 1]),
-            Self::Choice => {
-                matches!((body.first(), value), (Some(count), [index]) if index < count)
-            }
+            _ => matches!((body.first(), value), (Some(count), [index]) if index < count),
         }
     }
 }
@@ -123,7 +144,12 @@ pub(super) fn extension(body: &[u8]) -> &[u8] {
 
 /// Is `value` in `min..=max` and a whole number of steps above `min`?
 fn on_range(min: i32, max: i32, step: u32, value: i32) -> bool {
-    (min..=max).contains(&value) && (i64::from(value) - i64::from(min)) % i64::from(step) == 0
+    (min..=max).contains(&value) && steps_from(min, value, step)
+}
+
+/// Is `to` (not below `from`) a whole number of steps above `from`? The distance fits a u32.
+fn steps_from(from: i32, to: i32, step: u32) -> bool {
+    (to as u32).wrapping_sub(from as u32) % step == 0
 }
 
 /// A store leaf usable by `dk_data_path`, with a nonempty stem and the declared extension.

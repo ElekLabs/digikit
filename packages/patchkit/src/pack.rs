@@ -277,12 +277,21 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
             .filter(|d| m.manifest.module.builds_for(&d.short));
         crate::protect::check(id, dko, &crate::protect::windows_of(devs))?;
     }
-    let bytes = crate::dkm::pack_keys_with_service_imports(
+    // a module without a directory (built from parts) has no `workbench.toml`
+    let runtime_floor = if m.dir.as_os_str().is_empty() {
+        0
+    } else {
+        crate::build::workbench_runtime_floor(&m.dir)?
+    };
+    let bytes = crate::dkm::pack_keys_with_declared(
         service_obj.as_ref().or(cf.first().map(|c| c.0)),
         &reg,
         &dsp,
         &opts,
-        &m.manifest.service_imports,
+        &crate::dkm::Declared {
+            service_imports: &m.manifest.service_imports,
+            runtime_floor,
+        },
     )?;
     let dkm = crate::dkm::Dkm::parse(&bytes)?;
     Ok(Packed {

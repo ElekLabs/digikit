@@ -133,6 +133,17 @@ fn the_version_is_1_until_a_setting_uses_a_new_type() {
 }
 
 #[test]
+fn only_a_version_2_descriptor_needs_the_newer_runtime() {
+    let typed = crate::sdkgen::workbench_typed_runtime();
+    assert_eq!(parse(DECLARATION).unwrap().runtime_floor(), 0);
+    let source = format!(
+        "{DECLARATION}{}",
+        setting("extra", "type = \"boolean\"\ndefault = true")
+    );
+    assert_eq!(parse(&source).unwrap().runtime_floor(), typed);
+}
+
+#[test]
 fn a_schema_gives_its_settings_by_id() {
     let schema = parse(DECLARATION).unwrap();
     assert_eq!(schema.module(), "test/module");

@@ -17,4 +17,9 @@ mod ts_file;
 mod ts_schema;
 
 pub(super) use header::Header;
+
+/// The least runtime for the descriptor of the `workbench.toml` in `moddir` (0 when there is none or it is version 1).
+pub(super) fn runtime_floor(moddir: &std::path::Path, id: &str, name: Option<&str>) -> crate::error::Result<u32> {
+    Ok(schema::Schema::read(moddir, id, name)?.map_or(0, |schema| schema.runtime_floor()))
+}
 pub use ts_file::TsFile;

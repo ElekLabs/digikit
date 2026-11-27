@@ -194,6 +194,13 @@ pub fn workbench_ts(moddir: &Path) -> Result<Option<TsFile>> {
     TsFile::read(moddir, manifest.id(), manifest.module.name.as_deref())
 }
 
+/// The least runtime a packed module needs for its Workbench settings descriptor: 0 without `workbench.toml` or with a version 1
+/// descriptor, `[runtime] workbench_typed` of sdk/sdk.toml for version 2.
+pub fn workbench_runtime_floor(moddir: &Path) -> Result<u32> {
+    let manifest = manifest(moddir)?;
+    workbench::runtime_floor(moddir, manifest.id(), manifest.module.name.as_deref())
+}
+
 /// The object cache of a repository: `out/cache/dko`.
 pub fn cache_dir(root: &Path) -> PathBuf {
     root.join("out/cache/dko")

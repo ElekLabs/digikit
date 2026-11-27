@@ -113,6 +113,14 @@ impl Schema {
         self.settings.iter().find(|s| s.id() == id)
     }
 
+    /// The least runtime the module needs for its descriptor: 0 for version 1, else the runtime that first accepts version 2.
+    pub(super) fn runtime_floor(&self) -> u32 {
+        match self.descriptor_version() {
+            1 => 0,
+            _ => crate::sdkgen::workbench_typed_runtime(),
+        }
+    }
+
     /// The first byte of the binary descriptor: 1 while every setting is text or a file name, else 2.
     pub(super) fn descriptor_version(&self) -> u8 {
         if self.settings.iter().all(|s| s.kind().is_version_1()) {
