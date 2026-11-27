@@ -84,7 +84,7 @@ export class ModuleSettings<S extends SettingsSchema> implements TypedSettings<S
       };
     } catch (e) {
       if (!(e instanceof InvalidSettingValue)) throw e;
-      return { ok: false, error: settingError('unavailable', e.message) };
+      return { ok: false, error: settingError('invalid-stored', e.message) };
     }
   }
 }

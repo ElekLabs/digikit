@@ -2,7 +2,7 @@
 
 A loaded module can publish typed settings and a Solid page. Workbench shows the page under Modules in the sidebar while the module is loaded on the selected target. The first real user is a Project Manager module that shows the projects saved on the card. [Development guide](../DEVELOPMENT.md)
 
-Status: runtime 0.11.4 has public `text` and `file-name` settings, used by Boot screen. The sidebar Modules group, the generic form and the preview companion of `tests/fixtures/modules/settings-a` exist. Everything below marked as a phase is open.
+Status: runtime 0.11.4 has public `text` and `file-name` settings, used by Boot screen. The sidebar Modules group, the generic form (a control for every kind), the page registry (`workbench/index.tsx` with `definePage`), the channel factory (device and memory), Transfer Open and the page import rule exist; `tests/fixtures/modules/settings-a` is the first page. Everything below marked as a phase is open.
 
 ## Layers
 

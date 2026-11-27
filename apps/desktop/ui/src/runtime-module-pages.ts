@@ -1,18 +1,29 @@
 import { createEffect, createSignal, onCleanup } from 'solid-js';
-import type { DkModule, ModuleSettingsEndpoint } from '@digi/dk-session';
-import type { DescribedSchema } from '@digi/module-ui';
-import { describeDeviceSettings } from '@digi/workbench-core/module-ui/device-settings.ts';
+import type { DkModule } from '@digi/dk-session';
+import type { DescribedSchema, ModuleChannel, ModulePageDefinition } from '@digi/module-ui';
+import type { ModuleChannelFactory } from '@digi/workbench-core/module-ui/module-channel-factory.ts';
 import type { ModulePage } from '@digi/workbench-core/module-ui/module-page.ts';
+import type { ModulePageRegistry } from '@digi/workbench-core/module-ui/module-page-registry.ts';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
+import { targetKey } from '@digi/workbench-core/transfer/session-core.ts';
+
+/** The part of the Transfer app that decides which pages exist: the selected target and its loaded inventory. */
+export interface ModulePagesHost {
+  target: Pick<TransferApp['target'], 'target' | 'switching' | 'libraryOnly'>;
+  inventory: { modules(): DkModule[] };
+}
 
 // Keep a resolved page for each loaded instance on this selection. A new
 // inventory read alone does not remount open controls or discard edits.
 export function runtimeModulePages(
-  app: TransferApp,
+  app: ModulePagesHost,
+  channels: ModuleChannelFactory,
+  registry: ModulePageRegistry,
   pageFor: (
     id: string,
     schema: DescribedSchema,
-    open: (mounted: () => boolean) => ModuleSettingsEndpoint,
+    definition: ModulePageDefinition | undefined,
+    channel: (current: () => boolean) => ModuleChannel,
   ) => ModulePage,
 ) {
   type Entry = { slot: number; instance: number; page?: ModulePage };
@@ -28,7 +39,7 @@ export function runtimeModulePages(
     const previous = target === previousTarget ? entries : new Map<string, Entry>();
     previousTarget = target;
     entries = new Map();
-    const binding = app.target.bindSession();
+    const key = targetKey(target);
     for (const record of records) {
       const instance = record.uiInstance;
       if (!instance) continue;
@@ -40,22 +51,21 @@ export function runtimeModulePages(
       }
       const entry: Entry = { slot: index, instance };
       entries.set(name, entry);
+      // Ends with the entry (unload, reload, new inventory), the target and the switch in progress: a late result then reaches nothing.
       const current = () => entries.get(name) === entry && app.target.target() === target && !app.target.switching();
-      void binding
-        .session()
-        .then(async (session) => {
-          if (!current()) return;
-          const schema = await describeDeviceSettings(session.moduleSettings(index, instance, current));
-          if (!current()) return;
-          entry.page = pageFor(name, schema, (mounted) =>
-            session.moduleSettings(index, instance, () => current() && mounted()),
-          );
-          publish();
-        })
-        .catch(() => {
-          // A future inventory refresh can retry; existing file controls stay available.
-          if (current()) entries.delete(name);
-        });
+      const channelFor = (mounted: () => boolean) =>
+        channels({ target: key, module: record, current: () => current() && mounted() });
+      void (async () => {
+        const schema = await channelFor(() => true).describeSettings();
+        if (!current()) return;
+        const definition = await registry.find(name);
+        if (!current()) return;
+        entry.page = pageFor(name, schema, definition, channelFor);
+        publish();
+      })().catch(() => {
+        // A future inventory refresh can retry; existing file controls stay available.
+        if (current()) entries.delete(name);
+      });
     }
     publish();
   });

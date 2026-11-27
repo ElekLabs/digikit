@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DkError, type ModuleSettingsEndpoint } from '@digi/dk-session';
 import { createModuleClient, type DescribedSchema } from '@digi/module-ui';
 import { createDeviceModuleChannel } from '../src/module-ui/device-module-channel.ts';
-import { describeDeviceSettings, settingErrorOf } from '../src/module-ui/device-settings.ts';
+import { deviceSettingsChannel, settingErrorOf } from '../src/module-ui/device-settings.ts';
 
 // The descriptor the device reports for `schema` (the shape is checked against patchkit's bytes by the shared vectors).
 const descriptor = Uint8Array.from(
@@ -38,8 +38,9 @@ const files = {
   send: async () => {},
   remove: async () => {},
 };
+const settingsOf = (endpoint: ModuleSettingsEndpoint) => deviceSettingsChannel('Typed', async () => endpoint);
 const deviceSettings = (s: DescribedSchema, endpoint: ModuleSettingsEndpoint) =>
-  createModuleClient(createDeviceModuleChannel({ schema: s, endpoint, files })).settings(s);
+  createModuleClient(createDeviceModuleChannel({ settings: settingsOf(endpoint), files })).settings(s);
 
 function endpoint(over: Partial<ModuleSettingsEndpoint> = {}) {
   const sent: { field: number; value?: Uint8Array; revision: number }[] = [];
@@ -55,10 +56,10 @@ function endpoint(over: Partial<ModuleSettingsEndpoint> = {}) {
 
 describe('deviceSettings', () => {
   it('reads the descriptor the device reports and refuses a broken one', async () => {
-    expect(await describeDeviceSettings(endpoint().point)).toEqual(schema);
-    await expect(describeDeviceSettings(endpoint({ describe: async () => Uint8Array.of(2, 1) }).point)).rejects.toThrow(
-      /descriptor/,
-    );
+    expect(await settingsOf(endpoint().point).describeSettings()).toEqual(schema);
+    await expect(
+      settingsOf(endpoint({ describe: async () => Uint8Array.of(2, 1) }).point).describeSettings(),
+    ).rejects.toThrow(/descriptor/);
   });
   it('decodes stored bytes to display values and sends scaled bytes with the last revision and the field index', async () => {
     const { point, sent } = endpoint();
@@ -77,19 +78,52 @@ describe('deviceSettings', () => {
     expect(await s.put('gain', 1.5)).toMatchObject({ ok: false, error: { code: 'invalid' } });
     expect(sent).toEqual([]);
   });
+  it('fetches the endpoint and the descriptor at the first request and again after a failure', async () => {
+    let attempts = 0;
+    const { point } = endpoint();
+    const channel = deviceSettingsChannel('Typed', async () => {
+      if (++attempts === 1) throw new Error('The selected target changed.');
+      return point;
+    });
+    expect(await channel.getSetting('gain')).toMatchObject({ ok: false, error: { code: 'unavailable' } });
+    expect(await channel.getSetting('gain')).toMatchObject({ ok: true, revision: 3 });
+    expect(await channel.describeSettings()).toEqual(schema);
+    expect(attempts).toBe(2);
+  });
+  it('answers a read the device refuses as an invalid stored value with invalid-stored, a refused write with invalid', async () => {
+    const refused = new DkError({ error: 'Bad value.', kind: 'device', status: 'E_SET_VALUE' });
+    const { point } = endpoint({
+      get: async () => {
+        throw refused;
+      },
+      put: async () => {
+        throw refused;
+      },
+    });
+    const channel = settingsOf(point);
+    expect(await channel.getSetting('gain')).toEqual({
+      ok: false,
+      error: { code: 'invalid-stored', message: 'Bad value.' },
+    });
+    expect(await channel.putSetting('gain', Uint8Array.of(0, 0, 0, 1), 3)).toMatchObject({
+      ok: false,
+      error: { code: 'invalid' },
+    });
+  });
   it('maps each device status to its typed error', () => {
     const status = (name: string) => settingErrorOf(new DkError({ error: 'x', kind: 'device', status: name })).code;
     expect(status('E_MODULE_UI_CONFLICT')).toBe('conflict');
     expect(status('E_MODULE_UI_SCOPE')).toBe('overlay-scope');
     expect(status('E_AGAIN')).toBe('busy');
     expect(status('E_SET_VALUE')).toBe('invalid');
+    expect(status('E_MSG')).toBe('invalid');
     expect(status('E_NOFILE')).toBe('unavailable');
     expect(settingErrorOf(new Error('The module page has closed.'))).toEqual({
       code: 'unavailable',
       message: 'The module page has closed.',
     });
   });
-  it('returns a thrown exchange as a typed error and a corrupt stored value as unavailable', async () => {
+  it('returns a thrown exchange as a typed error and a corrupt stored value as invalid-stored', async () => {
     const conflict = new DkError({ error: 'The setting changed.', kind: 'device', status: 'E_MODULE_UI_CONFLICT' });
     const { point } = endpoint({
       put: async () => {
@@ -106,7 +140,7 @@ describe('deviceSettings', () => {
       schema,
       endpoint({ get: async () => ({ value: Uint8Array.of(0, 0, 1, 0), revision: 1 }) }).point,
     );
-    expect(await bad.get('gain')).toMatchObject({ ok: false, error: { code: 'unavailable' } });
+    expect(await bad.get('gain')).toMatchObject({ ok: false, error: { code: 'invalid-stored' } });
   });
 });
 
@@ -117,12 +151,12 @@ describe('createDeviceModuleChannel', () => {
       send: async (_name: string, _bytes: Uint8Array, progress: (sent: number, total: number) => void) =>
         progress(1, 2),
     };
-    const channel = createDeviceModuleChannel({ schema, files: sent });
+    const channel = createDeviceModuleChannel({ settings: deviceSettingsChannel('Typed'), files: sent });
     const events: unknown[] = [];
     channel.subscribe((e) => events.push(e));
     await channel.sendFile(4, 'a.dkbs', Uint8Array.of(1, 2));
     expect(events).toEqual([{ kind: 'file-progress', job: 4, done: 1, total: 2 }]);
     expect(await channel.getSetting('gain')).toMatchObject({ ok: false, error: { code: 'unavailable' } });
-    expect(await channel.describeSettings()).toBe(schema);
+    expect(await channel.describeSettings()).toEqual({ name: 'Typed', version: 1, settings: [] });
   });
 });

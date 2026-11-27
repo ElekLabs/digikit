@@ -10,15 +10,14 @@ import {
   type SettingError,
 } from '@digi/module-ui';
 
-/** A session's settings endpoint. A simulated device (the preview) may give its schema directly instead of a descriptor. */
-export type SettingsEndpoint = ModuleSettingsEndpoint & { describeSchema?(): Promise<DescribedSchema> };
-
-export async function describeDeviceSettings(endpoint: SettingsEndpoint): Promise<DescribedSchema> {
-  return endpoint.describeSchema ? endpoint.describeSchema() : decodeDescriptor(await endpoint.describe());
-}
+/** The settings requests of a module channel: what the device adapter and the memory channel both give. */
+export type ModuleSettingsChannel = Pick<
+  ModuleChannel,
+  'describeSettings' | 'getSetting' | 'putSetting' | 'resetSetting'
+>;
 
 /** The typed error of a failed exchange. A status the device sends for a setting maps to its code; anything else means the module is out of reach. */
-export function settingErrorOf(e: unknown): SettingError {
+export function settingErrorOf(e: unknown, request: 'get' | 'change' = 'change'): SettingError {
   const message = e instanceof Error ? e.message : String(e);
   const status = e instanceof DkError ? e.status : undefined;
   switch (status) {
@@ -29,6 +28,8 @@ export function settingErrorOf(e: unknown): SettingError {
     case 'E_AGAIN':
       return settingError('busy', message);
     case 'E_SET_VALUE':
+      // A read the device refuses as E_SET_VALUE found a stored value that fails the setting's rule; a write refused so is a bad value.
+      return settingError(request === 'get' ? 'invalid-stored' : 'invalid', message);
     case 'E_MSG':
       return settingError('invalid', message);
     default:
@@ -36,23 +37,53 @@ export function settingErrorOf(e: unknown): SettingError {
   }
 }
 
-type SettingRequests = Pick<ModuleChannel, 'getSetting' | 'putSetting' | 'resetSetting'>;
-
-export function deviceSettingRequests(schema: DescribedSchema, endpoint: ModuleSettingsEndpoint): SettingRequests {
-  const field = (id: string) => schema.settings.findIndex((s) => s.id === id);
-  async function run(id: string, call: (field: number) => Promise<RawSettingValue>): Promise<RawSetting> {
-    const index = field(id);
-    if (index < 0) return { ok: false, error: settingError('invalid', `Unknown public setting ${id}.`) };
+/**
+ * The settings requests of one loaded module instance over a session. The endpoint and the descriptor are fetched at the first request
+ * (a failed fetch is tried again at the next); without an endpoint the module has no public settings.
+ */
+export function deviceSettingsChannel(
+  id: string,
+  endpoint?: () => Promise<ModuleSettingsEndpoint>,
+): ModuleSettingsChannel {
+  const none = async (): Promise<RawSetting> => ({
+    ok: false,
+    error: settingError('unavailable', 'The module has no public settings.'),
+  });
+  if (!endpoint)
+    return {
+      describeSettings: async () => ({ name: id, version: 1, settings: [] }),
+      getSetting: none,
+      putSetting: none,
+      resetSetting: none,
+    };
+  let opened: Promise<{ point: ModuleSettingsEndpoint; schema: DescribedSchema }> | undefined;
+  const open = () => {
+    opened ??= (async () => {
+      const point = await endpoint();
+      return { point, schema: decodeDescriptor(await point.describe()) };
+    })();
+    void opened.catch(() => (opened = undefined));
+    return opened;
+  };
+  async function run(
+    setting: string,
+    request: 'get' | 'change',
+    call: (point: ModuleSettingsEndpoint, field: number) => Promise<RawSettingValue>,
+  ): Promise<RawSetting> {
     try {
-      const { value, revision } = await call(index);
+      const { point, schema } = await open();
+      const field = schema.settings.findIndex((s) => s.id === setting);
+      if (field < 0) return { ok: false, error: settingError('invalid', `Unknown public setting ${setting}.`) };
+      const { value, revision } = await call(point, field);
       return { ok: true, value, revision };
     } catch (e) {
-      return { ok: false, error: settingErrorOf(e) };
+      return { ok: false, error: settingErrorOf(e, request) };
     }
   }
   return {
-    getSetting: (id) => run(id, (f) => endpoint.get(f)),
-    putSetting: (id, value, revision) => run(id, (f) => endpoint.put(f, value, revision)),
-    resetSetting: (id, revision) => run(id, (f) => endpoint.reset(f, revision)),
+    describeSettings: async () => (await open()).schema,
+    getSetting: (setting) => run(setting, 'get', (p, f) => p.get(f)),
+    putSetting: (setting, value, revision) => run(setting, 'change', (p, f) => p.put(f, value, revision)),
+    resetSetting: (setting, revision) => run(setting, 'change', (p, f) => p.reset(f, revision)),
   };
 }

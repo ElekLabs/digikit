@@ -98,3 +98,19 @@ describe('TypedSettings', () => {
     expect(await s.get('nope')).toMatchObject({ ok: false, error: { code: 'invalid' } });
   });
 });
+
+describe('a stored value that fails the setting rule', () => {
+  it('reads as invalid-stored, keeping the revision for a later read', async () => {
+    const bad = (code?: 'invalid-stored') => ({
+      getSetting: async () =>
+        code
+          ? ({ ok: false, error: { code, message: 'x' } } as const)
+          : ({ ok: true, value: Uint8Array.of(0, 0, 1, 0), revision: 1 } as const),
+    });
+    const { channel } = createMemoryModuleChannel(schema);
+    const client = createModuleClient({ ...channel, ...bad() });
+    expect(await client.settings(schema).get('gain')).toMatchObject({ ok: false, error: { code: 'invalid-stored' } });
+    const refused = createModuleClient({ ...channel, ...bad('invalid-stored') });
+    expect(await refused.settings(schema).get('gain')).toMatchObject({ ok: false, error: { code: 'invalid-stored' } });
+  });
+});

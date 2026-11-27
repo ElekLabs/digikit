@@ -7,6 +7,8 @@ export type SettingErrorCode =
   | 'not-read'
   /** The value breaks the setting's rule. */
   | 'invalid'
+  /** The stored value fails the setting's rule, so a read cannot return it. A page shows the default. */
+  | 'invalid-stored'
   /** The device has no room for the request now. */
   | 'busy'
   /** The module is not loaded, the page closed or the target went away. */

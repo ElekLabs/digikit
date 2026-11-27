@@ -9,3 +9,4 @@ export * from './module-file-client.ts';
 export * from './module-client.ts';
 export * from './memory-settings-store.ts';
 export * from './memory-module-channel.ts';
+export * from './module-page.ts';

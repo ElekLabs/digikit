@@ -4,7 +4,6 @@ import type { DynamicSettings, SettingsSchema } from '@digi/module-ui';
 export interface PageDescriptor {
   id: string;
   name: string;
-  component?: string;
   schema: SettingsSchema;
 }
 
@@ -13,8 +12,4 @@ export interface PageDescriptor {
 export interface ModulePage {
   descriptor: PageDescriptor;
   open(current: () => boolean): { settings?: DynamicSettings; Panel?: Component };
-}
-
-export interface ModulePageSource {
-  lookup(target: string, module: string): ModulePage | undefined;
 }

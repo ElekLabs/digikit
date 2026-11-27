@@ -17,6 +17,7 @@ import ModulesMode from './ModulesMode';
 import SourcePanel from './SourcePanel';
 import TransferBar from './TransferBar';
 import { MODES, installBytes, modulesBar, parseMode } from '../../src/transfer/transfer-core';
+import type { ModulePageLinks } from '../../src/module-ui/page-open-action';
 import { storageBar } from '../../src/transfer/storage-bar';
 import { formatBytes } from '../../src/modules/backend';
 import { cancellable, cancelJob, runTransfer } from '../../src/transfer/run-transfer';
@@ -24,7 +25,7 @@ import { writing, type PageCtx } from './TransferParts';
 import './transfer-page.css';
 
 /** `onFlash`: starts the one-click Flash flow from a service refusal (the host gives it: the desktop opens its Firmware page, the site links to its own). */
-export default function TransferPage(props: { onFlash?: () => void }): JSX.Element {
+export default function TransferPage(props: { onFlash?: () => void; pages?: ModulePageLinks }): JSX.Element {
   const app = useTransferApp();
   const { env } = app;
   const { target, rescanTargets, switching } = app.target;
@@ -217,7 +218,7 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
 
       <Switch>
         <Match when={activeMode() === 'modules'}>
-          <ModulesMode ctx={ctx} onFlash={props.onFlash} />
+          <ModulesMode ctx={ctx} onFlash={props.onFlash} pages={props.pages} />
         </Match>
         <Match when={activeMode() === 'samples' && samples()}>
           {(slot) => <Dynamic component={slot().Mode} ctx={ctx} />}
