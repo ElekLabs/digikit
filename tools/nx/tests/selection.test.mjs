@@ -6,7 +6,7 @@ import { ownershipSelection } from '../device-owners.mjs';
 import { gateContext } from '../gate-context.mjs';
 import { declaredUsers, portEntryUsers } from '../port-entries.mjs';
 import { areaSelection, checkComplete, classify, loadAreas, portAreaSelection } from '../runtime-areas.mjs';
-import { confinedToSelection } from '../selection-files.mjs';
+import { applyConfinement, confinedToSelection } from '../selection-files.mjs';
 import { smokeSelected } from '../test-subset.mjs';
 
 const areas = loadAreas();
@@ -200,15 +200,38 @@ describe('gate selection files', () => {
   };
   const halves = [`core/ui:test-device--ui--${DEV}`];
 
-  it('plans no device test and no smoke for a diff confined to the selection files', () => {
+  const auto = {
+    tests: [{ project: 'core/ui', file: 'ui.device.test.ts' }],
+    deviceFiles: ['devices/x.toml'],
+    changed: [],
+  };
+  const namedTest = { project: 'core/lfo', file: 'lfo.device.test.ts' };
+  const tests = (sel) => sel.tests.map((t) => t.project);
+
+  it('plans no automatic test, device file or smoke for a diff confined to the selection files', () => {
     const changed = ['tools/nx/runtime-areas.json', 'tools/nx/test-subset.mjs', 'tools/nx/tests/selection.test.mjs'];
-    expect(confinedToSelection(changed)).toBe(true);
-    expect(areaSelection(projects, changed, lfoArea).tests).toEqual([]);
+    const sel = applyConfinement(auto, [], changed);
+    expect(sel.tests).toEqual([]);
+    expect(sel.deviceFiles).toEqual([]);
     expect(smokeSelected(changed, new Set(halves))).toBe(false);
   });
 
-  it('does not select the tests an area entry newly names', () => {
-    expect(areaSelection(projects, ['tools/nx/runtime-areas.json'], lfoArea).tests).toEqual([]);
+  it('keeps the tests the user named when the diff is confined', () => {
+    expect(tests(applyConfinement(auto, [namedTest], ['tools/nx/test-subset.mjs']))).toEqual(['core/lfo']);
+  });
+
+  it.each([
+    ['a platform file', 'runtime/platform/lfo/src/cf/lfo.c'],
+    ['a device file', 'devices/x.toml'],
+    ['a test file', 'modules/fx/a/b/tests/b.device.test.ts'],
+    ['the device test key policy', 'tools/nx/device-test-keys.mjs'],
+  ])('selects normally when a selection file changes with %s', (_name, other) => {
+    const changed = ['tools/nx/device-owners.mjs', other];
+    expect(confinedToSelection(changed)).toBe(false);
+    const sel = applyConfinement(auto, [namedTest, auto.tests[0]], changed);
+    expect(tests(sel)).toEqual(['core/ui', 'core/lfo']);
+    expect(sel.deviceFiles).toEqual(['devices/x.toml']);
+    expect(smokeSelected(changed, new Set(halves))).toBe(true);
   });
 
   it('still selects the area and the smoke set when a platform file changes with a selection file', () => {

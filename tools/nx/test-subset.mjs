@@ -17,7 +17,7 @@ import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 import { gateContext } from './gate-context.mjs';
 import { areaSelection, portAreaSelection } from './runtime-areas.mjs';
-import { confinedToSelection } from './selection-files.mjs';
+import { applyConfinement, confinedToSelection } from './selection-files.mjs';
 import { DEVICES, leavesOf, ownedConformance, ownershipSelection } from './device-owners.mjs';
 
 export { DEVICES };
@@ -251,19 +251,19 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     // A changed port binding also selects the area of the platform module that declares it.
     const declaring = portAreaSelection(projects, owned.mapped);
     const named = namedSelection(names, projects);
-    const seen = new Set();
-    selection = {
-      ...owned,
-      tests: [...area.tests, ...declaring.tests, ...owned.tests, ...named.tests].filter(
-        (t) => !seen.has(`${t.project}:${t.file}`) && seen.add(`${t.project}:${t.file}`),
-      ),
-      unknown: named.unknown,
-      areaNotes: [...area.notes, ...declaring.notes],
-      deviceFiles: owned.devices,
+    // A change confined to the gate's own selection files selects no area or ownership test; named projects still join.
+    selection = applyConfinement(
+      {
+        ...owned,
+        tests: [...area.tests, ...declaring.tests, ...owned.tests],
+        unknown: named.unknown,
+        areaNotes: [...area.notes, ...declaring.notes],
+        deviceFiles: owned.devices,
+        changed,
+      },
+      named.tests,
       changed,
-    };
-    // A change confined to the gate's own selection files selects no device test (selection-files.mjs).
-    if (confinedToSelection(changed)) selection = { ...selection, tests: [], deviceFiles: [] };
+    );
   } else
     selection = {
       ...namedSelection(names, projects),

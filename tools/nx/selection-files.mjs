@@ -19,3 +19,16 @@ export const isSelectionFile = (file) =>
 
 /** Whether a non-empty change touches nothing but selection files. */
 export const confinedToSelection = (changed) => changed.length > 0 && changed.every(isSelectionFile);
+
+/**
+ * The selection after the confinement rule: a diff confined to selection files drops the tests the areas and ownership chose and the
+ * device files (and, in smokeSelected, the smoke set); tests the user named (`named`) always join. Pure: no I/O.
+ * `selection.tests` are the automatic tests, `named` the user's; the result's `tests` is their union by project and file.
+ */
+export const applyConfinement = (selection, named, changed) => {
+  const confined = confinedToSelection(changed);
+  const seen = new Set();
+  const key = (t) => `${t.project}:${t.file}`;
+  const tests = [...(confined ? [] : selection.tests), ...named].filter((t) => !seen.has(key(t)) && seen.add(key(t)));
+  return { ...selection, tests, deviceFiles: confined ? [] : selection.deviceFiles };
+};
