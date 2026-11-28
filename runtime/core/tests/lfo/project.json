@@ -16,7 +16,7 @@
           "core/services/lfo"
         ],
         "plusdrive": true,
-        "firmwareOnly": "the LFO output through the vector 191 tick with stock waves and a shape table, the hook install, the reload of the lfo service (the shape table is republished under the interrupt mask); the shape numbering and routing decision are unit tests (services/lfo route.rs), refusals are assembly tests"
+        "firmwareOnly": "the LFO output through the vector 191 tick with stock waves and a shape table, the hook install, the reload of the lfo service (the shape table is republished under the interrupt mask; LIFECYCLE begin/end events of a live lfo service reload reach the runtime log through the debug module's sink); the shape numbering and routing decision are unit tests (services/lfo route.rs), refusals are assembly tests"
       },
       {
         "files": [

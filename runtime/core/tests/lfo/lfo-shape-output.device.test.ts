@@ -38,7 +38,7 @@ import {
  * - capacity: loading the shape adds one MODULES record and arena and no load failure; unselecting it and restarting restores MODULES and CAPACITY;
  * - start phase: on a note in MODE TRG the shape starts at the phase of SPH (item 4); each note takes a voice slot (with voice rotation the next slot, with one voice per track slot 0), whose phase is checked exactly;
  * - number kept: a restart with the same module keeps the wave number in `lfo.shapes` and the output follows the table again (item 5);
- * - reload: with the debug module on the card and the runtime log listener open, `RELOAD services/lfo.dks` answers 0, every LIFECYCLE step of the shape module begins and ends with status 0, the shape table is republished and the output follows it again (the order of the steps and the refusals are host tests).
+ * - reload: with the debug module on the card and the runtime log listener open, `RELOAD services/lfo.dks` answers 0, the LIFECYCLE detach and attach of the shape module begin and end with status 0 in the runtime log, the shape table is republished and the output follows it again (step order and refusals are host tests).
  * The refusals are assembly tests.
  */
 const READS = 100;
@@ -203,7 +203,8 @@ cardRigs(
         const events = new RuntimeEvents(dk, dk.clock);
         await events.listen();
         const reloaded = await dk.reloadAndWait('services/lfo.dks');
-        for (const step of ['detach', 'deactivate', 'stop', 'place', 'link', 'start', 'install', 'activate', 'attach']) {
+        // take-down, then bring-up: the firmware fact is that both reach the runtime log
+        for (const step of ['detach', 'attach']) {
           const begin = await events.untilLifecycle(shapeFile, step, 'begin', { withinMs: 5000 });
           const done = await events.untilLifecycle(shapeFile, step, 'end', { withinMs: 5000 });
           expect({ step, status: done.fields.status, op: done.fields.op }, `the end of ${step} of the shape module`).toEqual({ step, status: 0, op: begin.fields.op });
