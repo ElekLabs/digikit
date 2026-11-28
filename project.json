@@ -106,6 +106,26 @@
       },
       "description": "Every tracked runtime file is in an area of tools/nx/runtime-areas.json or host-proven, and every test the map names exists in the project graph."
     },
+    "test-host": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/vitest.host/nx-selection.json",
+        "{workspaceRoot}/tools/nx/*.{mjs,json}",
+        "{workspaceRoot}/tools/nx/tests/*",
+        "{workspaceRoot}/devices/*.toml",
+        "jsToolchain",
+        "{workspaceRoot}/vitest.host.config.ts",
+        { "externalDependencies": ["vitest"] }
+      ],
+      "outputs": [],
+      "options": {
+        "forwardAllArgs": false,
+        "command": "pnpm exec vitest run --config vitest.host.config.ts --project nx-selection",
+        "cwd": "."
+      },
+      "description": "Selector rules of the merge gate (platform areas, port-declaration users, device files) over fixture file lists."
+    },
     "lint": {
       "dependsOn": ["device-literals", "key-abi", "test-source", "vitest-host", "device-keys", "runtime-areas"],
       "executor": "nx:run-commands",
