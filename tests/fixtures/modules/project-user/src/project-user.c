@@ -4,8 +4,8 @@
  * API is not for the MIDI task, where service commands run), then logs `project-put` with the status. PROJECT_CMD + 1 answers: the result of the get in `init` (i32: the value's length or a
  * status), the number of puts that ran (u32), the result of the last put (i32) and the first 16 bytes of the value `init` read. With the service loaded the value is per project (the runtime's overlay), without it the module's settings are what
  * they always were.
- * Browse: the Workbench queries of workbench/project_user.proto, List(first_slot), Get(slot) and GetSettings(slot, module, version, cursor), call `dk_project_list`, `dk_project_get`
- * and `dk_project_settings` in the UI task and return what the exports gave (Get and GetSettings answer loading while the device reads the project's file; `next` of List is
+ * Browse: the Workbench queries of workbench/project_user.proto, List(first_slot), Get(slot) and GetSettings(slot, module, version, cursor) and ReadFile(slot, version, offset), call `dk_project_list`,
+ * `dk_project_get`, `dk_project_settings` and `dk_project_read` in the UI task and return what the exports gave (Get, GetSettings and ReadFile answer loading while the device reads the project's file; `next` of List is
  * always 0).
  */
 #include <dk/core/bytes.h>
@@ -130,6 +130,31 @@ int32_t project_user_get_settings(dk_module_ctx *ctx,
     }
     reply->entries_count = (uint32_t)r;
     reply->next = next;
+    return 0;
+}
+
+int32_t project_user_read_file(dk_module_ctx *ctx, const project_user_ReadFileRequest *request,
+                               project_user_ReadFileReply *reply)
+{
+    (void)ctx;
+    uint32_t total = 0;
+    int32_t r = dk_project_read(request->slot, request->version, request->offset, reply->data,
+                                sizeof reply->data, &total);
+    if (r == DK_E_AGAIN) {
+        reply->loading = 1;
+        return 0;
+    }
+    if (r == DK_E_CHANGED) {
+        reply->changed = 1;
+        return 0;
+    }
+    if (r == DK_E_NOT_FOUND)
+        return 0;
+    if (r < 0)
+        return r;
+    reply->found = 1;
+    reply->data_len = (uint32_t)r;
+    reply->total = total;
     return 0;
 }
 

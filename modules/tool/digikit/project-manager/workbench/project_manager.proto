@@ -14,6 +14,9 @@ service ProjectManager {
   // (ask Get again). loading is true while the device reads the project's file: ask again. found is false when the project or the module is not there. next is the cursor for
   // the next page, 0 when there are no more.
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsReply);
+  // The raw bytes of the project's .dkp file from offset, 768 at most per reply; total is the length of the whole file. version, loading and changed are as in GetSettings;
+  // found is false when the project has no file. The open project answers from the image the device holds, not from the file.
+  rpc ReadFile(ReadFileRequest) returns (ReadFileReply);
 }
 
 message ListRequest {
@@ -76,4 +79,18 @@ message GetSettingsReply {
   bool found = 3;
   repeated Setting entries = 4 [(dk.max_count) = 4];
   uint32 next = 5;
+}
+
+message ReadFileRequest {
+  uint32 slot = 1;
+  uint32 version = 2;
+  uint32 offset = 3;
+}
+
+message ReadFileReply {
+  bool loading = 1;
+  bool changed = 2;
+  bool found = 3;
+  bytes data = 4 [(dk.max_len) = 768];
+  uint32 total = 5;
 }

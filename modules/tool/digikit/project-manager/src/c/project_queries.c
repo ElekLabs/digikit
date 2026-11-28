@@ -1,4 +1,4 @@
-/* The handlers of the queries in workbench/project_manager.proto: they call the project service (dk_project_list, dk_project_get, dk_project_settings) and map the results
+/* The handlers of the queries in workbench/project_manager.proto: they call the project service (dk_project_list, dk_project_get, dk_project_settings, dk_project_read) and map the results
  * with project_query. Both run in the UI task. */
 #include <dk/core/module.h>
 #include <dk/platform/project.h>
@@ -7,6 +7,7 @@
 #include "workbench_queries.h"
 
 #define PAGE_SIZE 16
+#define READ_PAGE 768   /* the `max_len` of ReadFileReply.data */
 #define SETTINGS_PAGE 4 /* the `max_count` of GetSettingsReply.entries */
 
 int32_t project_manager_list(dk_module_ctx *ctx, const project_manager_ListRequest *request,
@@ -84,5 +85,21 @@ int32_t project_manager_get_settings(dk_module_ctx *ctx,
     }
     reply->entries_count = count;
     reply->next = next;
+    return 0;
+}
+
+int32_t project_manager_read_file(dk_module_ctx *ctx, const project_manager_ReadFileRequest *request,
+                                  project_manager_ReadFileReply *reply)
+{
+    (void)ctx;
+    uint32_t total = 0;
+    int32_t r = dk_project_read(request->slot, request->version, request->offset, reply->data,
+                                READ_PAGE, &total);
+    int32_t outcome =
+        project_query_settings_outcome(r, &reply->loading, &reply->changed, &reply->found);
+    if (outcome != 0 || !reply->found)
+        return outcome;
+    reply->data_len = (uint32_t)r < READ_PAGE ? (uint32_t)r : READ_PAGE;
+    reply->total = total;
     return 0;
 }

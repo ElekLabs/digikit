@@ -276,7 +276,69 @@ export declare type GetSettingsReply = Message<"project_user.GetSettingsReply"> 
 export declare const GetSettingsReplySchema: GenMessage<GetSettingsReply>;
 
 /**
- * What the project service's exports return (dk_project_list, dk_project_get, dk_project_settings), as a module sees them. The device holds at most 128 projects (slots 0 to 127).
+ * @generated from message project_user.ReadFileRequest
+ */
+export declare type ReadFileRequest = Message<"project_user.ReadFileRequest"> & {
+  /**
+   * @generated from field: uint32 slot = 1;
+   */
+  slot: number;
+
+  /**
+   * @generated from field: uint32 version = 2;
+   */
+  version: number;
+
+  /**
+   * @generated from field: uint32 offset = 3;
+   */
+  offset: number;
+};
+
+/**
+ * Describes the message project_user.ReadFileRequest.
+ * Use `create(ReadFileRequestSchema)` to create a new message.
+ */
+export declare const ReadFileRequestSchema: GenMessage<ReadFileRequest>;
+
+/**
+ * @generated from message project_user.ReadFileReply
+ */
+export declare type ReadFileReply = Message<"project_user.ReadFileReply"> & {
+  /**
+   * @generated from field: bool loading = 1;
+   */
+  loading: boolean;
+
+  /**
+   * @generated from field: bool changed = 2;
+   */
+  changed: boolean;
+
+  /**
+   * @generated from field: bool found = 3;
+   */
+  found: boolean;
+
+  /**
+   * @generated from field: bytes data = 4;
+   */
+  data: Uint8Array;
+
+  /**
+   * @generated from field: uint32 total = 5;
+   */
+  total: number;
+};
+
+/**
+ * Describes the message project_user.ReadFileReply.
+ * Use `create(ReadFileReplySchema)` to create a new message.
+ */
+export declare const ReadFileReplySchema: GenMessage<ReadFileReply>;
+
+/**
+ * What the project service's exports return (dk_project_list, dk_project_get, dk_project_settings, dk_project_read), as a module sees them. The device holds at most 128 projects (slots 0 to 127).
  *
  * @generated from service project_user.ProjectUser
  */
@@ -311,6 +373,16 @@ export declare const ProjectUser: GenService<{
     methodKind: "unary";
     input: typeof GetSettingsRequestSchema;
     output: typeof GetSettingsReplySchema;
+  },
+  /**
+   * The raw bytes of the project's .dkp file from offset, 768 at most; total is the length of the whole file. version, loading and changed are as in GetSettings.
+   *
+   * @generated from rpc project_user.ProjectUser.ReadFile
+   */
+  readFile: {
+    methodKind: "unary";
+    input: typeof ReadFileRequestSchema;
+    output: typeof ReadFileReplySchema;
   },
 }>;
 
