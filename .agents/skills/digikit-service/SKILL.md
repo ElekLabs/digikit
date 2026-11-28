@@ -36,7 +36,7 @@ Policy (who wins, ordering, conflicts) lives in the service. The platform only g
 
 ## Find the firmware place
 
-1. Use the firmware-query skill: `fw.py atlas TERM`, then `dossier ADDR --other IMAGE`. Check both devices (DT2 1.17, DN2 1.12) and confirm callers with `tools/coldfire/refscan.py`.
+1. Use the firmware-query skill: `fw.py atlas TERM`, then `dossier ADDR --other IMAGE`. Check every device on its current image (devices and their capabilities are in `devices/*.toml`) and confirm callers with `tools/coldfire/refscan.py`.
 2. Write the result in `docs/findings/NN-topic.md` with the marks [V], [D], [O], and index it in `docs/FINDINGS.md`. A [V] needs a second agent's check against image bytes.
 3. Declare the site in `ports/fw/<subsystem>.toml` (`uv run python -m tools.firmware.catalog declare IMAGE ADDR NAME --other IMAGE2 --write`). Add `users = ["core/services/NAME"]`; it is provenance only. Rules and fields: `docs/design/firmware-decls.md`.
 
@@ -91,7 +91,7 @@ Design bar: most proof is unit tests over fakes, some assembly tests, few device
 
 1. **Unit:** a trait seam with a fake, tests beside the code (`services/NAME/tests/`: `state.rs`, `records.rs`, `contract.rs` for the shared provider suite, `file.rs` for the file's own code). `pnpm nx:pilot run dkrt-svc-NAME:rust-tests`.
 2. **Assembly:** one case that fits and one typical refusal on the canonical fixtures: `pnpm nx:pilot run core/runtime:test-assembly`. Fixtures in `tests/fixtures/modules` (DRY: reuse `local-ping*`, add a variant only for a distinct identity).
-3. **Device:** one firmware fact per test, waits on events or state (`rt.listen()`, `events.until`), never fixed time; the test record names the fact. On card rigs run inside `h.usb`. Example: `services/shortcuts/tests/device/shortcuts.device.test.ts`. Run `pnpm nx:pilot run PROJECT:test-device--FILE--dn2` first, then `--dt2`. One device workload at a time.
+3. **Device:** one firmware fact per test, waits on events or state (`rt.listen()`, `events.until`), never fixed time; the test record names the fact. On card rigs run inside `h.usb`. Example: `services/shortcuts/tests/device/shortcuts.device.test.ts`. Run `pnpm nx:pilot run PROJECT:test-device--FILE--<device>` on each device (device ids are in `devices/*.toml`). One device workload at a time.
 
 Iteration and generated files:
 
@@ -100,7 +100,7 @@ Iteration and generated files:
     dist/patchkit/patchkit --root . build --tree runtime
     dist/patchkit/patchkit --root . build --tree services
     pnpm nx:pilot run patchkit:objects-check
-    mise run dk:dev -- ID --device dn2 --keys 'tap:...,shot:NAME'
+    mise run dk:dev -- ID --device <device> --keys 'tap:...,shot:NAME'
     mise run module:check -- AUTHOR/NAME
     DIGI_GATE_BASE=origin/main mise run test:changed
 
@@ -125,7 +125,7 @@ The contrast is the rule above: lfo's UI sites are hooks; the tick and walker si
 - [ ] Finding written and indexed; `ports/fw` declaration with `users`.
 - [ ] No device ids in hand-written code: `node tools/nx/device-literals.mjs` (use `--write` only after you removed literals).
 - [ ] Generated objects rebuilt (`build-objects`, `build --tree runtime`, `--tree services`), `patchkit:objects-check` passes. `patchkit gen --check` is clean.
-- [ ] Size before and after: `dist/patchkit/patchkit --root . size --device dt2,dn2` (see `patchkit --help`; `--baseline FILE` compares).
+- [ ] Size before and after: `dist/patchkit/patchkit --root . size --device <devices>` (see `patchkit --help`; `--baseline FILE` compares).
 - [ ] `core/runtime:test-assembly` passes.
 - [ ] Merge gate run once: `DIGI_GATE_BASE=origin/main mise run test`, plus lint, fmt-check, typecheck.
 - [ ] PR text lists tests per layer (unit / assembly / device) and quotes the gate's selected and skipped lines.
