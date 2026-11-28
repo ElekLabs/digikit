@@ -42,7 +42,7 @@ import {
 import { fxProfile, type FxProfile } from './device-data.ts';
 import { seedSettingsCard } from './project-kit.ts';
 import { runtimeWatchEnv } from './write-safety.ts';
-import { PROGRESS_HANG_S, renderShots } from '@digi/test-support';
+import { renderShots } from '@digi/test-support';
 
 export type { FxProfile };
 
