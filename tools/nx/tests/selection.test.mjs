@@ -248,9 +248,14 @@ describe('gate selection files', () => {
 
 describe('changedFiles', () => {
   const git = (_root, ...args) =>
-    args[0] === 'diff' ? ['tools/a.mjs'] : ['runtime/platform/dsp-link/host/target/x', 'runtime/platform/dsp-link/host/AGENTS.md'];
+    args[0] === 'diff'
+      ? ['tools/a.mjs']
+      : ['runtime/platform/dsp-link/host/target/x', 'runtime/platform/dsp-link/host/AGENTS.md'];
   it('leaves untracked files out of the gate selection and counts them', () => {
-    expect(changedFiles('.', 'main', { untracked: false, git })).toEqual({ files: ['tools/a.mjs'], ignoredUntracked: 2 });
+    expect(changedFiles('.', 'main', { untracked: false, git })).toEqual({
+      files: ['tools/a.mjs'],
+      ignoredUntracked: 2,
+    });
   });
   it('keeps a tracked edit and, by hand, the untracked files', () => {
     expect(changedFiles('.', 'main', { git }).files).toHaveLength(3);

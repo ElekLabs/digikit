@@ -176,7 +176,10 @@ export const halvesOfDevices = (halves, devices) =>
 export const changedFiles = (root, base, { untracked = true, git = defaultGit } = {}) => {
   const tracked = git(root, 'diff', '--name-only', base);
   const loose = git(root, 'ls-files', '--others', '--exclude-standard');
-  return { files: [...new Set(untracked ? [...tracked, ...loose] : tracked)], ignoredUntracked: untracked ? 0 : loose.length };
+  return {
+    files: [...new Set(untracked ? [...tracked, ...loose] : tracked)],
+    ignoredUntracked: untracked ? 0 : loose.length,
+  };
 };
 const defaultGit = (root, ...args) => {
   const done = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
