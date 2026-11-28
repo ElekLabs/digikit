@@ -3,6 +3,7 @@
 use core::mem::MaybeUninit;
 use dkrt_abi::provider::Provider;
 use dkrt_sdk::{E_EXISTS, E_NO_REGISTRY, E_TABLE_FULL};
+use dkrt_svc_shortcuts::key_abi;
 use dkrt_svc_shortcuts::key_table::{KeyTable, WORDS};
 use dkrt_svc_shortcuts::shortcuts::Shortcuts;
 use dkrt_svc_shortcuts::unwired_keys::UnwiredKeys;
@@ -47,7 +48,13 @@ fn a_refused_subscription_fails_the_start() {
 
 #[test]
 fn the_table_words_of_the_image_are_read_and_a_foreign_table_is_refused() {
-    let words = [0x4b45_5953, 1, 4, 0x4011_0000, 0x4011_0040];
+    let words = [
+        key_abi::MAGIC,
+        key_abi::VERSION,
+        4,
+        0x4011_0000,
+        0x4011_0040,
+    ];
     let t = KeyTable::parse(&words).expect("the table");
     assert_eq!(
         (t.slots(), t.subscribe(), t.unsubscribe()),
@@ -64,4 +71,33 @@ fn the_table_words_of_the_image_are_read_and_a_foreign_table_is_refused() {
     bad(3, 0); // no subscribe entry
     bad(4, 0); // no unsubscribe entry
     assert_eq!(WORDS, words.len());
+}
+
+#[test]
+fn the_answers_of_key_subscribe_map_to_the_status_of_the_start() {
+    assert_eq!(KeyTable::subscribe_result(0), Ok(()));
+    assert_eq!(KeyTable::subscribe_result(3), Ok(()));
+    assert_eq!(KeyTable::subscribe_result(key_abi::FULL), Err(E_TABLE_FULL));
+    assert_eq!(
+        KeyTable::subscribe_result(key_abi::DUPLICATE),
+        Err(E_EXISTS)
+    );
+    assert_eq!(KeyTable::subscribe_result(-3), Err(E_NO_REGISTRY));
+}
+
+#[test]
+fn the_table_is_found_by_the_name_hash_of_the_image_info_or_not_at_all() {
+    let mut core = FakeCore::new();
+    assert_eq!(KeyTable::find(&core), None, "an image without the table");
+    let words = vec![
+        key_abi::MAGIC,
+        key_abi::VERSION,
+        4,
+        0x4011_0000,
+        0x4011_0040,
+    ];
+    core.info_tables
+        .push((dkneeds::keys::name_hash("input_keys_info"), words));
+    let t = KeyTable::find(&core).expect("the table");
+    assert_eq!((t.slots(), t.subscribe()), (4, 0x4011_0000));
 }

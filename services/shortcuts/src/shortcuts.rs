@@ -240,7 +240,8 @@ impl<C: CoreApi, K: KeyEvents> Provider<C> for Shortcuts<K> {
     /// the 1.4 kB through the stack.
     ///
     /// Then the key routine is subscribed to the platform's key walk: a refusal (the image has no table of key subscribers, or it is full) fails the start, so a module that needs
-    /// the service is refused instead of binding keys that no one delivers. The routine may fire before the file's cell holds the instance: it finds none and the stock walker runs.
+    /// the service is refused instead of binding keys that no one delivers. Subscribe and unsubscribe run in the UI task only, the one task of the key walk, so the platform's plain
+    /// table of subscribers is never read and written at once (`key_subscribers.h`). The routine may fire before the file's cell holds the instance: it finds none and the stock walker runs.
     fn start_in(core: &C, slot: &mut MaybeUninit<Shortcuts<K>>) -> Result<(), Status> {
         // SAFETY: every field of `Shortcuts` is valid as zero bytes (integers, `None` callbacks, null pointers, the closed gate, and a `KeyEvents` by its contract).
         let this = unsafe {
