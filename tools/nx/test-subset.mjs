@@ -239,6 +239,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       changed: changed.filter((f) => !area.governed.has(f)),
       closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
       portUsers: ctx.portUsers,
+      portEntries: ctx.portEntries,
       deviceOf: ctx.deviceOf,
       projectJsonOf: (file) => ({ before: gitShow(root, base, file), after: readIfExists(resolve(root, file)) }),
     });

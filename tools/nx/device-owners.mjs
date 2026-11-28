@@ -2,6 +2,8 @@
 // A device test is a mechanism test on fixtures (owned by the mechanism's project) or a behaviour test (owned by its service or module).
 // A changed file selects tests by what owns it, with no tags and no list of ours:
 //   1. A device file (devices/<stem>.toml, its companions) names a device: the halves of that device only (`devices` of the result).
+//      A generated port file (`ports/<dev>-<version>.toml`) is the exception: the entries that differ from the base select the users of
+//      their `ports/fw` declarations (rule 2), unless the change is outside the named entries (`wide`, port-entries.mjs).
 //   2. A firmware declaration `ports/fw/<point>.toml` touches the projects of its `users`.
 //   3. Any other file belongs to the project with the deepest root containing it (Nx's own rule, from the `nx graph` nodes: nested
 //      projects win over their parents). Markdown and project.json files select nothing; a test source (config/test-source-patterns.json)
@@ -118,10 +120,13 @@ const subjectNames = (project, rec, byName) =>
  * `projects`: [{ name, root, subjects (authored implicitDependencies), targets, metadata }] (the nodes of the Nx graph).
  * `opts.changed`: repository-relative changed files. `opts.closureOf(projectRoot, file)`: the import closure of a test file.
  * `opts.projectJsonOf(file)`: { before, after } texts of a changed project.json (null when absent); without it a project.json selects nothing.
- * `opts.portUsers(file)`: project names of a firmware declaration file. `opts.deviceOf(file)`: the device a device file names.
+ * `opts.portUsers(file)`: project names of a firmware declaration file. `opts.portEntries(file)`: { users, wide } of a generated port file, or undefined. `opts.deviceOf(file)`: the device a device file names.
  * Returns { tests: [{ project, file, named, changed, dsp, targets }], mapped: [{ file, project }], devices: string[], unowned:
  * [{ file, why }], quiet: [{ file, project }] (owned by a project no test names), metadataOnly: [{ file, project }], covered: Set }. */
-export const ownershipSelection = (projects, { changed, closureOf, portUsers, deviceOf, projectJsonOf }) => {
+export const ownershipSelection = (
+  projects,
+  { changed, closureOf, portUsers, portEntries, deviceOf, projectJsonOf },
+) => {
   const byName = new Map(projects.map((p) => [p.name, p]));
   const touched = new Map(); // project name -> files
   const mapped = [];
@@ -130,7 +135,20 @@ export const ownershipSelection = (projects, { changed, closureOf, portUsers, de
   const changedRecords = new Map(); // project name -> canonical changed records of its project.json
   const devices = new Set();
   const touch = (name, file) => touched.set(name, [...(touched.get(name) ?? []), file]);
+  const touchPortUsers = (file, users, why) => {
+    const known = users.filter((u) => byName.has(u));
+    for (const u of known) touch(u, file);
+    for (const u of users.filter((u) => !byName.has(u)))
+      unowned.push({ file, why: `user ${u} of the port file is no project` });
+    if (!users.length && why) unowned.push({ file, why });
+    known.forEach((u) => mapped.push({ file, project: u }));
+  };
   for (const file of changed) {
+    const entries = portEntries?.(file);
+    if (entries && !entries.wide) {
+      touchPortUsers(file, entries.users);
+      continue;
+    }
     const device = deviceOf?.(file);
     if (device) {
       devices.add(device);
@@ -138,13 +156,7 @@ export const ownershipSelection = (projects, { changed, closureOf, portUsers, de
       continue;
     }
     if (/^ports\/fw\/[^/]+\.toml$/.test(file)) {
-      const users = portUsers?.(file) ?? [];
-      const known = users.filter((u) => byName.has(u));
-      for (const u of known) touch(u, file);
-      for (const u of users.filter((u) => !byName.has(u)))
-        unowned.push({ file, why: `user ${u} of the port file is no project` });
-      if (!users.length) unowned.push({ file, why: 'the port file names no users' });
-      known.forEach((u) => mapped.push({ file, project: u }));
+      touchPortUsers(file, portUsers?.(file) ?? [], 'the port file names no users');
       continue;
     }
     const owner = ownerOf(file, projects);
