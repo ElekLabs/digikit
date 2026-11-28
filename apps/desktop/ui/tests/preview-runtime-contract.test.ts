@@ -2,7 +2,7 @@
 // the format of sdk.toml and decodes with the parsers Workbench uses; a command whose capability is not advertised is not registered, so it gets no reply.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DkSession, hasCap, readSettingsRecord, type DkTransport } from '@digi/dk-session';
-import { CAP, CMD, SERVICE_CMD } from '@digi/dk-session/gen_proto';
+import { CAP, CMD, SERVICE_CMD, STATUS } from '@digi/dk-session/gen_proto';
 
 const fixture = { dev: 'dt2', state: 'runtime', os: '1.17', flashMs: 0, goneMs: 0, sent: 0 };
 type Cap = keyof typeof CAP;
@@ -109,4 +109,13 @@ describe.each([
       }
     }
   });
+});
+
+// FAULT has no capability: the runtime's `cmd_fault` answers a malformed body and an unknown option, and fails on purpose (no reply) for 1.
+it('answers FAULT as the runtime does', async () => {
+  const { sent } = await runtime([]);
+  const code = (name: string) => STATUS.find(([, n]) => n === name)![0];
+  expect(await sent(CMD.FAULT, [])).toBe(code('E_MSG'));
+  expect(await sent(CMD.FAULT, [0])).toBe(code('E_PROTO'));
+  expect(await sent(CMD.FAULT, [1])).toBeNull();
 });
