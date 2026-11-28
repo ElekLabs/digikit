@@ -1,12 +1,15 @@
 //! The module pages' save of files. The raw body is the packed list (per file a 4-byte big-endian name length, the name, a 4-byte big-endian size,
 //! the bytes). The command opens the folder dialog itself and writes into the folder the user picks; the webview never names a folder. A file of the
 //! same name in the folder is replaced (the user has chosen the folder just before), except a symbolic link, which is refused. The whole list is
-//! checked before the first file is written (names, count, total size, case-insensitive duplicates, targets); each file is written to a temporary
+//! checked before the first file is written (names, count, total size, duplicates after NFC and lowercase, targets); each file is written to a temporary
 //! file in the folder and renamed, so a failure leaves no half file. The name rule is the one of `@digi/module-ui` (`checkSaveName`); both read
 //! `packages/module-ui/tests/fixtures/save-names.json` in their tests.
 use crate::firmware::body;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
+use unicode_normalization::UnicodeNormalization;
 
+/// Temporary files of a save start with this; no saved file may.
+const TEMP_PREFIX: &str = ".digikit-save-";
 const MAX_NAME_BYTES: usize = 255;
 const MAX_FILES: usize = 256;
 const MAX_TOTAL_BYTES: usize = 64 * 1024 * 1024;
@@ -33,6 +36,9 @@ fn check_name(name: &str) -> Result<(), String> {
     {
         return bad();
     }
+    if name.to_lowercase().starts_with(TEMP_PREFIX) {
+        return Err(format!("a name reserved for temporary files: {name}"));
+    }
     if name.chars().all(|c| c == '.') || name.ends_with(['.', ' ']) {
         return bad();
     }
@@ -42,7 +48,13 @@ fn check_name(name: &str) -> Result<(), String> {
         .unwrap_or("")
         .trim_end()
         .to_ascii_uppercase();
-    let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+    let reserved = matches!(
+        stem.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) || matches!(
+        stem.as_str(),
+        "COM¹" | "COM²" | "COM³" | "LPT¹" | "LPT²" | "LPT³"
+    )
         || ((stem.starts_with("COM") || stem.starts_with("LPT"))
             && stem.len() == 4
             && matches!(stem.as_bytes()[3], b'1'..=b'9'));
@@ -87,12 +99,47 @@ fn unpack(packed: &[u8]) -> Result<Vec<(String, &[u8])>, String> {
         if total > MAX_TOTAL_BYTES {
             return Err(format!("save at most {MAX_TOTAL_BYTES} bytes at once"));
         }
-        if !seen.insert(name.to_lowercase()) {
+        if !seen.insert(name.nfc().collect::<String>().to_lowercase()) {
             return Err(format!("the file name is used twice: {name}"));
         }
         files.push((name, take(&mut rest, size)?));
     }
     Ok(files)
+}
+
+/// Creates a new temporary file (`create_new`, so an existing file or symbolic link is never opened) with a random suffix and writes the bytes.
+/// A file it created and could not fill is removed.
+fn create_temp(folder: &Path, index: usize, bytes: &[u8]) -> Result<PathBuf, String> {
+    use std::hash::{BuildHasher, Hasher};
+    use std::io::Write;
+    for _ in 0..16 {
+        let random = std::collections::hash_map::RandomState::new()
+            .build_hasher()
+            .finish();
+        let temp = folder.join(format!(
+            "{TEMP_PREFIX}{}-{index}-{random:016x}.tmp",
+            std::process::id()
+        ));
+        let opened = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp);
+        match opened {
+            Ok(mut f) => {
+                return match f.write_all(bytes) {
+                    Ok(()) => Ok(temp),
+                    Err(e) => {
+                        drop(f);
+                        let _ = std::fs::remove_file(&temp);
+                        Err(format!("{}: {e}", temp.display()))
+                    }
+                };
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("{}: {e}", temp.display())),
+        }
+    }
+    Err("no free temporary file name".into())
 }
 
 /// Writes the files into `folder` (which must exist); the number written. Nothing is written when a name, a limit or a target is refused.
@@ -113,14 +160,22 @@ fn write_all(folder: &Path, packed: &[u8]) -> Result<u32, String> {
             Err(e) => return Err(format!("{}: {e}", path.display())),
         }
     }
-    for (i, (name, bytes)) in files.iter().enumerate() {
-        let path = folder.join(name);
-        let temp = folder.join(format!(".digikit-save-{}-{i}.tmp", std::process::id()));
-        let written = std::fs::write(&temp, bytes).and_then(|()| std::fs::rename(&temp, &path));
-        if let Err(e) = written {
-            let _ = std::fs::remove_file(&temp);
-            return Err(format!("{}: {e}", path.display()));
+    let mut temps: Vec<PathBuf> = Vec::new();
+    let result = (|| {
+        for (i, (name, bytes)) in files.iter().enumerate() {
+            let path = folder.join(name);
+            let temp = create_temp(folder, i, bytes)?;
+            temps.push(temp.clone());
+            std::fs::rename(&temp, &path).map_err(|e| format!("{}: {e}", path.display()))?;
+            temps.pop();
         }
+        Ok(())
+    })();
+    if let Err(e) = result {
+        for t in &temps {
+            let _ = std::fs::remove_file(t);
+        }
+        return Err(e);
     }
     Ok(files.len() as u32)
 }

@@ -18,7 +18,12 @@
   "nul_x",
   "a.b.c",
   "LPT",
-  "aux1"
+  "aux1",
+  "CONIN",
+  "COM²²",
+  "digikit-save-a",
+  ".digikit-sav",
+  "COM¹x"
  ],
  "refuse": [
   "",
@@ -57,7 +62,19 @@
   "nul.tar.gz",
   "Aux.WAV",
   "CON .txt",
-  "../x"
+  "../x",
+  ".digikit-save-1.tmp",
+  ".DIGIKIT-SAVE-x",
+  "COM¹",
+  "com²",
+  "COM³.txt",
+  "LPT¹",
+  "lpt².wav",
+  "LPT³",
+  "CONIN$",
+  "conout$",
+  "CONOUT$.txt",
+  "conin$ .x"
  ],
  "acceptLists": [
   [
@@ -67,6 +84,10 @@
   [
    "a.wav",
    "a.wav2"
+  ],
+  [
+   "e.txt",
+   "é.txt"
   ]
  ],
  "refuseLists": [
@@ -81,6 +102,14 @@
   [
    "Ab",
    "aB"
+  ],
+  [
+   "é.txt",
+   "é.txt"
+  ],
+  [
+   "É",
+   "é"
   ]
  ]
 }

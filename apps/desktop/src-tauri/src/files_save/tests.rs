@@ -160,3 +160,20 @@ fn a_cut_list_is_refused() {
     assert!(write_all(&dir, &packed).unwrap_err().contains("cut short"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_symbolic_link_at_a_temporary_path_is_not_followed() {
+    let dir = folder("temp-link");
+    let victim = dir.join("victim.txt");
+    std::fs::write(&victim, b"keep").unwrap();
+    // Every temporary name the old scheme could pick, planted as a link to the victim.
+    for i in 0..2 {
+        let name = format!(".digikit-save-{}-{i}.tmp", std::process::id());
+        std::os::unix::fs::symlink(&victim, dir.join(name)).unwrap();
+    }
+    write_all(&dir, &pack(&[("a.bin", b"new"), ("b.bin", b"new")])).unwrap();
+    assert_eq!(std::fs::read(&victim).unwrap(), b"keep");
+    assert_eq!(std::fs::read(dir.join("a.bin")).unwrap(), b"new");
+    let _ = std::fs::remove_dir_all(&dir);
+}

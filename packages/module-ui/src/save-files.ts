@@ -24,12 +24,13 @@ export class SaveFilesError extends Error {
 /** The limits of one save call; the desktop's Rust side holds the same numbers (`apps/desktop/src-tauri/src/files_save.rs`). */
 export const SAVE_LIMITS = { maxNameBytes: 255, maxFiles: 256, maxTotalBytes: 64 * 1024 * 1024 } as const;
 
-const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+const RESERVED = /^(con|prn|aux|nul|conin\$|conout\$|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])$/i;
+const TEMP_PREFIX = '.digikit-save-';
 
 /**
  * The one check of a save name, the same rule as the Rust side (tests/fixtures/save-names.json holds the accept and refuse cases of both): not empty,
- * at most 255 UTF-8 bytes, none of `/ \ : * ? " < > |`, no control character (below 0x20, 0x7f), not only dots (so not `.` or `..`), no trailing dot or
- * space, and not a Windows reserved device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9), with or without an extension. `a..b` is a plain name.
+ * at most 255 UTF-8 bytes, none of `/ \ : * ? " < > |`, no control character (below 0x20, 0x7f), not starting with `.digikit-save-`, not only dots (so not `.` or `..`), no trailing dot or
+ * space, and not a Windows reserved device name (CON, PRN, AUX, NUL, COM1-9 and the superscript forms, LPT1-9 likewise, CONIN$, CONOUT$), with or without an extension. `a..b` is a plain name.
  * Throws `SaveFilesError`.
  */
 export function checkSaveName(name: string): void {
@@ -38,12 +39,13 @@ export function checkSaveName(name: string): void {
     throw new SaveFilesError(`The file name is longer than ${SAVE_LIMITS.maxNameBytes} bytes: ${name.slice(0, 40)}`);
   // eslint-disable-next-line no-control-regex
   if (/[/\\:*?"<>|\u0000-\u001f\u007f]/.test(name)) throw new SaveFilesError(`Not a plain file name: ${name}`);
+  if (name.toLowerCase().startsWith(TEMP_PREFIX)) throw new SaveFilesError(`A name reserved for temporary files: ${name}`);
   if (/^\.+$/.test(name) || /[. ]$/.test(name)) throw new SaveFilesError(`Not a plain file name: ${name}`);
   if (RESERVED.test(name.split('.')[0]!.trimEnd())) throw new SaveFilesError(`A reserved device name: ${name}`);
 }
 
 /**
- * Checks every name of a save, that no two names differ only in case, and the limits (at most 256 files, 64 MiB in all). Throws `SaveFilesError`
+ * Checks every name of a save, that no two names differ only in case or Unicode form, and the limits (at most 256 files, 64 MiB in all). Throws `SaveFilesError`
  * before anything is written.
  */
 export function checkSaveFiles(files: readonly SaveFile[]): void {
@@ -53,7 +55,7 @@ export function checkSaveFiles(files: readonly SaveFile[]): void {
   const seen = new Set<string>();
   for (const { name, bytes } of files) {
     checkSaveName(name);
-    const key = name.toLowerCase();
+    const key = name.normalize('NFC').toLowerCase();
     if (seen.has(key)) throw new SaveFilesError(`The file name is used twice: ${name}`);
     seen.add(key);
     total += bytes.length;
