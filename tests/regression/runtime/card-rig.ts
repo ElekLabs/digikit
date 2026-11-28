@@ -22,6 +22,7 @@ import { bounded, rpc } from './guest-access.ts';
 import { options } from './devices.ts';
 import { SETTLE } from './panel-waits.ts';
 import { drainInputs, withPausedFxProtocol } from './fx-session.ts';
+import { refusePausedProtocol } from './paused-protocol.ts';
 import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
@@ -160,6 +161,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     {
       ...options(device),
       runDirClaim: () => claimRunDir(device),
+      protocolCall: (call, session) => refusePausedProtocol(call, async () => (await session.status()).mode),
       ...(o.stallMs !== undefined ? { stallMs: o.stallMs } : {}),
       dsp: o.initial === 'small' ? 'cold' : o.dsp,
       startEmpty: o.startEmpty,

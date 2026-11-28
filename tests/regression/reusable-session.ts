@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach } from 'vitest';
-import { DkSession, EmuUsbTransport } from '@digi/dk-session';
+import { DkSession, EmuUsbTransport, type EmuRpcCall } from '@digi/dk-session';
 import { Session, withinRuntimeDeadline, type RuntimeBaseline, type SessionOptions } from '@digi/test-support';
 import { aggregate } from './aggregate-error.ts';
 import { fileTemp } from './file-temp.ts';
@@ -20,6 +20,8 @@ export function withReusablePatchedSession(
     dsp?: 'zero' | 'sharc' | 'cold';
     /** Called when the daemon starts: a persistent run dir for it (see `claimRunDir`), or undefined for a fresh temporary one. */
     runDirClaim?: () => RunDirClaim | undefined;
+    /** Wraps the rpc of each case's protocol session (a card rig refuses calls its paused daemon cannot answer). */
+    protocolCall?: (call: EmuRpcCall, session: Session) => EmuRpcCall;
   },
   lifecycle: {
     prepareBaseline: (session: Session) => Promise<RuntimeBaseline>;
@@ -76,13 +78,14 @@ export function withReusablePatchedSession(
       context,
     );
     let active = true;
+    const raw: EmuRpcCall = async <T>(method: string, params?: Record<string, unknown>) => {
+      if (!active) throw new Error('runtime case protocol is no longer active');
+      const result = await session!.client.call<T>(method, params);
+      if (!active) throw new Error('runtime case protocol is no longer active');
+      return result;
+    };
     const dk = new DkSession(
-      new EmuUsbTransport(async <T>(method: string, params?: Record<string, unknown>) => {
-        if (!active) throw new Error('runtime case protocol is no longer active');
-        const result = await session!.client.call<T>(method, params);
-        if (!active) throw new Error('runtime case protocol is no longer active');
-        return result;
-      }),
+      new EmuUsbTransport(opts.protocolCall ? opts.protocolCall(raw, session!) : raw),
       emulatedOptions(session!),
     );
     const invalidateCase = () => {
@@ -142,7 +145,7 @@ export function withReusablePatchedSession(
     }
   };
   const startSession = async (): Promise<void> => {
-    const { runDirClaim: _claim, ...sessionOptions } = opts;
+    const { runDirClaim: _claim, protocolCall: _wrap, ...sessionOptions } = opts;
     session = await Session.start({
       ...sessionOptions,
       onSession: (started) => {
