@@ -1,7 +1,7 @@
 ---
 name: digikit-module
 description: >-
-  Create, build, check, pack, run, export or import a digikit content module (a machine, an effect with its own FX page and master or send routes, or a ColdFire service loaded from the card as a .dkm) for the Digitakt II or Digitone II. Use for module:new, module:check, module:pack, module:export, module:import, dk:run, the module.toml manifest, the machine contract (render, note_on, desc), the builder calls in init (dk_module_ctx_add_machine, dk_machine_add_page, dk_page_add_param, dk_module_ctx_add_fx, dk_fx_routes), module_ids.h, the [uses] lines and knob and parameter rules. Patched-in core modules: references/patched-in.md. Not for firmware analysis.
+  Create, build, check, pack, run, export or import a digikit content module (a machine, or an effect with its own FX page and master or send routes) for the Digitakt II or Digitone II. Use for module:new, module:check, module:pack, module:export, module:import, dk:run, the module.toml manifest, the machine contract (render, note_on, desc), the builder calls in init (dk_module_ctx_add_machine, dk_machine_add_page, dk_page_add_param, dk_module_ctx_add_fx, dk_fx_routes), module_ids.h, the [uses] lines and knob and parameter rules. Patched-in core modules: references/patched-in.md. Not for firmware analysis.
 ---
 
 # digikit modules
@@ -20,6 +20,8 @@ The packer infers the kind from what the module declares: `[[machine]]` makes a 
 | `lfo-shape` | 1 to 8 LFO waveforms: one `[[record]] kind = "lfo_shape"` each, 32 literal samples in `SHAPES`; `module:check` validates them with the `lfo` service's rule (guide 5.10) | `sdk/templates/lfo-shape`; modules go to `modules/lfo-shape/AUTHOR/NAME` |
 
 The `core/*` modules are patched into the image. Changes to `core/*` are firmware work and need Em.
+
+A module that needs a resource or API no loaded service provides (a shared table, a firmware hook, a record kind with its own rule) needs a new or changed service: use the `digikit-service` skill. Check `sdk/sdk.toml` (`provided = true`) and `services/*` first.
 
 ## Workflow
 

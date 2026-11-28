@@ -21,8 +21,9 @@ Five layers, L0 to L4, and the port file beside them. The [taxonomy](design/taxo
         │ platform interface
  ───────┼────────────────────────────────────────────────────────────
  L1  Installer and platform modules (patched in, runtime/platform)
-     reset and boot entry, UI/MIDI/exception hooks, shared tables (rows),
-     DSP slots (dsp-voice, fx, dynfx), DSP link and stock fallbacks
+     reset and boot entry, UI/MIDI/exception hooks, DSP slots (dsp-voice, fx, dynfx),
+     DSP link and stock fallbacks; tables services use instead of patching
+     sites (rows, input keys, LFO waves)
         │ bindings and device facts             Port file (.dkport)
  ───────┼────────────────────────────────────────────────────────────
  L0  Stock firmware and hardware (ColdFire, SHARC, card, USB)
@@ -34,7 +35,7 @@ Five layers, L0 to L4, and the port file beside them. The [taxonomy](design/taxo
 
 The core owns shared mechanisms and safety policy, including admission, hook installation, scheduling, storage, diagnostics and generic settings and reload operations. A service owns its domain policy and state, including the meaning of any records it declares. A static library such as `services/rows` supplies code at build time. It creates no provider identity or managed lifetime. Shared live state, such as reserved descriptor rows, needs an owner even when multiple services use the same library to write it. The menu renders state and sends requests through runtime and UI APIs. It should leave domain decisions and persistence formats with their owners.
 
-A service needs an image capability only where its contract calls for one. `project.dks` and `shortcuts.dks` install hooks from the port file and have no separate image module. Image capabilities can support more than one service. The port file matches the stock firmware hash and supplies firmware names, hook sites and check values. The installer, platform entry points, firmware-time fallback paths and shared tables that stock code needs remain image-owned. A service wrapper can still contain device-specific hook or DSP routines that bind through the port or the image.
+A service needs an image capability only where its contract calls for one. `project.dks` installs hooks from the port file and has no separate image module. `shortcuts.dks` subscribes to the key table of `core/input` and installs no hook. Image capabilities can support more than one service. The port file matches the stock firmware hash and supplies firmware names, hook sites and check values. The installer, platform entry points, firmware-time fallback paths and shared tables that stock code needs remain image-owned. A service wrapper can still contain device-specific hook or DSP routines that bind through the port or the image.
 
 ### Implementation history
 
@@ -108,7 +109,7 @@ The SDK defines shared public contracts and their generated C and Rust bindings 
 
 A service file provides its code to the runtime as a provider: a `ProviderRow` over an owner object (`dkrt_abi::provider`): a name hash and a list of tagged parts, each a function table with a version (`PartRef`; lifecycle 1, records 2, DSP 3, tick 4, query 5, describe 6; every callback is a method of exactly one part, `parts.rs`). `service!(Name, "name", &KINDS, parts = [Records, Tick, ...], hooks = [...], fills = [...], exports = ..., tick = f)` emits the tables, the row and the cell `DK_SVC_OWNER` (`Owner<T>` of `dkrt-svc-rt`): the file's `init` makes the instance with `Provider::start_in` (default: `start` moved into the slot; a service with a large state writes it in place) before the declarations; the cell is `.bss` and passes row and instance with `dk_provider_declare_row`; its `fini` runs `Provider::stop(&mut self)` and drops the instance in place. The loader resolves the row at the commit (`ProviderHandle::resolve`: the row and each table must lie in the package image, a part version newer than the core knows is refused with `E_SVC_ABI`), `provider_rows::add` puts it in callback order (the `callback_order` of the service's manifest; a file without one follows every file with one), and a part the service did not adopt answers with its default (accept, nothing). `attach` is called for a consumer with records and for one without, `detach` when a consumer goes down, `can_stop` before a take-down, `reload_done` at the end of a reload; the part `Query` is the resident query entry. The part tables are versioned by `PartRef.version`, so a new callback is a new version of one part and `PROVIDER_ABI` stays 1; the service ABI word (`SVC_ABI`) changed with RC3 (the deletion of the old `Service` row and its import), so every `.dks` is rebuilt. The contract suite (`dkrt_test_support::contract`) runs over the part tables of a row (`provider_contract::<Recipe>`); `local-ping` is the provider fixture; `local-step` is the fixture of `Owner::step` (a key hook whose `act` calls the service's own export; host case `provider_step_assembly_tests.rs`, device test `runtime/core/tests/services/owner-step.device.test.ts`).
 
-The service crate that others copy is `services/shortcuts`, the first port to the provider form. Its layout: `src/shortcuts.rs` is the owner object (`Shortcuts`: private state, the `Provider` impl in one block, `Ticker` beside it); `src/records.rs` is the `Records` part of the same owner plus the free `validate` that `patchkit records --check` calls (the rule itself is `src/rule.rs`); a concept the owner holds is a file of its own named after the noun (`bindings.rs`, `keys.rs`, `build.rs` for the builder call's collection); `src/lib.rs` has only docs, `mod` and `pub use`; the service file `dks/` has `src/lib.rs` (the `service!` call), `hooks.rs` and `hooks.s`, `builder.rs` for a builder call that must reach the owner (`wrapper = "builder"` in `sdk/sdk.toml`) and the generated `gen_exports.rs`. The owner lives in the file's cell (`DK_SVC_OWNER`); hooks and builder calls reach it with `DK_SVC_OWNER.with(|s| ...)`, and a host test builds it with `Provider::start_in` over a `FakeCore`, so no test needs a lock. `patchkit service-check` takes the record kinds of a provider from the `&KINDS_<NAME>` argument of `service!`. `services/lfo` is the second port: the owner `Lfo` (`src/lfo.rs`) keeps the settled keys and is the `Provider` (`start_in`, `settle`, `detach`); `src/records.rs` is its `Records` part and the free `validate`; the shape table the LFO tick reads (`src/shapes.rs`) and the table of the WAVE rows (`src/wave.rs`) stay named statics, because an interrupt and the file's hooks reach them by symbol, and each is written only through its own file's functions; the firmware words of the WAVE rows are read by `start_in` from the file's `DKRT_LFO_FW`.
+The service crate that others copy is `services/shortcuts`, the first port to the provider form. Its layout: `src/shortcuts.rs` is the owner object (`Shortcuts`: private state, the `Provider` impl in one block, `Ticker` beside it); `src/records.rs` is the `Records` part of the same owner plus the free `validate` that `patchkit records --check` calls (the rule itself is `src/rule.rs`); a concept the owner holds is a file of its own named after the noun (`bindings.rs`, `keys.rs`, `build.rs` for the builder call's collection); `src/lib.rs` has only docs, `mod` and `pub use`; the service file `dks/` has `src/lib.rs` (the `service!` call), `hooks.rs` and `hooks.s`, `builder.rs` for a builder call that must reach the owner (`wrapper = "builder"` in `sdk/sdk.toml`) and the generated `gen_exports.rs`. The owner lives in the file's cell (`DK_SVC_OWNER`); hooks and builder calls reach it with `DK_SVC_OWNER.with(|s| ...)`, and a host test builds it with `Provider::start_in` over a `FakeCore`, so no test needs a lock. `patchkit service-check` takes the record kinds of a provider from the `&KINDS_<NAME>` argument of `service!`. `services/lfo` is the second port: the owner `Lfo` (`src/lfo.rs`) keeps the settled keys and is the `Provider` (`start_in`, `settle`, `detach`); `src/records.rs` is its `Records` part and the free `validate`; the wave table the LFO tick reads belongs to the platform module `core/lfo-table` (published as `lfo_table_info`); the service binds it in `dks/src/image_table.rs` and fills it (`src/wave_table.rs`), and the tick, which runs in the engine task, never reaches service code. The service's own UI hooks (task context, one consumer) stay `[[hook]]` entries.
 
 `services/samples` is the second port, a provider with the DSP part and no record kind: the owner `Samples` (`src/samples.rs`) holds `Tracks` (the clients' tracks and the table writes of `writes.rs`), the sample-pool adapter `Pool` (`pool.rs`) and the `PeakWindows`, and implements `Provider`, `DspPart` (`check_sections`, `admit`, `claim`, `release`, `loaded`: the track-table record of a module's DSP section) and `Ticker` in one block each. The module's calls (`dk_sample_pool_*`) and the two pool event slots reach it with `DK_SVC_OWNER.with(...)` (`dks/src/glue.rs`) and answer `E_CONTEXT` or drop the event when there is none. The adapter's `dkpool_tick` is the part's pre-tick step (`Ticker::pre_tick`, run by the table's tick function before the owner is entered) and fires `pool_done` and `pool_lost`, which reach the owner as typed events (`Owner::post`: at once with the owner idle); the peak-window jobs keep their data in `PeakJob` cells of a static of the file (a phase word hands each cell between the UI and job tasks) and end as a `PeakDone` event. `DKRT_SMP_RECORDS` and `DKRT_SMP_CONTROL` stay named statics because device tests read them by symbol; `Tracks::reserve` is their only writer and the logic reads its own copies. The state is made in place (`start_in`: zero bytes plus the few non-zero values), so the 35 kB track core is never copied through the stack.
 
@@ -126,6 +127,16 @@ FX routing uses no Query operation. The fx service shows the FX ROUTING row in t
 
 **Describe replaces the two bridges.** The `dkrt_fx` and `dk_machines_module_info` exports are gone; `dkrt_fx` stays as a stub that answers `E_NOT_FOUND`, and the two `ModuleHooks` fields stay as null words (append-only tables). The MODULES handler asks every record with a Describe part for consumer `record + 1`. The reply replaces the fixed machine fields with `u8 n_sections`, then per section `u32 service name hash, u8 n, n words`; a service with nothing for the consumer gives no section, and the core reads no meaning into the words. The reply carries the capability bit `MODULE_SECTIONS`. Hosts (`dkupload`, `dk-session`, `dkproto.py`, `memory-core.ts`) decode the sections; fx gives one word per effect row (row, route in force, saved, allowed, default) and machines five words (voice-row mask, faults, `nt` and guard-off flag, types 0 to 7).
 
+### Choosing a site: table or hook
+
+Record the execution context of each firmware site (task or interrupt) in `ports/fw` and in the finding that names it. Then:
+
+- **A task-context site with one consumer:** the service hooks it (`[[hook]]` through the Installer, reloaded with the guard).
+- **An interrupt-level or shared site, or one whose owner must reload live:** a platform table. A resident stub is patched once at boot and published with `[[info]]`, and the service finds it with `core.info`. This is a flashed platform change.
+- **A second consumer for a hook:** promote the hook to a table then. Do not build tables ahead of need.
+
+The owning service holds the policy (order, conflicts, who wins). The platform gives the sites and slots. `core/lfo-table` (wave tables) and `core/input` (key walk) are tables; the UI sites of `services/lfo` are hooks.
+
 ### Shipped services
 
 | Service | Callback order | Owns | Optional facets used |
@@ -133,9 +144,13 @@ FX routing uses no Query operation. The fx service shows the FX ROUTING row in t
 | [samples](../services/samples/dks/module.toml) | 100 | Per-module sample pools, track state and peak windows | Sample-pool API, pool completion/loss fills, DSP track-table parts |
 | [machines](../services/machines/dks/module.toml) | 200 | Machine types, parameters and pages, native pages, sticky type assignment | Record handlers and builders, module diagnostics, ColdFire hooks, DN2 frame-type fill and DSP voice dispatch |
 | [fx](../services/fx/dks/module.toml) | 300 | Effect records, pages, parameters, kit values and routes | Record handler and builders, the FX ROUTING row, ColdFire page hooks and DSP dispatch fills |
-| [lfo](../services/lfo/dks/module.toml) | 400 | LFO shape records, numbering and wave bounds | Provider form (RC3-4): owner `Lfo` (`Provider`: `settle`, `detach`; `Records`) over the shape table, which stays a named static because the interrupt of the LFO tick reads it; six interrupt hooks per device and MOD UI hooks, all installed at load; the interrupt hooks use plain names (`cf.lfo.hook.tick_call`), one entry per disjoint device set |
-| [shortcuts](../services/shortcuts/dks/module.toml) | 500 | Shortcut records and dispatch | Record handler, shortcut builder and a port-resolved key-walker hook |
+| [lfo](../services/lfo/dks/module.toml) | 400 | LFO shape records, numbering and wave bounds | Provider form (RC3-4): owner `Lfo` (`Provider`: `settle`, `detach`; `Records`); fills the wave table of `core/lfo-table` (`lfo_table_info`); three MOD UI hooks (DT2 two, DN2 three, port-resolved) |
+| [shortcuts](../services/shortcuts/dks/module.toml) | 500 | Shortcut records and dispatch | Record handler, shortcut builder and a subscriber to the key table of `core/input` (`input_keys_info`); no hook |
 | [project](../services/project/dks/module.toml) | 600 | `.dkp` files and project-scoped module settings | Project API, settings overlay, tick and port-resolved project hooks |
+
+What each service exposes to modules is in its `module.toml` (`[[export]]`, the builder calls of `sdk/sdk.toml` with `provided = true`, the record kinds it owns).
+
+**Resources and claims.** The manifest schema for `[[service.resource]]` and `[[service.record]]` is parsed and validated (`packages/patchkit/src/service_resource.rs`, `service_record.rs`) but not yet packed (RC3). The manager holds a `ResourceLedger` (`dkrt-fit`), but no packed header declares pools, so it refuses nothing [O]. Today each owning service enforces its claims, for example the DSP parts in `services/machines` and `services/fx`.
 
 ### Platform slots
 
@@ -150,6 +165,16 @@ The catalogue covers DT2 1.17 and DN2 1.12. All modules sit in `runtime/platform
 | [fx](../runtime/platform/fx/module.toml) | Post-master and send entry stubs, stock fallback, chain data and registry | `fx.dks` supplies master and send dispatch and output guards. Keep the stubs and check which data has stock or shared callers before moving it. |
 | [dynfx](../runtime/platform/dynfx/module.toml) | Empty DSP effect rows and `dynfx_info` over the shared DSP area | `fx.dks` admits effects and publishes rows into the reservation. Moving their policy requires no change to the image allocation. |
 | [sample-pool](../runtime/platform/sample-pool/module.toml) | DT2 stock pool/loader or DN2 DDR and LP0/DSP transfer, with a shared `sample_pool_info` interface | `samples.dks` owns the user API and fills completion/loss slots. Keep the device-specific backing behind the adapter interface. |
+| [lfo-table](../runtime/platform/lfo-table/module.toml) | The LFO wave tables the tick reads in the engine task, published as `lfo_table_info` | `lfo.dks` binds the table and fills the waves. |
+| [input](../runtime/platform/input/module.toml) | The key walk in the UI task before any view, with four subscriber slots; the first subscriber that returns nonzero consumes the event, else the stock walker runs. Published as `input_keys_info` | `shortcuts.dks` subscribes on start and unsubscribes on stop. |
+
+Published info tables, found with `core.info`:
+
+| Table | Module | Consumers |
+| --- | --- | --- |
+| `lfo_table_info` | `runtime/platform/lfo-table` | `services/lfo` |
+| `input_keys_info` | `runtime/platform/input` | `services/shortcuts` |
+| `rows_info` | `runtime/platform/rows` | `services/machines`, `services/fx` |
 
 ### Remaining ownership work
 
@@ -176,7 +201,7 @@ Use the lowest layer that sees the behavior. A host test replaces device coverag
 | L3 Service | `services/NAME` (module manifest in `dks/`) | `service` (checked by `patchkit service-check`) | Loaded from a `.dks` file | The core through `CoreApi` (interface C) and `dkrt-abi`, other services through declared imports (interface A) |
 | L1 Installer | `runtime/platform/expansion` | `installer` | At reset, once | Firmware bindings |
 | L1 Firmware bindings | `ports/bindings` | none (not a module) | Never; generated by `patchkit gen` from `ports/fw/` | Anchors |
-| L1 Platform or other image module | `runtime/platform/NAME` (except `expansion`) | `adapter` | Inside firmware hooks, in the firmware's contexts | Firmware bindings, runtime exports, other adapters' headers |
+| L1 Platform or other image module | `runtime/platform/NAME` (except `expansion`) | `adapter` | Inside firmware hooks, in the firmware's contexts; it also publishes tables that services use instead of patching sites | Firmware bindings, runtime exports, other adapters' headers |
 | L4 App | `runtime/apps/NAME` | `app` | In the task context, called by an adapter | SDK, `dkrt.h`, `dk_ui_core.h` |
 | L4 Content module | `modules/<kind>/<author>/<name>`, `tests/fixtures/modules` | none | Loaded at run time from the card (a `.dkm`) | SDK and declared service-local imports |
 | SDK contract | `sdk/` | none | Not code that runs; the contract between L4 and L2 and L3 | Nothing |
