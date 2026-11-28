@@ -98,7 +98,7 @@ export function levelChoices(row: 'default' | 'module'): { value: number; label:
 export function levelsOff(o: { origin: string | undefined; live: boolean; supported: boolean | undefined }): string {
   if (!o.origin) return 'Choose Emulator or Device in Source: the levels are set on one of them';
   if (!o.live) return `The ${o.origin} is not followed: nothing answers for its log levels`;
-  if (o.supported === false) return `The debug module is not loaded on the ${o.origin}: it has no log level control`;
+  if (o.supported === false) return 'Install digikit/debug to change log levels';
   return '';
 }
 

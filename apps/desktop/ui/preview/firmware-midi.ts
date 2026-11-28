@@ -1,6 +1,6 @@
 // The preview's named MIDI ports. DkSession probes these devices and the firmware sender uses the same wire.
 import { decode8in7, encode8in7, RPC_PING, RPC_SOFTWARE_VERSION } from '@digi/dk-session';
-import { CMD, PROTO_VERSION } from '@digi/dk-session/gen_proto';
+import { CAP, CMD, PROTO_VERSION, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { deviceProfiles, runtimeDeviceIds, type DeviceProfile } from '@digi/workbench-core/data/device-profiles.ts';
 import type { PreparedFlash } from '@digi/workbench-core/patch/patchkit-core.ts';
 import { FakeUpgrade } from '@digi/workbench-core/testing/fakeflash.ts';
@@ -139,7 +139,7 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
       be32(1),
       be32(1),
       be32(runtime),
-      be32(0),
+      be32(debugLoaded ? (1 << CAP.LOG) | (1 << CAP.PEEK) | (1 << CAP.LOGCFG) : 0),
       id,
     );
     push(to, concat([0xf0, 0x7d, 0x64, 0x6b, 1, CMD.INFO | 0x40, seq], encode8in7(body), [0xf7]));
@@ -166,14 +166,41 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     reply(to, CMD.SETTINGS, seq, 0, concat([0, 0], be32(0), be32(settingsRecord.length), piece));
   }
 
+  // digikit/debug on the simulated card (`?log=nodebug`: not loaded). INFO advertises LOG, PEEK and LOGCFG only while it is, and only then are they answered.
+  const debugLoaded = query.get('log') !== 'nodebug';
+  const DEBUG_COMMANDS = new Set<number>([SERVICE_CMD.LOG, SERVICE_CMD.PEEK, SERVICE_CMD.LOGCFG]);
+  const logConfig = { level: 2, modules: Array<number>(8).fill(0xff), cardOn: 0 };
+
+  /** LOG (an empty ring), PEEK (zeros) and LOGCFG ops 0 to 3 in the format of sdk.toml; other ops are an unknown option (E_PROTO). */
+  function debug(to: Link, msg: Uint8Array) {
+    const cmd = msg[5]!;
+    const seq = msg[6]!;
+    const body = decode8in7(msg.subarray(7, msg.length - 1));
+    if (cmd === SERVICE_CMD.LOG) return reply(to, cmd, seq, 0, concat(be32(0), be32(0), [0]));
+    if (cmd === SERVICE_CMD.PEEK) {
+      const len = (body[4]! << 8) | body[5]!;
+      return reply(to, cmd, seq, 0, concat(body.subarray(0, 4), [len >> 8, len & 255], new Uint8Array(len)));
+    }
+    const op = body[0];
+    if (op === 1) {
+      logConfig.level = body[1]!;
+      logConfig.modules = Array.from(body.subarray(2, 10));
+    }
+    if (op === 0 || op === 1) return reply(to, cmd, seq, 0, concat([logConfig.level], logConfig.modules, [1]));
+    if (op === 3) logConfig.cardOn = body[1] ? 1 : 0;
+    if (op === 2 || op === 3)
+      // u8 on, u8 file, u8 state, u8 0, u32 writes, i32 last_status, u32 ms_since_write
+      return reply(to, cmd, seq, 0, concat([logConfig.cardOn, 0, logConfig.cardOn], [0], be32(0), be32(0), be32(0xffffffff)));
+    reply(to, cmd, seq, 0xc4);
+  }
+
   function answer(to: Link, msg: Uint8Array) {
     const device = devices.get(to.name);
     if (!device || !online(device) || device.state === 'noreply' || sim.dev === 'noreply') return;
     if (msg[1] === 0x00 && msg[2] === 0x20) stock(to, device, msg);
     else if (msg[1] === 0x7d && msg[5] === CMD.INFO) info(to, device, msg[6]!);
     else if (msg[1] === 0x7d && (msg[5] === CMD.SETTINGS || msg[5] === CMD.FAULT)) settings(to, device, msg);
-    // any other command is unknown to this runtime (no debug module): it answers E_PROTO (-60) instead of staying silent
-    else if (msg[1] === 0x7d && device.runtime) reply(to, msg[5]!, msg[6]!, 0xc4);
+    else if (msg[1] === 0x7d && debugLoaded && DEBUG_COMMANDS.has(msg[5]!)) debug(to, msg);
   }
 
   function close() {

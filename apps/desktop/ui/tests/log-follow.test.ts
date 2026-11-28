@@ -33,11 +33,12 @@ const lv = (level: number, src = 0, error = false) => (level << 1) | (src << 8) 
 /** A device: a ring of events, the answers to INFO, LOGCFG, MODULES and the fault record, and a way to not answer. */
 class Device implements FollowSession {
   ring: DkLogEvent[] = [];
-  caps: number | null = 1 << CAP.LOG;
+  caps: number | null = (1 << CAP.LOG) | (1 << CAP.LOGCFG);
   debug = { level: 3, modules: Array<number>(8).fill(0xff), debug: true };
   modulesLoaded: { index: number; name: string }[] = [];
   faultRecord: Fault | null = null;
   failWith: Error | null = null;
+  cardLog?: () => Promise<null>;
   async info() {
     if (this.failWith) throw this.failWith;
     return { caps: this.caps };
@@ -146,11 +147,30 @@ test('without the debug module only the fault record is read, and the log starts
   assert.equal(await t.follower.tick(), IDLE_MS);
   assert.equal(t.entries.filter((e) => e.text.startsWith('fault:')).length, 1); // the same record is not shown twice
   // the device restarts with the module loaded: the log is followed
-  d.caps = (1 << CAP.SERVICE_CMDS) | (1 << CAP.LOG);
+  d.caps = (1 << CAP.SERVICE_CMDS) | (1 << CAP.LOG) | (1 << CAP.LOGCFG);
   d.ring = [ev(1, 'BOOT_START')];
   await t.follower.tick();
   assert.equal(t.statuses.at(-1), 'following');
   assert.equal(t.entries.filter((e) => e.rt?.event).length, 1);
+});
+
+test('LOGCFG is sent only to a target that advertises it', async () => {
+  const d = new Device();
+  d.caps = 1 << CAP.LOG; // the log without CAP_LOGCFG
+  const sent: string[] = [];
+  d.logConfig = async () => {
+    sent.push('get');
+    return d.debug;
+  };
+  d.cardLog = async () => {
+    sent.push('card');
+    return null;
+  };
+  const t = setup(d);
+  await t.follower.tick();
+  await t.follower.tick();
+  assert.deepEqual(sent, []);
+  assert.equal(t.statuses.at(-1), 'following');
 });
 
 test('a DSP stop of the boot before is one error entry, with the crash events folded into its detail', async () => {

@@ -14,3 +14,16 @@ it('dispose while disconnected stops the grace timer', () => {
   vi.advanceTimersByTime(DISCONNECT_GRACE_MS * 2);
   expect(expired).not.toHaveBeenCalled();
 });
+
+it('a lost optional request changes nothing and starts no re-read; a lost core request does both', () => {
+  const lost = vi.fn();
+  const c = createRoot(() => createConnection({ deviceName: async () => 'x' }, undefined, { lost }));
+  c.noteConnection({ type: 'answered', device: { id: 'dt2', name: 'Digitakt II' } });
+  c.noteConnection({ type: 'lost', reason: 'no reply', optional: true });
+  expect(c.connection().state).toBe('connected');
+  expect(lost).not.toHaveBeenCalled();
+  c.noteConnection({ type: 'lost', reason: 'no reply' });
+  expect(c.connection().state).toBe('disconnected');
+  expect(lost).toHaveBeenCalledOnce();
+  c.dispose();
+});

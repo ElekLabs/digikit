@@ -20,6 +20,9 @@ export function createConnection(
   let selection = 0;
   let graceTimer: ReturnType<typeof setTimeout> | undefined;
   const noteConnection = (e: ConnectionEvent): void => {
+    // Health is judged by core requests only: an optional request (LOG, PEEK, LOGCFG: a module the target may not have loaded) that is lost
+    // says nothing about the connection and starts no re-read.
+    if (e.type === 'lost' && e.optional) return;
     if (e.type === 'target') selection++;
     const next = step(connection(), e);
     // A lost request is not a new device: one unanswered request (a command the target does not know) must not empty the module

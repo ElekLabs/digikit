@@ -123,7 +123,7 @@ test('the menu acts on the origin chosen in Source; All and the app sources only
 test('why the controls are off', () => {
   assert.match(levelsOff({ origin: undefined, live: false, supported: undefined }), /Choose Emulator or Device/);
   assert.match(levelsOff({ origin: 'device', live: false, supported: undefined }), /not followed/);
-  assert.match(levelsOff({ origin: 'device', live: true, supported: false }), /no log level control/);
+  assert.match(levelsOff({ origin: 'device', live: true, supported: false }), /Install digikit\/debug/);
   assert.equal(levelsOff({ origin: 'device', live: true, supported: true }), '');
   assert.equal(levelsOff({ origin: 'device', live: true, supported: undefined }), '');
 });
