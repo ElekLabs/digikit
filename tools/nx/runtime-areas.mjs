@@ -95,6 +95,24 @@ export const areaSelection = (projects, changed, areas = loadAreas()) => {
   return { tests: [...byKey.values()], governed, notes, unclassified };
 };
 
+/** The tests of the platform areas that declare the changed port bindings: `mapped` is the `{ file, project }` list of ownershipSelection;
+ * a `ports/` file mapped to a project whose root is a platform module selects that module's area (its `module.toml` stands for it).
+ * Returns tests as areaSelection does, their `changed` naming the port file. */
+export const portAreaSelection = (projects, mapped, areas = loadAreas()) => {
+  const root = (name) => projects.find((p) => p.name === name)?.root;
+  const stand = mapped
+    .filter(({ file, project }) => file.startsWith('ports/') && root(project)?.startsWith('runtime/platform/'))
+    .map(({ file, project }) => ({ file, stand: `${root(project)}/module.toml` }));
+  const out = areaSelection(projects, [...new Set(stand.map((s) => s.stand))], areas);
+  const from = (f) => stand.filter((s) => s.stand === f).map((s) => s.file);
+  return {
+    tests: out.tests.map((t) => ({ ...t, changed: [...new Set(t.changed.flatMap(from))] })),
+    notes: stand.length
+      ? [...new Set(stand.map((s) => `${s.file} -> declaring area of ${s.stand.split('/').slice(0, 3).join('/')}`))]
+      : [],
+  };
+};
+
 /** The files among `files` under the runtime scope that are in no area and not host-proven. */
 export const checkComplete = (files, areas = loadAreas()) =>
   files.filter((f) => classify(f, areas)?.kind === 'unclassified');

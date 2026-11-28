@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { deviceShorts } from '../device-files.mjs';
 import { ownershipSelection } from '../device-owners.mjs';
 import { declaredUsers, portEntryUsers } from '../port-entries.mjs';
-import { checkComplete, classify, loadAreas } from '../runtime-areas.mjs';
+import { checkComplete, classify, loadAreas, portAreaSelection } from '../runtime-areas.mjs';
 
 const areas = loadAreas();
 const [DEV] = deviceShorts();
@@ -117,5 +117,28 @@ describe('port bindings and device files', () => {
   it('keeps every half of the device for a hand-edited device file', () => {
     const got = select([`devices/${DEV}.toml`], undefined);
     expect(got.devices).toEqual([DEV]);
+  });
+});
+
+describe('declaring area of a changed port binding', () => {
+  const inputArea = {
+    scope: ['runtime/platform/**'],
+    areas: { 'platform-input': { globs: ['runtime/platform/input/**'], tests: ['core/ui:ui.device.test.ts'] } },
+  };
+  it('selects the area tests of a platform user of the changed declaration', () => {
+    const got = portAreaSelection(projects, [{ file: 'ports/fw/input.toml', project: 'core/input' }], inputArea);
+    expect(got.tests.map((t) => [t.project, t.changed])).toEqual([['core/ui', ['ports/fw/input.toml']]]);
+  });
+
+  it('ignores a user outside the platform modules and a file that is no port file', () => {
+    const got = portAreaSelection(
+      [...projects, { name: 'svc', root: 'services/svc', targets: [] }],
+      [
+        { file: 'ports/fw/input.toml', project: 'svc' },
+        { file: 'runtime/platform/input/module.toml', project: 'core/input' },
+      ],
+      inputArea,
+    );
+    expect(got.tests).toEqual([]);
   });
 });
