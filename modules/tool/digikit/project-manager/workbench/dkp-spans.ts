@@ -38,10 +38,12 @@ const u32 = (b: Uint8Array, at: number) => ((b[at] << 24) | (b[at + 1] << 16) | 
 export function dkpSpans(bytes: Uint8Array): Span[] | undefined {
   if (bytes.length < HEADER || u32(bytes, 0) !== 0x444b504a || u16(bytes, 4) !== DKP_VERSION) return undefined;
   const spans: Span[] = [];
+  // No span reaches past `limit` (the file, then the section being read), so the spans stay in order even for a length field that lies.
+  let limit = bytes.length;
   const put = (start: number, length: number, kind: SpanKind) => {
-    const end = Math.min(start + length, bytes.length);
+    const end = Math.min(start + length, limit);
     if (end > start) spans.push({ start, end, kind });
-    return start + length;
+    return Math.max(end, start);
   };
   put(0, 4, 'magic');
   put(4, 2, 'version');
@@ -59,6 +61,7 @@ export function dkpSpans(bytes: Uint8Array): Span[] | undefined {
     const end = Math.min(at + 3 + u16(bytes, at + 1), used);
     put(at, 3, 'section');
     let pos = at + 3;
+    limit = end;
     if (tag === TAG_MODULES) {
       while (pos < end) {
         const length = bytes[pos];
@@ -67,8 +70,7 @@ export function dkpSpans(bytes: Uint8Array): Span[] | undefined {
         pos = put(pos, 4, 'module-hash');
       }
     } else if (tag === TAG_DATA) {
-      const owner = bytes[pos] ?? 0;
-      pos = put(pos, 1 + owner, 'owner');
+      pos = put(pos, 1 + (bytes[pos] ?? 0), 'owner');
       while (pos < end) {
         const keyLength = bytes[pos];
         if (pos + 1 + keyLength + 2 > end) break;
@@ -80,6 +82,7 @@ export function dkpSpans(bytes: Uint8Array): Span[] | undefined {
     }
     // what is left of the section (an unknown tag's body, or bytes a known body did not parse into)
     put(pos, end - pos, 'unknown');
+    limit = bytes.length;
     at = end;
   }
   // the bytes after `used`, and any gap, are plain

@@ -108,4 +108,36 @@ describe('the pages of the modules loaded on the selected target', () => {
     expect(h.requests).toEqual(['midi:A']);
     h.dispose();
   });
+
+  it('shows a page that failed to build as an error page of the module', async () => {
+    const h = harness({ definition: page });
+    let lookup!: (module: DkModule) => ModulePage | undefined;
+    const only = { kind: 'midi', port: 'A' };
+    const host = {
+      target: { target: () => only, switching: () => false, libraryOnly: () => false },
+      inventory: { modules: () => [record(sample.module, 3)] },
+    } as unknown as ModulePagesHost;
+    const dispose = createRoot((d) => {
+      lookup = runtimeModulePages(
+        host,
+        ({ current }) => ({
+          ...createMemoryModuleChannel(sample, { current }).channel,
+          describeSettings: async () => {
+            throw new Error('chunk missing');
+          },
+        }),
+        createModulePageRegistry({}),
+        () => {
+          throw new Error('not reached');
+        },
+      );
+      return d;
+    });
+    await vi.waitFor(() => expect(lookup(record(sample.module, 3))).toBeDefined());
+    const shown = lookup(record(sample.module, 3))!;
+    expect(shown.open(() => true).error).toContain('chunk missing');
+    expect(shown.descriptor.name).toBe(sample.module);
+    dispose();
+    h.dispose();
+  });
 });

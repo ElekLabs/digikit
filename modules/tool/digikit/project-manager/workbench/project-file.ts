@@ -6,6 +6,9 @@ import { queryErrorText } from './project-text';
 export const FILE_RETRY_MS = 200;
 /** How often a project that changed while it was read is read again before the read gives up. */
 const ATTEMPTS = 3;
+/** How often one ask is repeated while the device says `loading`: with FILE_RETRY_MS about ten seconds. */
+const LOADING_ASKS = 50;
+const STALLED = 'The device did not finish reading the file.';
 
 export type Pm = ServiceClient<typeof ProjectManager>;
 
@@ -31,11 +34,12 @@ export async function readProjectFile(
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     let name = '';
     let counter = 0;
-    for (;;) {
+    for (let asks = 0; ; asks++) {
       const result = await service.get({ slot });
       if (!active()) return undefined;
       if (!result.ok) return { state: 'error', text: queryErrorText(result.error) };
       if (result.value.loading) {
+        if (asks >= LOADING_ASKS) return { state: 'error', text: STALLED };
         await wait(FILE_RETRY_MS);
         if (!active()) return undefined;
         continue;
@@ -48,12 +52,14 @@ export async function readProjectFile(
     let offset = 0;
     let total = Infinity;
     let changed = false;
+    let asks = 0;
     while (offset < total) {
       const result = await service.readFile({ slot, version: counter, offset });
       if (!active()) return undefined;
       if (!result.ok) return { state: 'error', text: queryErrorText(result.error) };
       const reply = result.value;
       if (reply.loading) {
+        if (++asks >= LOADING_ASKS) return { state: 'error', text: STALLED };
         await wait(FILE_RETRY_MS);
         if (!active()) return undefined;
         continue;
@@ -64,8 +70,9 @@ export async function readProjectFile(
       }
       if (!reply.found) return { state: 'missing' };
       total = reply.total;
-      // an empty range before the end would never advance: stop instead of asking forever
-      if (reply.data.length === 0) break;
+      asks = 0;
+      // an empty range before the end would never advance: refuse the short file instead of asking forever or saving too few bytes
+      if (reply.data.length === 0) return { state: 'error', text: 'The device sent a short file.' };
       chunks.push(reply.data);
       offset += reply.data.length;
     }

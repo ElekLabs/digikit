@@ -81,4 +81,29 @@ describe('the project file highlighter against the dkp vectors', () => {
     expect(spans[spans.length - 1].end).toBe(50);
     expect(kindAt(spans, 60)).toBeUndefined();
   });
+
+  it('keeps every span in order inside its section for garbage lengths', () => {
+    const header = bytesOf(vectors.valid.find((v) => v.name === 'one_owner')!.hex).slice(0, 42);
+    // a data section of 4 bytes whose owner length says 200, followed by a second section
+    const lying = Uint8Array.from([...header, 2, 0, 4, 200, 1, 2, 3, 1, 0, 0, 9, 9, 9]);
+    new DataView(lying.buffer).setUint32(34, lying.length);
+    const spans = dkpSpans(lying)!;
+    const owner = of(spans, 'owner')[0];
+    expect(owner.end).toBeLessThanOrEqual(42 + 3 + 4);
+    let at = 42;
+    let seed = 7;
+    const random = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) >> 8;
+    for (let round = 0; round < 200; round++) {
+      const noise = Uint8Array.from({ length: 60 }, random);
+      const bytes = new Uint8Array([...header.slice(0, 34), 0, 0, 0, 60 + 8, ...header.slice(38), ...noise]);
+      const found = dkpSpans(bytes)!;
+      at = 0;
+      for (const span of found) {
+        expect(span.start).toBeGreaterThanOrEqual(at);
+        expect(span.end).toBeGreaterThan(span.start);
+        expect(span.end).toBeLessThanOrEqual(bytes.length);
+        at = span.end;
+      }
+    }
+  });
 });

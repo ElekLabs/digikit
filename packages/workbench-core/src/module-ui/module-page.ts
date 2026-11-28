@@ -15,5 +15,6 @@ export interface PageDescriptor {
 // to the lifetime of the mount and the selected connection.
 export interface ModulePage {
   descriptor: PageDescriptor;
-  open(current: () => boolean): { settings?: DynamicSettings; Panel?: Component; Page?: Component };
+  /** `error` replaces the content: the page could not be built. */
+  open(current: () => boolean): { settings?: DynamicSettings; Panel?: Component; Page?: Component; error?: string };
 }

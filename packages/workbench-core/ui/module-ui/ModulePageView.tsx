@@ -19,6 +19,13 @@ export default function ModulePageView(props: { page: ModulePage; current: () =>
   return (
     <main class="module-page">
       <h2>{props.page.descriptor.name}</h2>
+      <Show when={client.error}>
+        {(error) => (
+          <p class="err" role="alert">
+            {error()}
+          </p>
+        )}
+      </Show>
       <Show when={client.Panel}>{(panel) => <Dynamic component={panel()} />}</Show>
       <Show when={tabs.length > 1}>
         <div class="module-tabs" role="tablist" aria-label="Module">
