@@ -136,6 +136,14 @@ export function emulatedClock(status: () => Promise<EmuStatus>): Clock {
   };
 }
 
+/** Emulated ms one `step` rpc of a stepped clock covers: a long window stays several short rpcs, none near the control client's timeout. */
+const STEP_CHUNK_MS = 250;
+
+async function stepEmulated(step: (instructions: number) => Promise<unknown>, ms: number): Promise<void> {
+  for (let left = ms; left > 0; left -= STEP_CHUNK_MS)
+    await step(Math.ceil(Math.min(left, STEP_CHUNK_MS) * INSNS_PER_MS));
+}
+
 /**
  * A paused daemon: time passes only when stepped. `now` is the emulated ms of `status()`; `pause(ms)` steps the daemon by `ms` emulated ms
  * (`step(instructions)`, the daemon's `step`) instead of waiting wall time, so a wait bounded by N ms of emulated time ends when the
@@ -148,12 +156,8 @@ export function steppedClock(
   const base = emulatedClock(status);
   return {
     ...base,
-    pause: async (ms) => {
-      if (ms > 0) await step(Math.ceil(ms * INSNS_PER_MS));
-    },
-    pauseEmulated: async (ms) => {
-      if (ms > 0) await step(Math.ceil(ms * INSNS_PER_MS));
-    },
+    pause: (ms) => stepEmulated(step, ms),
+    pauseEmulated: (ms) => stepEmulated(step, ms),
   };
 }
 

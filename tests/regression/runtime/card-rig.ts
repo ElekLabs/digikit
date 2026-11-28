@@ -22,7 +22,7 @@ import { bounded, rpc } from './guest-access.ts';
 import { options } from './devices.ts';
 import { SETTLE } from './panel-waits.ts';
 import { drainInputs, withPausedFxProtocol } from './fx-session.ts';
-import { refusePausedProtocol } from './paused-protocol.ts';
+import { refusePausedProtocol, RigMode } from './paused-protocol.ts';
 import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
@@ -93,6 +93,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   const overlays: string[] = [];
   const cardServices = new Set<string>();
   const epochs = new Set<number>();
+  const mode = new RigMode(async () => (await fixture.runtime.session.status()).mode);
   const extra = new Set(o.storeExtra ?? []);
   const symbols = [...(o.plain ? [] : ['DKRT_BOOT', 'DKRT_HOST_DIR']), ...(o.symbols ?? [])];
 
@@ -161,7 +162,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     {
       ...options(device),
       runDirClaim: () => claimRunDir(device),
-      protocolCall: (call, session) => refusePausedProtocol(call, async () => (await session.status()).mode),
+      protocolCall: (call) => refusePausedProtocol(call, mode),
       ...(o.stallMs !== undefined ? { stallMs: o.stallMs } : {}),
       dsp: o.initial === 'small' ? 'cold' : o.dsp,
       startEmpty: o.startEmpty,
@@ -260,6 +261,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     if (o.plain) {
       await runtime.ui.wait({ ms: 300, why: SETTLE });
       await rpc(runtime.session, 'run.mode', { mode: 'paused' });
+      mode.set('paused');
       return runtime;
     }
     if (o.hold) {
@@ -273,6 +275,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       emulatedMs: options.emulatedMs,
     });
     await rpc(runtime.session, 'run.mode', { mode: 'paused' });
+    mode.set('paused');
     return runtime;
   };
   const afterCard = async (tag: string, base: string) => {
@@ -316,7 +319,9 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     },
     card: (spec = {}) => build(fixture.runtime.session, spec.name ?? 'card', spec),
     async boot(cardImage, extraOptions = {}) {
+      mode.forget();
       const next = await fixture.reload(baseline(cardImage, extraOptions.deliverExceptions));
+      mode.set(o.hold ? 'paused' : 'free');
       if (prepared.preparedImage) validateRuntimePlan(prepared.plan, next.session);
       epochs.add(next.epoch);
       image = cardImage;
@@ -347,6 +352,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       const { session } = runtime;
       const before = Number((await bounded(() => session.status())).epoch);
       await rpc(session, 'run.mode', { mode: 'free' });
+      mode.set('free');
       await bounded(() => runtime.dk.restart());
       runtime.dk.cancelPending();
       const dk = emulatorDk(session);
@@ -453,6 +459,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       await expectRuntimeUi(runtime.session, prepared.plan, artifacts, { afterEpoch: runtime.epoch - 1 });
       await drainInputs(runtime.session);
       await rpc(runtime.session, 'run.mode', { mode: 'paused' });
+      mode.set('paused');
       await runtime.ui.wait({ ms: 300, why: SETTLE });
       if (previous && previous !== path.dirname(next)) fs.rmSync(previous, { recursive: true, force: true });
       clone = next;

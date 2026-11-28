@@ -168,5 +168,24 @@ test('steppedClock: pause steps the target by that many emulated ms and waits no
   await clock.pause(250);
   await clock.pauseEmulated!(10);
   await clock.pause(0);
-  assert.deepEqual(steps, [250 * INSNS_PER_MS, 10 * INSNS_PER_MS]);
+  assert.equal(
+    steps.reduce((a, b) => a + b, 0),
+    260 * INSNS_PER_MS,
+  );
+});
+
+test('steppedClock: a long pause is several bounded steps that sum to the exact total', async () => {
+  const steps: number[] = [];
+  const clock = steppedClock(
+    async () => ({ elapsed: 0 }),
+    async (n) => void steps.push(n),
+  );
+  await clock.pauseEmulated!(10_000);
+  await clock.pause(1234);
+  assert.ok(steps.length > 40);
+  assert.equal(
+    steps.reduce((a, b) => a + b, 0),
+    11_234 * INSNS_PER_MS,
+  );
+  assert.equal(Math.max(...steps) < 2_000 * INSNS_PER_MS, true);
 });
