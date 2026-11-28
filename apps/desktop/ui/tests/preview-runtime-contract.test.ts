@@ -98,7 +98,7 @@ async function runtime(modules: string[]) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe.each([
-  ['without digikit/debug', ['digikit/pluck']],
+  ['without digikit/debug', ['test/settings-a']],
   ['with digikit/debug', ['digikit/debug']],
 ])('the preview runtime %s', (_name, modules) => {
   it('answers every command of an advertised capability in its format and no other command', async () => {

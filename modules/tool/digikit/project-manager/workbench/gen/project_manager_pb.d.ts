@@ -377,7 +377,7 @@ export declare const ProjectManager: GenService<{
   },
   /**
    * The raw bytes of the project's .dkp file from offset, 768 at most per reply; total is the length of the whole file. version, loading and changed are as in GetSettings;
-   * found is false when the project has no file. The open project answers from the image the device holds, not from the file.
+   * found is false when the project has no file. Every project, the open one too, is read from its file on the card (the open project's file holds its last save).
    *
    * @generated from rpc project_manager.ProjectManager.ReadFile
    */

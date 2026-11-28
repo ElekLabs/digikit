@@ -49,7 +49,7 @@ it('with digikit/debug on the card INFO advertises LOG, PEEK and LOGCFG and LOGC
 });
 
 it('without digikit/debug on the card INFO has no debug capability and the commands are not answered', async () => {
-  const { ask } = await emulator(['digikit/pluck']);
+  const { ask } = await emulator(['test/settings-a']);
   const info = bodyOf(await ask(CMD.INFO, 5));
   expect(new DataView(info.buffer, info.byteOffset).getUint32(info.length - 8 - 4, false) & DEBUG_CAPS).toBe(0);
   for (const cmd of [SERVICE_CMD.LOG, SERVICE_CMD.PEEK, SERVICE_CMD.LOGCFG]) expect(await ask(cmd, 6, [0])).toBe('');
