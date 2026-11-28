@@ -2,6 +2,7 @@
 use super::{
     bundle::{Create, OpenSession, WorkingCard, attach, create, mount, read, save},
     document::{MANIFEST, asset, atomic, problem},
+    dsp,
 };
 use digi_control::{cards::PRIVATE_CARD_MARKER, firmware::sha256_hex};
 use std::{fs, path::PathBuf, sync::Mutex};
@@ -167,6 +168,15 @@ pub(crate) async fn session_save(
 ) -> Result<OpenSession, String> {
     let handle = host.handle.clone();
     run(move || save(&handle, &root, card.as_deref(), &name)).await
+}
+
+#[tauri::command]
+pub(crate) async fn session_save_dsp(
+    root: PathBuf,
+    module: String,
+    source: Option<dsp::ReportSource>,
+) -> Result<OpenSession, String> {
+    run(move || dsp::save(&root, module, source)).await
 }
 
 #[tauri::command]

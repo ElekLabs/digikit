@@ -1,1 +1,1 @@
-export type Page = 'run' | 'transfer' | 'files' | 'firmware' | 'settings' | 'module';
+export type Page = 'run' | 'dsp' | 'transfer' | 'files' | 'firmware' | 'settings' | 'module';

@@ -169,6 +169,7 @@ pub(super) fn create(working: &impl WorkingCard, input: Create) -> Result<OpenSe
     );
     let mut overlay = None;
     if let Some(previous) = &previous {
+        doc.dsp = previous.document.dsp.as_ref().map(|dsp| dsp.selection());
         sparse::copy(&asset(&previous.root, BASE)?, &base).map_err(problem)?;
         overlay = if let Some(card) = &input.card {
             Some(working.read(card)?.pin(&mut doc.firmware)?)

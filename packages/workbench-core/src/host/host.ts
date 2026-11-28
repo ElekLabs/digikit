@@ -252,10 +252,19 @@ export interface SymbolsHost {
   revision(): number;
 }
 
+export interface DspQualityModule {
+  id: string;
+  name: string;
+}
+
 export interface Host {
   sessions?: import('./session.ts').SessionHost;
   symbols?: SymbolsHost;
   analyzer?: AnalyzerHost;
+  dspQuality?: {
+    listModules(): Promise<DspQualityModule[]>;
+    run(module: string): Promise<{ folder: string }>;
+  };
   fs: FsHost;
   library: LibraryHost;
   ports: PortsHost;
