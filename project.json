@@ -13,6 +13,22 @@
       },
       "description": "Device ids and names outside the allowed places may not grow beyond tools/nx/device-literals.baseline.json (reads every tracked file: not cached, and any tracked-file change selects it in the affected gate; `lint` depends on it)."
     },
+    "key-abi": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/tools/nx/key-abi.mjs",
+        "{workspaceRoot}/runtime/platform/input/src/cf/key_subscribers.h",
+        "{workspaceRoot}/services/shortcuts/src/key_abi.rs",
+        { "externalDependencies": [] }
+      ],
+      "outputs": [],
+      "options": {
+        "command": "node tools/nx/key-abi.mjs",
+        "cwd": "."
+      },
+      "description": "The numbers of services/shortcuts/src/key_abi.rs are those of runtime/platform/input/src/cf/key_subscribers.h (`lint` depends on it)."
+    },
     "test-source": {
       "executor": "nx:run-commands",
       "cache": true,
@@ -91,7 +107,7 @@
       "description": "Every tracked runtime file is in an area of tools/nx/runtime-areas.json or host-proven, and every test the map names exists in the project graph."
     },
     "lint": {
-      "dependsOn": ["device-literals", "test-source", "vitest-host", "device-keys", "runtime-areas"],
+      "dependsOn": ["device-literals", "key-abi", "test-source", "vitest-host", "device-keys", "runtime-areas"],
       "executor": "nx:run-commands",
       "cache": true,
       "outputs": [],

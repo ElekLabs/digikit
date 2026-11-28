@@ -1,6 +1,6 @@
 //! `KeyAbi`: the numbers of `core/input`'s key subscribers that the service shares with the image: the magic and version of `input_keys_info` and the answers of `key_subscribe`. The
 //! one source is the header of the image's module (`runtime/platform/input/src/cf/key_subscribers.h`); these are the one Rust copy of its `#define`s (a build of the service stages
-//! only its crates, so the header cannot be read at compile time), and `tests/key_header.rs` fails when the header and this file differ. No other Rust file names the numbers.
+//! only its crates, so the header cannot be read at compile time), and the gate command `tools/nx/key-abi.mjs` (`workspace:key-abi`) fails when the header and this file differ. No other Rust file names the numbers.
 
 /// `KEYS_INFO_MAGIC` (`'KEYS'`): word 0 of `input_keys_info`.
 pub const MAGIC: u32 = 0x4b45_5953;

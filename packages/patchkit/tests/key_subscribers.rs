@@ -1,6 +1,7 @@
 //! `core/input` key subscribers (runtime/platform/input): the key walker's hook and the subscriber table of the committed object on the ColdFire core, for every device whose
 //! object list has it (the devices that have the walker).
 //!
+//! - words 0 and 1 of `input_keys_info` are the magic and version of `key_subscribers.h`;
 //! - the entries of `input_keys_info` (words 3 and 4) are the two calls, which the subscribing tests below call through the table;
 //! - the hook in a nonzero interrupt mask passes to the tail with no subscriber called;
 //! - the hook with no subscriber jumps to the tail of the site with the stack as the entry had it and D0, D1, A0 and A1 intact (the stock code reads them);
@@ -157,6 +158,29 @@ impl Rig {
     }
 }
 
+/// The value of `#define name value` in the module's header: decimal or `0x` hexadecimal, a `u` suffix.
+fn header_define(name: &str) -> u32 {
+    let text =
+        std::fs::read_to_string(root().join("runtime/platform/input/src/cf/key_subscribers.h"))
+            .unwrap();
+    let word = text
+        .lines()
+        .find_map(|l| {
+            l.strip_prefix("#define ")?
+                .strip_prefix(name)?
+                .strip_prefix(' ')
+        })
+        .unwrap_or_else(|| panic!("{name} is not defined in the header"))
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .trim_end_matches('u');
+    match word.strip_prefix("0x") {
+        Some(h) => u32::from_str_radix(h, 16).unwrap(),
+        None => word.parse().unwrap(),
+    }
+}
+
 fn rigs() -> Option<Vec<(String, Rig)>> {
     let lib = Library::scan_repo_or_skip(&root())?;
     let rigs: Vec<(String, Rig)> = devdata::all()
@@ -165,6 +189,26 @@ fn rigs() -> Option<Vec<(String, Rig)>> {
         .collect();
     assert!(!rigs.is_empty(), "a device has the key walker");
     Some(rigs)
+}
+
+#[test]
+fn the_built_object_publishes_the_magic_and_version_of_the_header() {
+    let Some(rigs) = rigs() else {
+        return;
+    };
+    for (dev, mut rig) in rigs {
+        let info = rig.sym("input_keys_info");
+        assert_eq!(
+            rig.ram.read32(info).unwrap(),
+            header_define("KEYS_INFO_MAGIC"),
+            "{dev}: magic"
+        );
+        assert_eq!(
+            rig.ram.read32(info + 4).unwrap(),
+            header_define("KEYS_INFO_VERSION"),
+            "{dev}: version"
+        );
+    }
 }
 
 #[test]
