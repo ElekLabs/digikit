@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { DkSession, EmuUsbTransport, frame, parseReply } from '@digi/dk-session';
+import { DkSession, EmuUsbTransport, frame, parseReply, steppedClock } from '@digi/dk-session';
 import { RpcError } from '@digi/control-client';
 import { resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
 import { describe, expect } from 'vitest';
@@ -456,11 +456,15 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       await runtime.ui.wait({ ms: 300, why: SETTLE });
       if (previous && previous !== path.dirname(next)) fs.rmSync(previous, { recursive: true, force: true });
       clone = next;
-      // Wall-time wait: a stepping transport advances the emulator itself, with a 60 s timeout.
+      // The stepping transport and the stepped clock advance the paused emulator; waits count emulated ms.
       const transport = new EmuUsbTransport((method, params) => runtime.session.client.call(method, params), {
         stepInstructions: 400_000,
       });
-      stepping = { dk: new DkSession(transport, { timeoutMs: 60_000 }), transport };
+      const clock = steppedClock(
+        () => runtime.session.status(),
+        (instructions) => runtime.session.client.call('step', { instructions }),
+      );
+      stepping = { dk: new DkSession(transport, { timeoutMs: 60_000, clock }), transport };
       return stepping.dk;
     },
     async view(tag) {

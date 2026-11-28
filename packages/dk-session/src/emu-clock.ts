@@ -137,6 +137,27 @@ export function emulatedClock(status: () => Promise<EmuStatus>): Clock {
 }
 
 /**
+ * A paused daemon: time passes only when stepped. `now` is the emulated ms of `status()`; `pause(ms)` steps the daemon by `ms` emulated ms
+ * (`step(instructions)`, the daemon's `step`) instead of waiting wall time, so a wait bounded by N ms of emulated time ends when the
+ * emulated clock has moved N ms, on any host speed and however many reads that takes.
+ */
+export function steppedClock(
+  status: () => Promise<EmuStatus>,
+  step: (instructions: number) => Promise<unknown>,
+): Clock {
+  const base = emulatedClock(status);
+  return {
+    ...base,
+    pause: async (ms) => {
+      if (ms > 0) await step(Math.ceil(ms * INSNS_PER_MS));
+    },
+    pauseEmulated: async (ms) => {
+      if (ms > 0) await step(Math.ceil(ms * INSNS_PER_MS));
+    },
+  };
+}
+
+/**
  * Bound one probe (`dk.info`, `dk.logPage`, ...) in emulated time: `run` gets `{ signal, ms }`; the signal fires `emulatedMs` of clock time after the
  * probe started (the clock only counts forward; a restart that lowers it starts the count again) and the probe then fails like a lost request.
  * Give the result to `DkSessionOptions.emulatedProbe`.

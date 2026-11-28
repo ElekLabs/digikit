@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { emulatedClock, emulatedProbe, poll, INSNS_PER_MS, type EmuStatus } from '@digi/dk-session';
+import { emulatedClock, emulatedProbe, poll, steppedClock, INSNS_PER_MS, type EmuStatus } from '@digi/dk-session';
 
 beforeEach(() => void vi.useFakeTimers());
 afterEach(() => void vi.useRealTimers());
@@ -139,4 +139,34 @@ test('a probe that answers is not cut', async () => {
   const probe = emulatedProbe({ now: async () => (t += 10) });
   const out = await probe(async ({ signal }) => (signal.aborted ? 'aborted' : 'answer'), 200);
   assert.equal(out, 'answer');
+});
+
+test('steppedClock: a wait bounded by N emulated ms polls until the stepped clock reaches N, not for a read count', async () => {
+  let instructions = 0;
+  let reads = 0;
+  const clock = steppedClock(
+    async () => ({ elapsed: instructions }),
+    async (n) => void (instructions += n),
+  );
+  const seen = poll(
+    clock,
+    async () => ++reads,
+    () => false,
+    { withinMs: 6600, intervalMs: 100, message: 'never' },
+  );
+  await assert.rejects(seen, /within 6600 ms of emulated time/);
+  assert.ok(reads > 60, `${reads} reads: past the 65-read wall bound`);
+  assert.equal(instructions / INSNS_PER_MS, 6600);
+});
+
+test('steppedClock: pause steps the target by that many emulated ms and waits no wall time', async () => {
+  const steps: number[] = [];
+  const clock = steppedClock(
+    async () => ({ elapsed: 0 }),
+    async (n) => void steps.push(n),
+  );
+  await clock.pause(250);
+  await clock.pauseEmulated!(10);
+  await clock.pause(0);
+  assert.deepEqual(steps, [250 * INSNS_PER_MS, 10 * INSNS_PER_MS]);
 });
