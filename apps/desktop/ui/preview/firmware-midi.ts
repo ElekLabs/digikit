@@ -31,7 +31,7 @@ type Device = {
   offlineUntil: number;
   upgrade: FakeUpgrade;
 };
-type CardModules = (profile: DeviceProfile, key: string) => Promise<readonly string[]>;
+type CardModules = (key: string, profile: DeviceProfile) => Promise<readonly string[]>;
 type Link = { name: string; queue: Uint8Array[]; wake?: () => void };
 
 export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixture) {
@@ -171,7 +171,7 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
   // The runtime registers LOG, PEEK and LOGCFG (and advertises them in INFO) only while digikit/debug is loaded: the fake asks the simulated card.
   let cardModules: CardModules = async () => [];
   const debugLoaded = async (to: Link, device: Device) =>
-    (await cardModules(device.profile, to === emulatorLink ? 'emulator' : `midi:${to.name}`)).includes('digikit/debug');
+    (await cardModules(to === emulatorLink ? 'emulator' : `midi:${to.name}`, device.profile)).includes('digikit/debug');
   const DEBUG_COMMANDS = new Set<number>([SERVICE_CMD.LOG, SERVICE_CMD.PEEK, SERVICE_CMD.LOGCFG]);
   const logConfig = { level: 2, modules: Array<number>(8).fill(0xff), cardOn: 0 };
 
