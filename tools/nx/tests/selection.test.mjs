@@ -5,7 +5,9 @@ import { deviceShorts } from '../device-files.mjs';
 import { ownershipSelection } from '../device-owners.mjs';
 import { gateContext } from '../gate-context.mjs';
 import { declaredUsers, portEntryUsers } from '../port-entries.mjs';
-import { checkComplete, classify, loadAreas, portAreaSelection } from '../runtime-areas.mjs';
+import { areaSelection, checkComplete, classify, loadAreas, portAreaSelection } from '../runtime-areas.mjs';
+import { applyConfinement, confinedToSelection, isDocumentationFile } from '../selection-files.mjs';
+import { changedFiles, smokeSelected } from '../test-subset.mjs';
 
 const areas = loadAreas();
 const [DEV] = deviceShorts();
@@ -188,5 +190,90 @@ describe('gate context against the base', () => {
 
   it('leaves a file that is no generated port file alone', () => {
     expect(ctx({}).portEntries('ports/fw/input.toml')).toBeUndefined();
+  });
+});
+
+describe('gate selection files', () => {
+  const lfoArea = {
+    scope: ['runtime/platform/**'],
+    areas: { 'platform-lfo': { globs: ['runtime/platform/lfo/**'], tests: ['core/ui:ui.device.test.ts'] } },
+  };
+  const halves = [`core/ui:test-device--ui--${DEV}`];
+
+  const auto = {
+    tests: [{ project: 'core/ui', file: 'ui.device.test.ts' }],
+    deviceFiles: ['devices/x.toml'],
+    changed: [],
+  };
+  const namedTest = { project: 'core/lfo', file: 'lfo.device.test.ts' };
+  const tests = (sel) => sel.tests.map((t) => t.project);
+
+  it('plans no automatic test, device file or smoke for a diff confined to the selection files', () => {
+    const changed = ['tools/nx/runtime-areas.json', 'tools/nx/test-subset.mjs', 'tools/nx/tests/selection.test.mjs'];
+    const sel = applyConfinement(auto, [], changed);
+    expect(sel.tests).toEqual([]);
+    expect(sel.deviceFiles).toEqual([]);
+    expect(smokeSelected(changed, new Set(halves))).toBe(false);
+  });
+
+  it('plans no test and no smoke for a documentation-only diff', () => {
+    const changed = ['docs/TESTING.md', 'docs/findings/1-x.md'];
+    expect(changed.every(isDocumentationFile)).toBe(true);
+    const sel = applyConfinement(auto, [], changed);
+    expect(sel.tests).toEqual([]);
+    expect(sel.deviceFiles).toEqual([]);
+    expect(smokeSelected(changed, new Set(halves))).toBe(false);
+  });
+
+  it('selects normally when documentation changes with a platform file', () => {
+    const changed = ['docs/TESTING.md', 'runtime/platform/lfo/src/cf/lfo.c'];
+    expect(confinedToSelection(changed)).toBe(false);
+    expect(tests(applyConfinement(auto, [], changed))).toEqual(['core/ui']);
+    expect(smokeSelected(changed, new Set(halves))).toBe(true);
+  });
+
+  it('keeps the tests the user named when the diff is confined', () => {
+    expect(tests(applyConfinement(auto, [namedTest], ['tools/nx/test-subset.mjs']))).toEqual(['core/lfo']);
+  });
+
+  it.each([
+    ['a platform file', 'runtime/platform/lfo/src/cf/lfo.c'],
+    ['a device file', 'devices/x.toml'],
+    ['a test file', 'modules/fx/a/b/tests/b.device.test.ts'],
+    ['the device test key policy', 'tools/nx/device-test-keys.mjs'],
+  ])('selects normally when a selection file changes with %s', (_name, other) => {
+    const changed = ['tools/nx/device-owners.mjs', other];
+    expect(confinedToSelection(changed)).toBe(false);
+    const sel = applyConfinement(auto, [namedTest, auto.tests[0]], changed);
+    expect(tests(sel)).toEqual(['core/ui', 'core/lfo']);
+    expect(sel.deviceFiles).toEqual(['devices/x.toml']);
+    expect(smokeSelected(changed, new Set(halves))).toBe(true);
+  });
+
+  it('still selects the area and the smoke set when a platform file changes with a selection file', () => {
+    const changed = ['tools/nx/device-owners.mjs', 'runtime/platform/lfo/src/cf/lfo.c'];
+    expect(confinedToSelection(changed)).toBe(false);
+    expect(areaSelection(projects, changed, lfoArea).tests.map((t) => t.project)).toEqual(['core/ui']);
+    expect(smokeSelected(changed, new Set(halves))).toBe(true);
+  });
+
+  it('keeps the smoke set off when no device half is affected', () => {
+    expect(smokeSelected(['runtime/platform/lfo/src/cf/lfo.c'], new Set())).toBe(false);
+  });
+});
+
+describe('changedFiles', () => {
+  const git = (_root, ...args) =>
+    args[0] === 'diff'
+      ? ['tools/a.mjs']
+      : ['runtime/platform/dsp-link/host/target/x', 'runtime/platform/dsp-link/host/AGENTS.md'];
+  it('leaves untracked files out of the gate selection and counts them', () => {
+    expect(changedFiles('.', 'main', { untracked: false, git })).toEqual({
+      files: ['tools/a.mjs'],
+      ignoredUntracked: 2,
+    });
+  });
+  it('keeps a tracked edit and, by hand, the untracked files', () => {
+    expect(changedFiles('.', 'main', { git }).files).toHaveLength(3);
   });
 });

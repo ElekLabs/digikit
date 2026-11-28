@@ -17,6 +17,7 @@ import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 import { gateContext } from './gate-context.mjs';
 import { areaSelection, portAreaSelection } from './runtime-areas.mjs';
+import { applyConfinement, confinedToSelection, isDocumentationFile } from './selection-files.mjs';
 import { DEVICES, leavesOf, ownedConformance, ownershipSelection } from './device-owners.mjs';
 
 export { DEVICES };
@@ -61,6 +62,10 @@ export const whyText = (t) =>
   ].join(', ');
 
 // The tasks of a selection by DSP mode, and how many start at once with the machine's core budget and slots.
+// Whether the fixed device smoke set joins: `affected` selects a device half, unless the change is confined to the gate's own selection
+// files (selection-files.mjs), which no device run proves.
+export const smokeSelected = (changed, affected) => !confinedToSelection(changed) && deviceHalves(affected).length > 0;
+
 export const modeSummary = (tests, work = workCores()) => {
   const count = { sharc: 0, zero: 0 };
   for (const t of tests) count[t.dsp] += t.targets.length;
@@ -166,10 +171,16 @@ export const skipText = (skipped) => {
 export const halvesOfDevices = (halves, devices) =>
   devices ? halves.filter((id) => devices.some((d) => id.endsWith(`--${d}`))) : halves;
 
-// Files changed since `base`: the tracked diff (committed and working tree) and the untracked files. `git`: runs git in `root`.
-export const changedFiles = (root, base, git = defaultGit) => [
-  ...new Set([...git(root, 'diff', '--name-only', base), ...git(root, 'ls-files', '--others', '--exclude-standard')]),
-];
+// Files changed since `base`: the tracked diff (committed and working tree), plus the untracked files unless `untracked` is false (the
+// gate and `test:plan`: an untracked build dir or scratch file must not select device tests). `git`: runs git in `root`.
+export const changedFiles = (root, base, { untracked = true, git = defaultGit } = {}) => {
+  const tracked = git(root, 'diff', '--name-only', base);
+  const loose = git(root, 'ls-files', '--others', '--exclude-standard');
+  return {
+    files: [...new Set(untracked ? [...tracked, ...loose] : tracked)],
+    ignoredUntracked: untracked ? 0 : loose.length,
+  };
+};
 const defaultGit = (root, ...args) => {
   const done = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
   if (done.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${done.stderr}`);
@@ -224,7 +235,11 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   let selection;
   if (base) {
     // Ownership gate (device-owners.mjs): what owns a changed file selects the tests; the named projects join as a union.
-    const changed = changedFiles(root, base);
+    const { files: changed, ignoredUntracked } = changedFiles(root, base, { untracked: !gate });
+    if (ignoredUntracked)
+      console.log(
+        `test:subset: ${ignoredUntracked} untracked file(s) ignored by the gate; a change to untracked inputs needs named targets`,
+      );
     const importInputs = testImportInputs(root);
     const ctx = gateContext(root, base);
     // Runtime source files are decided by their area (runtime-areas.json); the rest by ownership.
@@ -246,17 +261,19 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     // A changed port binding also selects the area of the platform module that declares it.
     const declaring = portAreaSelection(projects, owned.mapped);
     const named = namedSelection(names, projects);
-    const seen = new Set();
-    selection = {
-      ...owned,
-      tests: [...area.tests, ...declaring.tests, ...owned.tests, ...named.tests].filter(
-        (t) => !seen.has(`${t.project}:${t.file}`) && seen.add(`${t.project}:${t.file}`),
-      ),
-      unknown: named.unknown,
-      areaNotes: [...area.notes, ...declaring.notes],
-      deviceFiles: owned.devices,
+    // A change confined to the gate's own selection files selects no area or ownership test; named projects still join.
+    selection = applyConfinement(
+      {
+        ...owned,
+        tests: [...area.tests, ...declaring.tests, ...owned.tests],
+        unknown: named.unknown,
+        areaNotes: [...area.notes, ...declaring.notes],
+        deviceFiles: owned.devices,
+        changed,
+      },
+      named.tests,
       changed,
-    };
+    );
   } else
     selection = {
       ...namedSelection(names, projects),
@@ -284,7 +301,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   const affected = base ? affectedTasks(base) : new Set();
   const fixed = gate ? [] : affectedFixed(base ?? process.env.DIGI_GATE_BASE ?? 'main');
   // The device smoke set runs whenever `affected` selects a device half.
-  const smoke = base && deviceHalves(affected).length ? [DEVICE_SMOKE] : [];
+  const smoke = base && smokeSelected(selection.changed, affected) ? [DEVICE_SMOKE] : [];
   // A changed device file runs every device half `affected` selects of that device; the conformance tasks are those of
   // ownedConformance.
   const deviceHalvesOf = deviceFiles.length ? halvesOfDevices(deviceHalves(affected), deviceFiles) : [];
@@ -304,6 +321,9 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   if (mapped.length > 20) console.log(`  owner: ${mapped.length - 20} more changed files`);
   for (const { file, why } of (selection.unowned ?? []).slice(0, 20))
     console.log(`  unowned ${file} (${why}): selects no test`);
+  const docs = (selection.changed ?? []).filter(isDocumentationFile);
+  if (docs.length)
+    console.log(`  ${docs[0]}${docs.length > 1 ? ` and ${docs.length - 1} more` : ''}: documentation selects none`);
   for (const { file, project } of (selection.metadataOnly ?? []).slice(0, 20))
     console.log(`  metadata only ${project}: ${file} selects none (tags, subjects or reasons changed)`);
   for (const { file, project } of (selection.quiet ?? []).slice(0, 20))
@@ -324,7 +344,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     console.log(
       smoke.length
         ? `  ${DEVICE_SMOKE.project}: ${DEVICE_SMOKE.target} (${smokeHalves(projects).length} halves)`
-        : `  ${DEVICE_SMOKE.project}: not selected (no device input changed)`,
+        : `  ${DEVICE_SMOKE.project}: not selected (${confinedToSelection(selection.changed) ? 'only gate selection files and documentation changed' : 'no device input changed'})`,
     );
   if (base) {
     const skipped = skippedHalves(affected, pairs, smokeHalves(projects));
