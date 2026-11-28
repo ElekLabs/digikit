@@ -1,5 +1,6 @@
 import type { ModuleChannel } from './module-channel.ts';
 import { ChannelFiles, type ModuleFileClient } from './module-file-client.ts';
+import { checkSaveFiles, type ModuleSaveFiles } from './save-files.ts';
 import type { DescService } from '@bufbuild/protobuf';
 import { createServiceClient, type ServiceClient } from './query-service-client.ts';
 import type { SettingsOf, SettingsSchema } from './settings-schema.ts';
@@ -9,7 +10,7 @@ import { ModuleSettings, type TypedSettings } from './typed-settings.ts';
  * What a module page uses: typed settings, the module's own files and typed queries. It is a page-side helper over a `ModuleChannel`, so the same page
  * runs compiled into the app or inside a sandboxed frame.
  */
-export interface ModuleClient {
+export interface ModuleClient extends ModuleSaveFiles {
   settings<S extends SettingsSchema>(schema: S): TypedSettings<SettingsOf<S>>;
   /**
    * One async function per method of the module's protobuf-es service; results are `{ ok, value }` or `{ ok: false, error }`. After a `timeout`
@@ -24,5 +25,12 @@ export function createModuleClient(channel: ModuleChannel): ModuleClient {
     settings: (schema) => new ModuleSettings(schema, channel),
     service: (desc) => createServiceClient(channel, desc),
     files: new ChannelFiles(channel),
+    async saveFiles(files) {
+      checkSaveFiles(files);
+      return channel.saveFiles(files);
+    },
+    saveFile(name, bytes) {
+      return this.saveFiles([{ name, bytes }]);
+    },
   };
 }

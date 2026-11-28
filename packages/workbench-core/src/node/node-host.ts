@@ -10,6 +10,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { connect, type Client } from '@digi/control-client';
 import { ProcessBulkLink } from '@digi/dk-session';
+import { checkSaveFiles } from '@digi/module-ui';
 import { ProcessTransport } from '@digi/dk-session/process-transport';
 import type {
   BulkHost,
@@ -108,6 +109,11 @@ function nodeFs(outDir: string | undefined): FsHost {
       return toBuffer(head === null ? bytes : bytes.subarray(0, head));
     },
     saveLog: (bytes, name) => saveTo(outDir, 'fs.saveLog', bytes, name),
+    async saveFiles(files) {
+      checkSaveFiles(files);
+      for (const { name, bytes } of files) await saveTo(outDir, 'fs.saveFiles', bytes, name);
+      return { saved: files.length, cancelled: false, where: outDir };
+    },
   };
 }
 

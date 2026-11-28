@@ -5,6 +5,8 @@ import {
   type DescribedSchema,
   type ModuleFileClient,
   type RawSetting,
+  type SaveFile,
+  type SaveResult,
 } from '@digi/module-ui';
 import { QUERY_REPLY_MAX, QUERY_REQUEST_MAX } from '@digi/dk-session';
 import { createDeviceModuleChannel } from '@digi/workbench-core/module-ui/device-module-channel.ts';
@@ -25,6 +27,8 @@ export function createPreviewChannels(
   filesOf: (request: ModuleChannelRequest) => ModuleFileClient,
   /** The TypeScript handlers of a module's queries, by module id; the device limits of a request and a reply apply to them. */
   queryServices: Map<string, PreviewQueryFactory> = previewQueryServices(),
+  /** The save of a page's files: the preview records it and answers with a fake folder. */
+  saveFiles?: (files: SaveFile[]) => Promise<SaveResult>,
 ): ModuleChannelFactory {
   const stores = new Map<string, MemorySettingsStore>();
   return (request) => {
@@ -65,6 +69,7 @@ export function createPreviewChannels(
       },
       queries: memory,
       files,
+      saveFiles,
     });
   };
 }
