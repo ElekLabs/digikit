@@ -165,6 +165,25 @@ export function createPreviewStores(library: PreviewLibrary) {
     }
   }
 
+  function cardOf(key: string, profile: DeviceProfile) {
+    const current = stores.get(key);
+    if (current?.revision === deviceRevision) return current.store;
+    const next = seedStore(library, profile).then((card) => {
+      if (stores.get(key)?.store === next) publishBoot(key, card.boot.modules);
+      return card;
+    });
+    stores.set(key, { revision: deviceRevision, store: next });
+    void next.catch(() => {
+      if (stores.get(key)?.store === next) stores.delete(key);
+    });
+    return next;
+  }
+
+  /** The names of the modules loaded on the simulated card of a target (`emulator` or `midi:PORT`). */
+  async function loadedModules(key: string, profile: DeviceProfile): Promise<string[]> {
+    return (await cardOf(key, profile)).boot.modules.map((m) => m.name);
+  }
+
   async function restart(key: string) {
     const entry = stores.get(key);
     if (!entry) return; // Its first access will boot the card.
@@ -181,19 +200,7 @@ export function createPreviewStores(library: PreviewLibrary) {
     let pending = new AbortController();
     const cancel = session.cancelPending.bind(session);
     const limit = 82 * 1024;
-    const store = () => {
-      const current = stores.get(key);
-      if (current?.revision === deviceRevision) return current.store;
-      const next = seedStore(library, profile).then((card) => {
-        if (stores.get(key)?.store === next) publishBoot(key, card.boot.modules);
-        return card;
-      });
-      stores.set(key, { revision: deviceRevision, store: next });
-      void next.catch(() => {
-        if (stores.get(key)?.store === next) stores.delete(key);
-      });
-      return next;
-    };
+    const store = () => cardOf(key, profile);
     const getFile = async (path: string) => {
       const bytes = (await store()).files.get(path);
       if (!bytes || path.endsWith('/'))
@@ -349,5 +356,5 @@ export function createPreviewStores(library: PreviewLibrary) {
       },
     } satisfies Partial<DkSession>;
   }
-  return { storeSession, restart };
+  return { storeSession, restart, loadedModules };
 }

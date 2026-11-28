@@ -31,6 +31,7 @@ type Device = {
   offlineUntil: number;
   upgrade: FakeUpgrade;
 };
+type CardModules = (profile: DeviceProfile, key: string) => Promise<readonly string[]>;
 type Link = { name: string; queue: Uint8Array[]; wake?: () => void };
 
 export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixture) {
@@ -125,8 +126,9 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     }, answer.delayMs);
   }
 
-  function info(to: Link, device: Device, seq: number) {
+  async function info(to: Link, device: Device, seq: number) {
     if (!device.runtime) return;
+    const withDebug = await debugLoaded(to, device);
     const { version, imageId } = device.runtime;
     const runtime = packedVersion(version);
     const id = (imageId?.match(/../g) ?? []).map((byte) => parseInt(byte, 16));
@@ -139,7 +141,7 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
       be32(1),
       be32(1),
       be32(runtime),
-      be32(debugLoaded ? (1 << CAP.LOG) | (1 << CAP.PEEK) | (1 << CAP.LOGCFG) : 0),
+      be32(withDebug ? (1 << CAP.LOG) | (1 << CAP.PEEK) | (1 << CAP.LOGCFG) : 0),
       id,
     );
     push(to, concat([0xf0, 0x7d, 0x64, 0x6b, 1, CMD.INFO | 0x40, seq], encode8in7(body), [0xf7]));
@@ -166,8 +168,10 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     reply(to, CMD.SETTINGS, seq, 0, concat([0, 0], be32(0), be32(settingsRecord.length), piece));
   }
 
-  // digikit/debug on the simulated card (`?log=nodebug`: not loaded). INFO advertises LOG, PEEK and LOGCFG only while it is, and only then are they answered.
-  const debugLoaded = query.get('log') !== 'nodebug';
+  // The runtime registers LOG, PEEK and LOGCFG (and advertises them in INFO) only while digikit/debug is loaded: the fake asks the simulated card.
+  let cardModules: CardModules = async () => [];
+  const debugLoaded = async (to: Link, device: Device) =>
+    (await cardModules(device.profile, to === emulatorLink ? 'emulator' : `midi:${to.name}`)).includes('digikit/debug');
   const DEBUG_COMMANDS = new Set<number>([SERVICE_CMD.LOG, SERVICE_CMD.PEEK, SERVICE_CMD.LOGCFG]);
   const logConfig = { level: 2, modules: Array<number>(8).fill(0xff), cardOn: 0 };
 
@@ -194,13 +198,13 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     reply(to, cmd, seq, 0xc4);
   }
 
-  function answer(to: Link, msg: Uint8Array) {
+  async function answer(to: Link, msg: Uint8Array) {
     const device = devices.get(to.name);
     if (!device || !online(device) || device.state === 'noreply' || sim.dev === 'noreply') return;
     if (msg[1] === 0x00 && msg[2] === 0x20) stock(to, device, msg);
-    else if (msg[1] === 0x7d && msg[5] === CMD.INFO) info(to, device, msg[6]!);
+    else if (msg[1] === 0x7d && msg[5] === CMD.INFO) await info(to, device, msg[6]!);
     else if (msg[1] === 0x7d && (msg[5] === CMD.SETTINGS || msg[5] === CMD.FAULT)) settings(to, device, msg);
-    else if (msg[1] === 0x7d && debugLoaded && DEBUG_COMMANDS.has(msg[5]!)) debug(to, msg);
+    else if (msg[1] === 0x7d && DEBUG_COMMANDS.has(msg[5]!) && (await debugLoaded(to, device))) debug(to, msg);
   }
 
   function close() {
@@ -211,6 +215,10 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
 
   return {
     ports,
+    /** Where the fake reads the modules loaded on a target's simulated card. */
+    readCard(read: CardModules) {
+      cardModules = read;
+    },
     prepare({ device, os, restore, runtime, imageId }: Image & { device: string }) {
       images.set(device, { os, restore, runtime, imageId });
     },
@@ -221,12 +229,12 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     },
     send(msg: Uint8Array) {
       if (!link) throw new Error('The MIDI port is closed.');
-      answer(link, msg);
+      void answer(link, msg);
     },
     /** The emulator target's `midi.usb.in`: one message to the runtime of `device`. */
     usbIn(device: string, bytes: Uint8Array) {
       emulatorLink.name = portOf(deviceProfiles[device]!);
-      answer(emulatorLink, bytes);
+      void answer(emulatorLink, bytes);
     },
     /** The emulator target's `midi.usb.out`: the replies so far, as hex. */
     usbOut(): string {

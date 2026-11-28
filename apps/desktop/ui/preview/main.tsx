@@ -4,7 +4,7 @@ import { bindModuleFiles } from '@digi/workbench-core/module-ui/module-files.ts'
 import { createPreviewChannels } from './module-channels';
 import { previewPageLoaders } from './module-page-loaders';
 import { previewSettingsSchemas } from './module-schemas';
-import { firmwarePort } from './firmware-mock';
+import { firmwarePort, midi as firmwareMidi } from './firmware-mock';
 import { emulator } from './tauri-mock';
 import { createPreviewSymbols } from './symbols-mock';
 import { createDesktopApps } from '../src/desktop-app';
@@ -27,6 +27,7 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
   const page = query.get('page') ?? (transferFixture ? 'transfer' : undefined);
   const fixture = createPreviewLibrary();
   const stores = createPreviewStores(fixture);
+  firmwareMidi.readCard(stores.loadedModules);
   const base = createTauriHost();
   const rpc: EmuRpc = {
     async call<T>(method: string, params?: Record<string, unknown>, session?: number) {
