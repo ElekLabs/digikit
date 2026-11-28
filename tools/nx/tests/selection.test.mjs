@@ -1,11 +1,13 @@
 // Selector rules of the merge gate over fixture file lists (docs/TESTING.md "Runtime areas", "Nx gate"): the platform area map, the users of
 // a changed port declaration and the rule for a hand-edited device file.
 import { describe, expect, it } from 'vitest';
+import { deviceShorts } from '../device-files.mjs';
 import { ownershipSelection } from '../device-owners.mjs';
 import { declaredUsers, portEntryUsers } from '../port-entries.mjs';
 import { checkComplete, classify, loadAreas } from '../runtime-areas.mjs';
 
 const areas = loadAreas();
+const [DEV] = deviceShorts();
 
 describe('platform areas', () => {
   it('maps a platform module file to the area of its module', () => {
@@ -35,7 +37,7 @@ describe('platform areas', () => {
 
 const GENERATED = (hook, extra = '') => `
 [port]
-device = "dt2"
+device = "${DEV}"
 version = "1.17"
 ${extra}
 [[anchor]]
@@ -78,7 +80,7 @@ const project = (name, root, files) => ({
   name,
   root,
   subjects: [],
-  targets: files.flatMap((f) => [`test-device--${f}--dt2`, `test-device--${f}--dn2`]),
+  targets: files.map((f) => `test-device--${f}--${DEV}`),
   metadata: { runtimeAcceptance: [{ files: files.map((f) => `${f}.device.test.ts`) }] },
 });
 const projects = [
@@ -88,25 +90,25 @@ const projects = [
 const select = (changed, hooks) =>
   ownershipSelection(projects, {
     changed,
-    portEntries: (f) => (f.startsWith('ports/dt2-') ? hooks : undefined),
-    deviceOf: (f) => (/^devices\/dt2\.toml$|^ports\/dt2-/.test(f) ? 'dt2' : undefined),
+    portEntries: (f) => (f.startsWith(`ports/${DEV}-`) ? hooks : undefined),
+    deviceOf: (f) => (f === `devices/${DEV}.toml` || f.startsWith(`ports/${DEV}-`) ? DEV : undefined),
   });
 
 describe('port bindings and device files', () => {
   it('selects the tests of the users of a changed generated entry, no device', () => {
-    const got = select(['ports/dt2-1.17.toml'], { users: ['core/input'], wide: false });
+    const got = select([`ports/${DEV}-1.0.toml`], { users: ['core/input'], wide: false });
     expect(got.tests.map((t) => t.project)).toEqual(['core/input']);
     expect(got.devices).toEqual([]);
   });
 
   it('keeps every half of the device for a wide change of a port file', () => {
-    const got = select(['ports/dt2-1.17.toml'], { users: [], wide: true });
+    const got = select([`ports/${DEV}-1.0.toml`], { users: [], wide: true });
     expect(got.tests).toEqual([]);
-    expect(got.devices).toEqual(['dt2']);
+    expect(got.devices).toEqual([DEV]);
   });
 
   it('keeps every half of the device for a hand-edited device file', () => {
-    const got = select(['devices/dt2.toml'], undefined);
-    expect(got.devices).toEqual(['dt2']);
+    const got = select([`devices/${DEV}.toml`], undefined);
+    expect(got.devices).toEqual([DEV]);
   });
 });
