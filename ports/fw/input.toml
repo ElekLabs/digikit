@@ -58,8 +58,7 @@ doc = "Entry of `bool f(ViewController *vc, KeyEvent *ev)`, the walker every key
 name = "cf.input.hook.key_event"
 site = "cf.input.site.key_event_walk"
 cpu = "cf"
-mode = "replace"
-tail = true
+mode = "before"
 regs = { in = [], clobbers = ["ccr"] }   # strict liveness (tools.coldfire.liveness, dt2-1.17, dn2-1.12, dn2-1.11) after the displaced instructions: the flags are dead, d0, d1, a0 and a1 are live
 devices = ["dt2", "dn2"]
 mark = "D"

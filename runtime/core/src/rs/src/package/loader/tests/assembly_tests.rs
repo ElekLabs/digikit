@@ -1784,8 +1784,8 @@ fn a_card_without_the_fx_service_file_refuses_an_effect_naming_the_service() {
     }
 }
 
-/// The shortcuts seam: a module that calls `dk_shortcut_add` has a hard NEED on the service file, its builder import is an export of `shortcuts.dks`, and the file owns the
-/// SHORTCUT kind of the module's records. A card without the file refuses the module naming the service.
+/// The shortcuts seam: a module that calls `dk_shortcut_add` has a hard NEED on the service file, its builder import is an export of `shortcuts.dks`, the file owns the
+/// SHORTCUT kind of the module's records and takes no firmware site (its key routine subscribes to `core/input`'s table, `input_keys_info`: the patchkit test `key_subscribers`). A card without the file refuses the module naming the service.
 #[test]
 fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
     let _g = clean();
@@ -1800,9 +1800,9 @@ fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
         let keys = Keys::parse(&t).unwrap();
         let kinds: Vec<u32> = (0..keys.count(tag::KINDS)).map(|i| keys.words(tag::KINDS, i).unwrap().0).collect();
         assert_eq!(kinds, [dkrt_sdk::records::KIND_SHORTCUT], "{}: the kinds shortcuts.dks declares", dev.name);
-        // the one hook it takes: the entry of the key walker (ports/fw/input.toml), listed by the port file of the device and present on it
+        // no hook: the key walker belongs to core/input (ports/fw/input.toml), which the service subscribes to (`input_keys_info`)
         let hooks: Vec<u32> = (0..keys.count(tag::HOOKS)).map(|i| keys.words(tag::HOOKS, i).unwrap().0).collect();
-        assert_eq!(hooks, [name_hash("cf.input.hook.key_event")], "{}: the hooks shortcuts.dks declares", dev.name);
+        assert_eq!(hooks, Vec::<u32>::new(), "{}: shortcuts.dks declares no hook", dev.name);
         let image = Image::read(*dev, "emulator");
         unsafe {
             // with the file on the card the module is accepted and the file is the provider that loads, and its builder import is one of its exports
@@ -1810,10 +1810,8 @@ fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
             assert!(found(&l, &plan).contains("services/shortcuts.dks"), "{}", dev.name);
             let run = boot_run(&mut l, &plan, &[&SHORTCUT_DEMO], true);
             assert_eq!(run.verdict(0), Verdict::Accepted, "{}", dev.name);
-            // the hook site is one `jmp` at the walker entry of the device's firmware
-            let binds = binds_of(*dev, &l, &plan);
-            assert_eq!(binds.len(), 1, "{}: the sites shortcuts.dks installs", dev.name);
-            assert_eq!(binds[0].0, name_hash("cf.input.hook.key_event"), "{}", dev.name);
+            // it takes no firmware site: the file is admitted without the key hook
+            assert!(binds_of(*dev, &l, &plan).is_empty(), "{}: the sites shortcuts.dks installs", dev.name);
             assert!(l.exports.owned(name_hash("dk_shortcut_add")).is_some(), "{}: dk_shortcut_add is no export of shortcuts.dks", dev.name);
             let listed: Vec<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
             assert_eq!(listed, [name_hash("dk_shortcut_add")], "{}: the header table's exports", dev.name);

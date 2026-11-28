@@ -10,7 +10,7 @@ import { ringWatch } from '@digi/regression/runtime/runtime-menu.ts';
 import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 
 /**
- * The `shortcuts` service on the device (docs/plans/track-manager.md, phase 3): the key hook at the entry of the firmware's key walker.
+ * The `shortcuts` service on the device (docs/plans/track-manager.md, phase 3): its key routine, subscribed to core/input's walker at the entry of the firmware's key walker.
  * Only what the firmware shows is asserted here; the swallow and release rules are unit tests of the crate (`tests/state.rs`).
  * The fixture `test/shortcut-demo` binds [TRK]+[YES]; its `on` logs "on" with the selected track as the value (`dk_selected_track`), its `off` logs "off" (error-level MOD_LOG events).
  * No SHARC. Waits are on log events, on the drained input queue and on the identity of the top view of the firmware's view stack (`readViewStack`); never a count of views.

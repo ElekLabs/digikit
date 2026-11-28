@@ -2,9 +2,9 @@
 //! `start` (`KeyTable::find`) and calls `key_subscribe(routine)`; `key_unsubscribe(routine)` takes it out at `stop`. The ColdFire build only: a host build (the tests of the file) has the owner
 //! over `FakeKeys`.
 use crate::key_routine::dk_shortcuts_key;
-use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::provider::Status;
 use dkrt_sdk::{E_EXISTS, E_NO_REGISTRY, E_TABLE_FULL};
+use dkrt_svc_rt::dkrt_abi::core_api::CoreApi;
+use dkrt_svc_rt::dkrt_abi::provider::Status;
 use dkrt_svc_shortcuts::key_events::KeyEvents;
 use dkrt_svc_shortcuts::key_table::KeyTable;
 use dkrt_svc_shortcuts::shortcuts::Shortcuts;
