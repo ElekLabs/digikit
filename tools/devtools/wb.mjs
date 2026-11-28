@@ -18,6 +18,7 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
 //     node tools/devtools/wb.mjs [--format json|text] addrmap lookup ADDR... | module analyse DKM DKO | profile report FILE | profile record --seconds N --out FILE [--cpu cf|sharc]
 //     mise run wb:cli -- module render MODULE --device ID --case GROUP/NAME [--emit wav,json] --out DIR
+//     mise run wb:cli -- module quality MODULE --out DIR [--comparison FILE ...]
 //     mise run wb:cli -- audio compare BASELINE CANDIDATE --out DIR
 //
 //     node tools/devtools/wb.mjs profile calibrate fit --device D.json --model E.json --out cal.json | profile calibrate report cal.json   (offline; wb_prof.mjs)
@@ -100,7 +101,7 @@ const opts = {
   ret: false,
 };
 // the offline group takes these several times
-const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model', 'case']);
+const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model', 'case', 'comparison']);
 const OFFLINE = ['addrmap', 'module', 'profile', 'audio', 'session'];
 const words = [];
 let explicitMidiPort = false;
@@ -140,6 +141,7 @@ for (let i = 0; i < args.length; i++) {
       '--run-dir',
       '--run-id',
       '--emit',
+      '--comparison',
       '--send-amount',
       '--params-f32',
       '--profile-block',
@@ -248,7 +250,7 @@ const REFERENCE_RUN = REFERENCE && words[2] === 'run';
 const REFERENCE_INSPECT = REFERENCE && words[2] === 'inspect';
 const REFERENCE_PROJECT = REFERENCE && words[2] === 'prepare-project';
 const REFERENCE_INPUTS = REFERENCE && words[2] === 'inputs';
-const AUDIO = words[0] === 'audio' || (words[0] === 'module' && words[1] === 'render');
+const AUDIO = words[0] === 'audio' || (words[0] === 'module' && ['render', 'quality'].includes(words[1]));
 if (opts.help) {
   if (!AUDIO) console.log(usage);
   if (!words.length || words[0] === 'profile') console.log('wb profile report FILE [--format json]');

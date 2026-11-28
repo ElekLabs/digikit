@@ -282,6 +282,18 @@ function runs(n: number, bad: (i: number) => boolean): [number, number][] {
   return out;
 }
 
+interface RmsComparison {
+  window: number;
+  windows: number;
+  maxAbsDeltaDb: number | null;
+  at: number | null;
+}
+
+export interface CompareMeasurements {
+  rms?: RmsComparison;
+  blockRms?: RmsComparison;
+}
+
 export interface CompareOptions {
   /** SHA-256 of the analysed float32 words of the capture (needed to check an exact pin) */
   sha256?: string;
@@ -292,6 +304,8 @@ export interface CompareOptions {
   block?: number;
   /** most blocks the onset may move (default 2) */
   onsetBlocks?: number;
+  /** Worst deltas among the RMS windows admitted by the comparison's level floors. */
+  measurements?: CompareMeasurements;
 }
 
 /** Frames of one DSP block of a device (its `short` id): the sample rate over `dsp_blocks_per_second` of its `devices/*.toml`. */
@@ -343,12 +357,19 @@ export function compare(pinIn: Pin, got: FingerprintV2, o: CompareOptions = {}):
   // level per window: the first moved run says where, the others are counted
   const nw = Math.min(pin.rms_db.length, got.rms_db.length);
   const ms = (i: number): number => Math.round((i * pin.rms_window * 1000) / pin.rate);
-  const moved = runs(
-    nw,
-    (i) =>
-      Math.abs(got.rms_db[i]! - pin.rms_db[i]!) > tol.level_db &&
-      Math.max(got.rms_db[i]!, pin.rms_db[i]!) > tol.rms_floor_db,
-  );
+  const rms: RmsComparison = { window: pin.rms_window, windows: nw, maxAbsDeltaDb: null, at: null };
+  if (o.measurements) o.measurements.rms = rms;
+  const moved = runs(nw, (i) => {
+    const p = pin.rms_db[i]!;
+    const g = got.rms_db[i]!;
+    const delta = Math.abs(g - p);
+    const eligible = Math.max(g, p) > tol.rms_floor_db;
+    if (o.measurements && eligible && (rms.maxAbsDeltaDb === null || delta > rms.maxAbsDeltaDb)) {
+      rms.maxAbsDeltaDb = delta;
+      rms.at = i;
+    }
+    return delta > tol.level_db && eligible;
+  });
   if (moved.length) {
     const [a, b] = moved[0]!;
     let mean = 0;
@@ -361,10 +382,24 @@ export function compare(pinIn: Pin, got: FingerprintV2, o: CompareOptions = {}):
   if (pin.rms_db.length === 0 && pin.block_rms && got.block_rms && pin.block === got.block) {
     // a v1 rig pin: the level per block, where it is above 60 dB under the peak
     const lim = Math.max(...pin.block_rms) * 1e-3;
-    const blk = runs(Math.min(pin.block_rms.length, got.block_rms.length), (i) => {
+    const windows = Math.min(pin.block_rms.length, got.block_rms.length);
+    const blockRms: RmsComparison = {
+      window: pin.block ?? 32,
+      windows,
+      maxAbsDeltaDb: null,
+      at: null,
+    };
+    if (o.measurements) o.measurements.blockRms = blockRms;
+    const blk = runs(windows, (i) => {
       const p = pin.block_rms![i]!;
       const g = got.block_rms![i]!;
-      return Math.max(p, g) > lim && Math.abs(db20(g) - db20(p)) > tol.level_db;
+      const delta = Math.abs(db20(g) - db20(p));
+      const eligible = Math.max(p, g) > lim;
+      if (o.measurements && eligible && (blockRms.maxAbsDeltaDb === null || delta > blockRms.maxAbsDeltaDb)) {
+        blockRms.maxAbsDeltaDb = delta;
+        blockRms.at = i;
+      }
+      return eligible && delta > tol.level_db;
     });
     if (blk.length) {
       const [a, b] = blk[0]!;

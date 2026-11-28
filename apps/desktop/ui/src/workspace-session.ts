@@ -1,5 +1,5 @@
 import { batch, createSignal } from 'solid-js';
-import type { SavedSession, SessionDocument, SessionHost } from '@digi/workbench-core/host/session.ts';
+import type { DspReportSource, SavedSession, SessionDocument, SessionHost } from '@digi/workbench-core/host/session.ts';
 import type { KeyValue } from '@digi/workbench-core/storage.ts';
 import type { SessionBoot } from './emulator/firmware';
 
@@ -37,6 +37,7 @@ export function createWorkspaceSession(options: {
 }) {
   const { host, firmware, storage } = options;
   const [saved, setSaved] = createSignal<SavedSession>();
+  const [dspSession, setDspSession] = createSignal<SavedSession>();
   const [card, setCard] = createSignal<string>();
   const [name, setName] = createSignal(UNTITLED);
   const [recent, setRecent] = createSignal(readRecent(storage));
@@ -49,11 +50,12 @@ export function createWorkspaceSession(options: {
   const mayDiscard = () =>
     (!card() && !dirty()) || options.confirm('Close this session and discard any changes since the last checkpoint?');
 
-  function accept(session: SavedSession) {
+  function accept(session: SavedSession, switched = false) {
     const { root, document } = session;
     const updated = [{ root, name: document.name }, ...recent().filter((r) => r.root !== root)].slice(0, 8);
     batch(() => {
       setSaved(session);
+      if (switched) setDspSession(session);
       setName(document.name);
       setRecent(updated);
       setDraft(false);
@@ -90,7 +92,7 @@ export function createWorkspaceSession(options: {
       if (!path) return;
       const session = await host.open(path);
       await detach();
-      accept(session);
+      accept(session, true);
     });
   }
 
@@ -144,7 +146,7 @@ export function createWorkspaceSession(options: {
       });
       // A live fork has the same immutable base and the same working writes.
       // Keep playing. All subsequent saves go to the copy, not the original.
-      accept(created);
+      accept(created, true);
       if (card()) firmware.updateSessionBuild(created.document.firmware.imageSha256);
       setNote(
         card()
@@ -156,6 +158,7 @@ export function createWorkspaceSession(options: {
 
   return {
     saved,
+    dspSession,
     card,
     name,
     setName,
@@ -179,6 +182,7 @@ export function createWorkspaceSession(options: {
       return run(async () => {
         await detach();
         setSaved(undefined);
+        setDspSession(undefined);
         setName(UNTITLED);
         setDraft(true);
       });
@@ -200,7 +204,7 @@ export function createWorkspaceSession(options: {
           runtime: firmware.bootRuntime(),
           dsp: firmware.bootDsp(),
         });
-        accept(next);
+        accept(next, true);
         setNote('Saved. Start the session when you are ready.');
       }),
     save: () => {
@@ -212,6 +216,17 @@ export function createWorkspaceSession(options: {
         if (card()) firmware.updateSessionBuild(next.document.firmware.imageSha256);
         setNote(card() ? 'Working card checkpoint saved.' : 'Session saved.');
       });
+    },
+    saveDsp: async (module: string, source?: DspReportSource) => {
+      const root = saved()?.root;
+      if (!root || disabled()) return;
+      await run(async () => {
+        const next = await host.saveDsp(root, module, source);
+        setSaved(next);
+        setNote(source ? 'DSP report saved.' : 'DSP selection saved.');
+      });
+      const failure = error();
+      if (failure) throw new Error(failure);
     },
     start: () =>
       run(async () => {
@@ -243,6 +258,7 @@ export function createWorkspaceSession(options: {
       return run(async () => {
         await detach();
         setSaved(undefined);
+        setDspSession(undefined);
         setName(UNTITLED);
         setDraft(false);
       });

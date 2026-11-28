@@ -6,7 +6,7 @@ export interface Wave {
   samples: number[];
 }
 
-export function parseWave(bytes: Buffer): Wave {
+function waveLayout(bytes: Buffer) {
   if (bytes.toString('latin1', 0, 4) !== 'RIFF' || bytes.toString('latin1', 8, 12) !== 'WAVE')
     throw new Error('Expected a little-endian RIFF/WAVE file.');
   const end = 8 + bytes.readUInt32LE(4);
@@ -47,6 +47,16 @@ export function parseWave(bytes: Buffer): Wave {
     data.length % align !== 0
   )
     throw new Error('Expected a nonempty mono or stereo WAV with complete frames.');
+  return { tag, bits, channels, rate, data };
+}
+
+/** Check the format and frame boundaries without decoding samples. */
+export function validateWave(bytes: Buffer): void {
+  waveLayout(bytes);
+}
+
+export function parseWave(bytes: Buffer): Wave {
+  const { tag, bits, channels, rate, data } = waveLayout(bytes);
   const scale = 2 ** (bits - 1);
   const stride = bits / 8;
   const samples = Array.from({ length: data.length / stride }, (_, i) => {

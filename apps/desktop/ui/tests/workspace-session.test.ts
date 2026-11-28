@@ -34,6 +34,7 @@ function setup(options: { loaded?: boolean; confirm?: boolean } = {}) {
     mount: vi.fn<SessionHost['mount']>().mockResolvedValue([saved, '/private/card.img']),
     release: vi.fn<SessionHost['release']>().mockResolvedValue(undefined),
     save: vi.fn<SessionHost['save']>().mockResolvedValue(saved),
+    saveDsp: vi.fn<SessionHost['saveDsp']>().mockResolvedValue(saved),
     preserve: vi.fn<SessionHost['preserve']>().mockResolvedValue(undefined),
     attach: vi.fn<SessionHost['attach']>().mockResolvedValue(saved),
     readCapture: vi.fn<SessionHost['readCapture']>().mockResolvedValue('{}'),
@@ -117,4 +118,27 @@ test('closing or reverting a working card respects the discard choice', async ()
   expect(firmware.closeSession).not.toHaveBeenCalled();
   expect(confirm).toHaveBeenCalledTimes(2);
   expect(session.card()).toBe('/private/card.img');
+});
+
+test('saving a DSP selection leaves the working card and the draft name alone', async () => {
+  const { session, host, saved, firmware } = setup();
+  await session.open();
+  await session.start();
+  session.setName('Draft name');
+  const dsp = { module: 'some/fx', reportFolder: `dsp/${'a'.repeat(64)}` };
+  const update = { ...saved, document: { ...saved.document, dsp } };
+  host.saveDsp.mockResolvedValueOnce(update);
+  const source = { folder: '/picked/report', sha256: 'b'.repeat(64) };
+  await session.saveDsp(dsp.module, source);
+  expect(host.saveDsp).toHaveBeenCalledWith(saved.root, dsp.module, source);
+  expect(host.save).not.toHaveBeenCalled();
+  expect(firmware.closeSession).not.toHaveBeenCalled();
+  expect(session.saved()?.document.dsp).toEqual(dsp);
+  expect(session.name()).toBe('Draft name');
+  expect(session.card()).toBe('/private/card.img');
+
+  host.open.mockResolvedValueOnce({ ...update, root: '/moved/demo' });
+  await session.open('/moved/demo');
+  expect(session.dspSession()?.document.dsp).toEqual(dsp);
+  expect(session.dspSession()?.root).toBe('/moved/demo');
 });

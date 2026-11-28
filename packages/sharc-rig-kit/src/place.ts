@@ -3,6 +3,7 @@
  * externs, and the link (port of `_build` in tests/support/machine_rig.py and fx_rig.py). The result holds what a rig needs: the
  * linked code, the data symbols, the initial bytes of every data run, and the ranges of the module's own code and data.
  */
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { SLOTS, STOCK_BP, TABLE, TYPE_CACHE, FRAME, PARAM_REC, RELEASE, UNPACK_BP } from './context.ts';
@@ -65,6 +66,16 @@ export interface Init {
   address: number;
   bytes: Uint8Array;
   bss: boolean;
+}
+
+export function linkedSha256({ linked, inits }: Pick<FxBuilt, 'linked' | 'inits'>): string {
+  const hash = createHash('sha256');
+  for (const code of linked) hash.update(`code:${code.baseSw}:${code.codeBoot}\n`);
+  for (const init of inits) {
+    hash.update(`data:${init.address}:${init.bytes.length}:${init.bss}\n`);
+    hash.update(init.bytes);
+  }
+  return hash.digest('hex');
 }
 
 /** (byte address, bytes) of a data run. */

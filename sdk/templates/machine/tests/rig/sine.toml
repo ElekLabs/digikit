@@ -1,0 +1,20 @@
+# Replace this case with checks for the pitch, level or envelope of your own voice.
+[[case]]
+name = "A4 plays a sine at the expected pitch and level"
+
+[[case.step]]
+note = 69
+vel = 100
+params = { level = 0x7f00 }
+blocks = 32
+
+[[case.check]]
+kind = "pitch-hz"
+note = 69
+cents = 1.0
+
+[[case.check]]
+kind = "peak"
+# Full LEVEL gives a peak of 0.5 * 100 / 127, about 0.394.
+min = 0.38
+max = 0.41

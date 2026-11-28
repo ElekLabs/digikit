@@ -880,6 +880,47 @@ Band spectra describe the first analysis window. The report gives its frame coun
 measurements cover the render beyond that window.
 The plots and fingerprints summarize evidence. They do not establish that one version sounds better.
 
+### Report a module's declarative DSP checks
+
+Follow the repository setup in [README](../README.md#setup), including the toolchains and generated core.
+Run the following commands from the checkout root.
+
+```sh
+pnpm nx:pilot run patchkit:cli
+pnpm nx:pilot run sharc-rig:build
+mise run wb:cli -- module quality digikit/freqshift --out out/runs/shift-quality
+```
+
+The report runs the module's `tests/rig/*.toml` files through the same runner used by `rigSuite`.
+It writes `quality.json` (`dk.module-quality/1`) and `quality.md` with the inputs and steps,
+observed values and declared tolerances, case and check results, block and rig instruction counts,
+and hashes of the case files, linked builds and build tools. The raw effect tests run on the shared
+`fx` rig lane with a scratch or master tap. Machine cases identify their device and voice tap.
+Stereo machine cases report the primary voice's instruction counts.
+
+To link a saved audio comparison, add `--comparison PATH/TO/comparison.json`. Repeat the option
+for more comparisons. The report links the comparison, source artifacts, associated WAVs and plots
+for listening review. The reported DSP checks cover only the declarative cases.
+Standalone TypeScript tests, firmware validation and listening review have their own evidence.
+
+Use `--emit json,markdown,html` to also write `quality.html`. The default is `--emit json,markdown`.
+Pass any subset of the three formats to write just those files. For example:
+
+```sh
+mise run wb:cli -- module quality digikit/freqshift --out out/runs/shift-quality \
+  --comparison out/runs/shift-compare/comparison.json --emit json,html --format json
+```
+
+Open `quality.html` locally to inspect the rig checks, view the saved plots and switch between the
+original WAVs at the same playback time. Keep `quality-media/` beside the report when moving it.
+When HTML is requested, all emitted formats link to content-addressed copies of the comparison
+JSON, available WAVs and PNGs in that folder. The comparison JSON retains its original contents.
+Source artifact and case references retain their original paths. Missing or invalid media is
+reported separately from the DSP verdict.
+
+Failed checks, skipped cases, execution errors and absent cases produce a nonzero exit status
+and preserve the requested report files. `--format json` prints the outcome and output paths to the terminal.
+
 ### Listen to a send return
 
 The rig can generate two repeatable scenes for an effect. `send/percussion` sends a syncopated hat and

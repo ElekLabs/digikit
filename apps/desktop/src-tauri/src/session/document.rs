@@ -6,6 +6,8 @@ use std::{
 };
 use tempfile::NamedTempFile;
 
+use super::dsp::Dsp;
+
 const SCHEMA: &str = "dk.session/1";
 pub(super) const MANIFEST: &str = "session.json";
 pub(super) const BASE: &str = "card/base.img";
@@ -39,6 +41,8 @@ pub(super) struct Document {
     pub(super) checkpoint: Option<String>,
     #[serde(default)]
     pub(super) attachments: Vec<Attachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) dsp: Option<Dsp>,
 }
 
 impl Document {
@@ -50,6 +54,7 @@ impl Document {
             firmware,
             checkpoint: None,
             attachments: Vec::new(),
+            dsp: None,
         }
     }
 
@@ -66,6 +71,7 @@ impl Document {
                 .as_deref()
                 .is_some_and(|v| !hash(v))
             || doc.checkpoint.as_deref().is_some_and(|v| !hash(v))
+            || doc.dsp.as_ref().is_some_and(|v| !v.valid())
         {
             return Err("not a supported Workbench session".into());
         }

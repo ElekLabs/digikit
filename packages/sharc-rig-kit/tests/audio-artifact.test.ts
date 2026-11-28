@@ -1,13 +1,19 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
-import { writeAudioComparison, writeAudioRender, type AudioExport } from '../src/audio-artifact.ts';
+import {
+  audioComparisonLinks,
+  writeAudioComparison,
+  writeAudioRender,
+  type AudioExport,
+} from '../src/audio-artifact.ts';
 import type { RenderedCase } from '../src/render-case.ts';
 import { wavBytes } from '../src/plot.ts';
 import { DEVICES } from '../src/spec.ts';
 import { summarizeAudio } from '../src/audio-summary.ts';
 import { BAND_WINDOW_FRAMES } from '../src/fingerprint.ts';
+import { qualityMedia } from '../src/quality-media.ts';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -77,6 +83,22 @@ test('JSON-only comparison warns about workload mismatches without claiming samp
   });
 });
 
+test('comparison links locate bare PCM and a symlinked manifest’s WAV', () => {
+  const { dir, save } = fixture();
+  const samples = [0.25, 0.25, -0.25, -0.25];
+  const render = save('render', samples, ['wav', 'json']);
+  const alias = path.join(dir, 'linked-render.json');
+  symlinkSync(render.files.json!, alias);
+  const bare = path.join(dir, 'bare.wave');
+  writeFileSync(bare, wavBytes(samples, 48000, 2));
+  const { file } = writeAudioComparison(bare, alias, path.join(dir, 'compare'));
+  const out = path.join(dir, 'quality');
+  const links = audioComparisonLinks(file, out);
+  expect(links.baseline).toEqual({ file: '../bare.wave', wav: '../bare.wave' });
+  expect(links.candidate.file).toBe('../linked-render.json');
+  expect(realpathSync(path.resolve(out, links.candidate.wav!))).toBe(realpathSync(render.files.wav!));
+});
+
 test('a bare WAV can compare with another WAV and mismatched rates are not sample-aligned', () => {
   const { dir, save } = fixture();
   const a = save('a', [0.25, 0.25, -0.25, -0.25], ['wav']);
@@ -100,6 +122,47 @@ test('a manifest cannot silently use a replaced WAV', () => {
   expect(() => writeAudioComparison(a.files.json!, a.files.json!, path.join(dir, 'ab'))).toThrow(
     'WAV hash does not match',
   );
+});
+
+test('portable audio omits a WAV replaced after comparison', () => {
+  const { dir, save } = fixture();
+  const a = save('a', [0.25, 0.25], ['wav', 'json']);
+  const b = save('b', [0.5, 0.5], ['wav', 'json']);
+  const { file } = writeAudioComparison(a.files.json!, b.files.json!, path.join(dir, 'ab'));
+  save('a', [0.75, 0.75], ['wav', 'json']);
+
+  const diagnostics: string[] = [];
+  const links = audioComparisonLinks(
+    file,
+    dir,
+    qualityMedia(dir, (message) => diagnostics.push(message)),
+  );
+
+  expect(links.baseline).toEqual({ file: 'a/render.json' });
+  expect(readFileSync(path.join(dir, links.candidate.wav!))).toEqual(readFileSync(b.files.wav!));
+  expect(diagnostics).toEqual([expect.stringContaining('Render WAV hash changed since comparison.')]);
+});
+
+test('portable audio omits a WAV added after a summary-only comparison', () => {
+  const { dir, save } = fixture();
+  const samples = [0.25, 0.25];
+  const a = save('a', samples, ['json']);
+  const { file } = writeAudioComparison(a.files.json!, a.files.json!, path.join(dir, 'ab'));
+  save('a', samples, ['wav', 'json']);
+
+  const diagnostics: string[] = [];
+  const links = audioComparisonLinks(
+    file,
+    dir,
+    qualityMedia(dir, (message) => diagnostics.push(message)),
+  );
+
+  expect(links.baseline).toEqual({ file: 'a/render.json' });
+  expect(links.candidate).toEqual({ file: 'a/render.json' });
+  expect(diagnostics).toEqual([
+    expect.stringContaining('Baseline had no WAV at comparison time.'),
+    expect.stringContaining('Candidate had no WAV at comparison time.'),
+  ]);
 });
 
 test('reusing a render directory never points unprofiled audio at an older profile', () => {

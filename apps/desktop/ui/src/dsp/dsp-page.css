@@ -1,0 +1,186 @@
+.dsp-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+  color: var(--ink);
+}
+
+.dsp-heading,
+.dsp-actions,
+.dsp-playhead,
+.dsp-select {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.dsp-heading {
+  justify-content: space-between;
+}
+
+.dsp-page :is(h2, h3, h4) {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.dsp-card {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  overflow-wrap: anywhere;
+}
+
+.dsp-card h3 {
+  font-size: 16px;
+}
+
+.dsp-card h4 {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.dsp-page p,
+.dsp-page ul {
+  margin: 6px 0 0;
+}
+
+.dsp-pass {
+  color: var(--ok);
+}
+
+.dsp-fail,
+.dsp-error {
+  color: var(--bad);
+}
+
+.dsp-skip {
+  color: var(--ink-2);
+}
+
+.dsp-select,
+.dsp-playhead,
+.dsp-run {
+  margin-top: 10px;
+}
+
+.dsp-select select,
+.dsp-run select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel-3);
+  color: var(--ink);
+  font: inherit;
+}
+
+.dsp-run label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.dsp-sources,
+.dsp-measurements {
+  display: grid;
+  gap: 6px 12px;
+  margin: 10px 0;
+}
+
+.dsp-sources {
+  grid-template-columns: auto minmax(0, 1fr);
+  font: 11px var(--font-mono);
+  color: var(--ink-2);
+}
+
+.dsp-page dd {
+  margin: 0;
+}
+
+.dsp-playhead {
+  font: 11px var(--font-mono);
+}
+
+.dsp-playhead input {
+  flex: 1;
+  min-width: 100px;
+  accent-color: var(--action);
+}
+
+.dsp-envelope {
+  margin: 14px 0 0;
+  font: 11px var(--font-mono);
+}
+
+.dsp-envelope figcaption {
+  margin-bottom: 6px;
+}
+
+.dsp-envelope .analyzer-chart {
+  grid-template-rows: 170px auto;
+}
+
+.dsp-envelope .analyzer-plot {
+  cursor: auto;
+}
+
+.dsp-page .dsp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  list-style: none;
+  padding: 0;
+  color: var(--ink-2);
+}
+
+.dsp-saved-plot {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-top: 8px;
+}
+
+.dsp-checks section {
+  margin-top: 12px;
+}
+
+.dsp-checks details {
+  padding: 6px 0 6px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.dsp-checks summary {
+  cursor: pointer;
+  padding: 4px;
+}
+
+.dsp-checks summary strong {
+  margin: 0 8px 0 4px;
+  font: 600 11px var(--font-mono);
+}
+
+.dsp-count {
+  margin-left: 8px;
+  color: var(--ink-2);
+}
+
+.dsp-measurements {
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+}
+
+.dsp-measurements pre {
+  max-height: 240px;
+  overflow: auto;
+  margin: 4px 0 0;
+  padding: 6px;
+  background: var(--panel-3);
+  font: 11px var(--font-mono);
+  white-space: pre-wrap;
+}

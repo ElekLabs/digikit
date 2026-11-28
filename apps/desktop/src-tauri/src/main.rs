@@ -13,6 +13,7 @@ use elektron_native_boot::Snapshot;
 mod analyzer;
 mod bulk_port;
 mod desktop_runtime;
+mod dsp_quality;
 mod files_save;
 mod firmware;
 mod library;
@@ -720,6 +721,7 @@ fn main() {
             session_menu::session_set_actions_enabled,
             session::session_release,
             session::session_save,
+            session::session_save_dsp,
             session::session_preserve,
             session::session_attach,
             session::session_read_capture,
@@ -733,6 +735,8 @@ fn main() {
             analyzer::analyzer_open,
             analyzer::analyzer_read,
             analyzer::analyzer_close,
+            dsp_quality::dsp_quality_modules,
+            dsp_quality::dsp_quality_run,
             emu_startup,
             emu_step,
             emu_tap,

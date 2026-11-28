@@ -21,6 +21,17 @@ export interface AnalyzerFrame {
   fundamental: Stereo<number | null>;
 }
 
+export interface EnvelopeTrace {
+  levels: Float32Array;
+  secondsPerWindow: number;
+  duration: number;
+}
+
+export interface EnvelopeFrame {
+  traces: Stereo<EnvelopeTrace>;
+  duration: number;
+}
+
 export interface AnalyzerInput {
   revision: number;
   rate: number;

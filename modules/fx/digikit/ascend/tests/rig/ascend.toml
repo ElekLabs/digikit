@@ -1,0 +1,116 @@
+[[case]]
+name = "the return balances the chosen sideband with half the direct tone"
+
+[case.input]
+kind = "sine"
+freq = 1500
+amp = 0.5
+
+[[case.step]]
+params_f32 = [0.25, 63, 0.5, 1]
+blocks = 12300
+
+[[case.step]]
+params_f32 = [0.25, -64, 0.5, 1]
+blocks = 12300
+
+# Two turns per window separate the original tone from both possible sidebands.
+[[case.check]]
+kind = "tone-fit"
+channel = "left"
+blocks = [300, 12300]
+freq = 1500
+amp = 0.25
+tol = 0.002
+
+[[case.check]]
+kind = "tone-fit"
+channel = "left"
+blocks = [300, 12300]
+freq = 1500.25
+amp = 0.25
+tol = 0.002
+
+[[case.check]]
+kind = "tone-fit"
+channel = "left"
+blocks = [300, 12300]
+freq = 1499.75
+amp = 0.0
+tol = 0.003
+
+[[case.check]]
+kind = "tone-fit"
+channel = "right"
+blocks = [12600, 24600]
+freq = 1500
+amp = 0.25
+tol = 0.002
+
+[[case.check]]
+kind = "tone-fit"
+channel = "right"
+blocks = [12600, 24600]
+freq = 1499.75
+amp = 0.25
+tol = 0.002
+
+[[case.check]]
+kind = "tone-fit"
+channel = "right"
+blocks = [12600, 24600]
+freq = 1500.25
+amp = 0.0
+tol = 0.003
+
+[[case.check]]
+kind = "no-clip"
+
+[[case]]
+name = "density changes the location of the standing notches"
+
+[case.input]
+kind = "sine"
+freq = 1500
+amp = 0.5
+
+[[case.step]]
+params_f32 = [0.1, 0, 0, 1]
+blocks = 160
+
+[[case.step]]
+params_f32 = [0.1, 0, 1, 1]
+blocks = 160
+
+[[case.check]]
+kind = "tone-fit"
+blocks = [80, 160]
+freq = 1500
+amp = 0.327
+tol = 0.005
+
+[[case.check]]
+kind = "tone-fit"
+blocks = [240, 320]
+freq = 1500
+amp = 0.149
+tol = 0.005
+
+[[case]]
+name = "depth zero returns silence during a sweep"
+
+[case.input]
+kind = "square-noise"
+amp = 1
+
+[[case.step]]
+params_f32 = [0.3, 63, 1, 0]
+blocks = 100
+
+[[case.check]]
+kind = "peak"
+channel = "both"
+max = 0
+
+[[case.check]]
+kind = "state-untouched-beyond"

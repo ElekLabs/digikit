@@ -53,6 +53,7 @@ import { createDeviceNames, createEmulatorNames, selectedSymbolImage } from './l
 import { windowShown } from './log-follow-core';
 import type { DesktopApps } from './desktop-app';
 import WorkbenchDrawer from './WorkbenchDrawer';
+import DspPage from './dsp/DspPage';
 import LogPanel from './LogPanel';
 import FirmwareSymbols from './FirmwareSymbols';
 import FirmwareCatalog, { type CatalogSelection } from './FirmwareCatalog';
@@ -721,6 +722,15 @@ export default function WorkbenchShell(
               {(view) => <ModulePageView page={view} current={() => modulePage() === view} />}
             </Show>
           </Show>
+          <DspPage
+            active={page() === 'dsp'}
+            fs={props.host.fs}
+            rig={props.host.dspQuality}
+            session={workspaceSession?.dspSession()}
+            sessionBusy={workspaceSession?.disabled()}
+            saveDsp={workspaceSession?.saveDsp}
+            openTransfer={() => setPage('transfer')}
+          />
           <Show when={page() === 'transfer'}>
             <TransferPage
               onFlash={() => {
