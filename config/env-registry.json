@@ -341,6 +341,10 @@
    "owner": "ts:tools/nx",
    "purpose": "Set to 1 to run the optional voices case of the LP0 sample transfer device test (otherwise skipped)."
   },
+  "DIGI_MIN_FREE_GB": {
+   "owner": "ts:packages/test-support",
+   "purpose": "Free GB a device-test session needs under its run volume before it starts (plain non-negative decimal, default 5)"
+  },
   "DIGI_NO_PROGRESS_MS": {
    "owner": "ts:tools/nx",
    "purpose": "Wall-time limit in ms of the no-progress watchdog in device tests (default 120000; 0 turns it off)."
