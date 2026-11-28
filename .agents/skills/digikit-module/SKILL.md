@@ -1,7 +1,7 @@
 ---
 name: digikit-module
 description: >-
-  Create, build, check, pack, run, export or import a digikit content module (a machine, an effect with its own FX page and master or send routes, or a ColdFire service loaded from the card as a .dkm) for the Digitakt II or Digitone II. Use for module:new, module:check, module:pack, module:export, module:import, dk:run, the module.toml manifest, the machine contract (render, note_on, desc), the builder calls in init (dk_module_ctx_add_machine, dk_machine_add_page, dk_page_add_param, dk_module_ctx_add_fx, dk_fx_routes), module_ids.h, the [uses] lines and knob and parameter rules. Patched-in core modules: references/patched-in.md. Not for firmware analysis.
+  Create, build, check, pack, run, export or import a digikit content module (a machine, or an effect with its own FX page and master or send routes) for the Digitakt II or Digitone II. Use for module:new, module:check, module:pack, module:export, module:import, dk:run, the module.toml manifest, the machine contract (render, note_on, desc), the builder calls in init (dk_module_ctx_add_machine, dk_machine_add_page, dk_page_add_param, dk_module_ctx_add_fx, dk_fx_routes), module_ids.h, the [uses] lines and knob and parameter rules. Patched-in core modules: references/patched-in.md. Not for firmware analysis.
 ---
 
 # digikit modules

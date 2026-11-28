@@ -72,7 +72,7 @@ Rules from `services/shortcuts/README.md`:
 
 **Versions.** Packed `major << 16 | minor << 8 | patch`. `version_satisfies(provided, minimum)` in `runtime/core/abi/src/version.rs` is the one rule: same major, not older. Fixtures: `local-ping` (1.2.0), `-user` (needs 1.2.0), `-user-b`, `-old-user` (a need the provider no longer meets, refused).
 
-**Claims and resources.** The core's `ResourceLedger` (`runtime/core/fit/src/ledger.rs`) counts pools `(owner, name)` with a limit and sums consumers' claims. **Open:** its header says nothing in the runtime uses it yet; confirm before you depend on it. Today the services own the claim policy in the `Dsp` part (`DspPart` in `runtime/core/abi/src/provider/parts.rs`: `admit`, `claim`, `release`, `clear`); read `services/machines/src/dsp/claim.rs` and `services/fx/src/dsp/`. The core never decides who wins.
+**Claims and resources.** The core's `ResourceLedger` (`runtime/core/fit/src/ledger.rs`) counts pools `(owner, name)` with a limit and sums consumers' claims. `PackageManager` holds it (`runtime/core/lifecycle/src/manager.rs`; plans and claims in `manager/resources.rs`), but the real manifest returns empty `resources()`/`wants()` (`runtime/core/src/rs/src/package/lifecycle/manifest.rs`) because no packed header declares pools yet (RC3), so it refuses nothing [O]. Today the services own the claim policy in the `Dsp` part (`DspPart` in `runtime/core/abi/src/provider/parts.rs`: `admit`, `claim`, `release`, `clear`); read `services/machines/src/dsp/claim.rs` and `services/fx/src/dsp/`. The core never decides who wins.
 
 ## Lifecycle
 
@@ -111,7 +111,7 @@ On a merge conflict in `*.dko.json`, take main's version and regenerate. `dk:dev
 **Shortcuts on `core/input`'s key table** (PR #789). The key walker is shared and runs in the UI task before any view, so the platform owns it:
 
 - Platform: `runtime/platform/input/src/cf/key_subscribers.c` and `.h`, `key-walk.s`, and the image table `input_keys_info` (`'KEYS'`, version, slots, subscribe, unsubscribe). The first subscriber that returns nonzero consumes the event; else the stock walker runs. Four slots.
-- Service: `services/shortcuts` reads the table (`key_table.rs`), subscribes on `start`, unsubscribes on `detach`/`stop`. No `[[hook]]` in its `module.toml`. The policy (two-key combinations, bindings) stays in the service.
+- Service: `services/shortcuts` reads the table (`key_table.rs`), subscribes in `start_in` and unsubscribes in `stop`; `detach` only ends the builder and drops the consumer's bindings. No `[[hook]]` in its `module.toml`. The policy (two-key combinations, bindings) stays in the service.
 - Fake: `UnwiredKeys` (`services/shortcuts/src/unwired_keys.rs`) counts calls; `UnwiredKeys<REFUSAL>` gives the refusal of a full or missing table, so the start-refusal path is a unit test.
 - Gate command: `workspace:key-abi` (`node tools/nx/key-abi.mjs`) checks the ABI words against their source.
 
