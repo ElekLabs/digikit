@@ -27,6 +27,7 @@ import {
   type Device,
 } from '../../packages/test-support/src/firmware-inputs.ts';
 import { DkSession, EmuUsbTransport } from '../../packages/dk-session/src/index.ts';
+import { cloneFile } from '../../packages/test-support/src/clone.ts';
 import { steppedClock } from '../../packages/test-support/src/emulated-clock.ts';
 import { MS, Session } from '../../packages/test-support/src/session.ts';
 
@@ -178,8 +179,8 @@ try {
       sha256[key] = null;
       continue;
     }
-    // A clone on APFS (the card is 3.8 GB), else a plain copy.
-    fs.copyFileSync(sources[key]!, path.join(tmpDir, name), fs.constants.COPYFILE_FICLONE);
+    // Shares blocks on APFS, else a sparse copy (the card is 24.8 GB apparent size).
+    cloneFile(sources[key]!, path.join(tmpDir, name));
     sha256[key] = sha256File(path.join(tmpDir, name));
   }
   const provenance = {
