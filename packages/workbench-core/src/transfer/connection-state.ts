@@ -13,7 +13,9 @@ export function createConnection(env: { deviceName(device: string): Promise<stri
   const noteConnection = (e: ConnectionEvent): void => {
     if (e.type === 'target') selection++;
     const next = step(connection(), e);
-    if (e.type === 'target' || e.type === 'lost' || e.type === 'closed' || e.type === 'noruntime') invalidate?.();
+    // A lost request is not a new device: one unanswered request (a command the target does not know) must not empty the module
+    // inventory and the pages built from it, and the next answer brings the indicator back. A read that fails clears the inventory itself.
+    if (e.type === 'target' || e.type === 'closed' || e.type === 'noruntime') invalidate?.();
     setConnection(next);
   };
 

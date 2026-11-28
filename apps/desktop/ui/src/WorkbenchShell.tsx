@@ -710,8 +710,18 @@ export default function WorkbenchShell(
               </Show>
             </div>
           </div>
-          <Show when={page() === 'module' && modulePage()} keyed>
-            {(view) => <ModulePageView page={view} current={() => modulePage() === view} />}
+          <Show when={page() === 'module'}>
+            <Show
+              when={modulePage()}
+              keyed
+              fallback={
+                <p class="note" role="status">
+                  This module is not loaded on {targetLabel(target())}.
+                </p>
+              }
+            >
+              {(view) => <ModulePageView page={view} current={() => modulePage() === view} />}
+            </Show>
           </Show>
           <Show when={page() === 'transfer'}>
             <TransferPage

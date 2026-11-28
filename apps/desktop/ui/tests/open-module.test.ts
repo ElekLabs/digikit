@@ -10,13 +10,13 @@ vi.mock('@digi/workbench-core/modules/dktransfer.ts', () => ({ readLoadedModules
 const pm = { name: 'project-manager', index: 1, uiInstance: 3 } as DkModule;
 const later = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function harness() {
+function harness(switching: () => boolean = () => false) {
   const inventory = createModuleInventory();
   const [target, setTarget] = createSignal('A');
   const left = vi.fn();
   createRoot(() =>
     watchOpenModule(
-      { target, switching: () => false, inventory, hasPage: (m) => m.uiInstance !== undefined },
+      { target, switching, inventory, hasPage: (m) => m.uiInstance !== undefined },
       () => ({ id: 'project-manager' }),
       left,
     ),
@@ -66,6 +66,14 @@ describe('the module open on the page', () => {
     const h = harness();
     await h.run([pm]);
     h.setTarget('B');
+    expect(h.left).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves when the target changes while the switch never ends and nothing is settled', async () => {
+    const [switching] = createSignal(true);
+    const h = harness(switching);
+    h.setTarget('B');
+    expect(h.inventory.settled()).toBe(false);
     expect(h.left).toHaveBeenCalledTimes(1);
   });
 });

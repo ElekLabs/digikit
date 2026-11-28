@@ -25,8 +25,9 @@ export function watchOpenModule(host: OpenModuleHost, open: () => { id: string }
     }
     const target = host.target();
     if (!openedOn || openedOn.id !== current.id) openedOn = { id: current.id, target: untrack(host.target) };
-    if (host.switching()) return;
+    // A switch that never ends (a target that does not come up) must not keep the page of the old target.
     if (openedOn.target !== target) return leave();
+    if (host.switching()) return;
     if (!host.inventory.settled()) return;
     const record = host.inventory.modules().find((module) => module.name === current.id);
     if (!record || !host.hasPage(record)) leave();

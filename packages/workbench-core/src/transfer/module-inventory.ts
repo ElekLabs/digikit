@@ -28,7 +28,10 @@ export function createModuleInventory() {
         return loaded;
       } catch (error) {
         // A failed read leaves nothing listed: that is an answer, not a refresh in progress.
-        if (connection === generation && request === sequence) setKnown(true);
+        if (connection === generation && request === sequence) {
+          setModules([]);
+          setKnown(true);
+        }
         throw error;
       } finally {
         setReading((n) => n - 1);
