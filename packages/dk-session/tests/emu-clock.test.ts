@@ -189,3 +189,23 @@ test('steppedClock: a long pause is several bounded steps that sum to the exact 
   );
   assert.equal(Math.max(...steps) < 2_000 * INSNS_PER_MS, true);
 });
+
+test('steppedClock: a step that never resolves fails the pause at the hang bound', async () => {
+  vi.useFakeTimers();
+  try {
+    const clock = steppedClock(
+      async () => ({ elapsed: 0 }),
+      () => new Promise<never>(() => {}),
+      { hangMs: 5000 },
+    );
+    const out = clock.pause(100).then(
+      () => 'ok',
+      (e: Error) => e,
+    );
+    await vi.advanceTimersByTimeAsync(5000);
+    const error = await out;
+    assert.ok(error instanceof Error && /took over 5000 ms/.test(error.message), String(error));
+  } finally {
+    vi.useRealTimers();
+  }
+});

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { emulatorClock, pollUntil, steppedClock, type Clock } from '../src/emulated-clock.ts';
+import { emulatorClock, pollUntil, type Clock } from '../src/emulated-clock.ts';
 import { MS } from '../src/session.ts';
 
 beforeEach(() => {
@@ -8,19 +8,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
-});
-
-test('steppedClock steps floor(ms * MS) instructions in slices', async () => {
-  const steps: number[] = [];
-  const clock = steppedClock({
-    status: async () => ({ elapsed: 0 }),
-    client: { step: async (n: number) => void steps.push(n) },
-  } as never);
-  await clock.pause(1.5);
-  assert.deepEqual(steps, [Math.floor(1.5 * MS)]);
-  steps.length = 0;
-  await clock.pause(1200);
-  assert.deepEqual(steps, [500 * MS, 500 * MS, 200 * MS]);
 });
 
 test('emulatorClock steps a paused daemon and waits on a free one', async () => {

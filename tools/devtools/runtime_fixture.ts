@@ -26,10 +26,9 @@ import {
   repoRoot,
   type Device,
 } from '../../packages/test-support/src/firmware-inputs.ts';
-import { DkSession, EmuUsbTransport } from '../../packages/dk-session/src/index.ts';
+import { DkSession, EmuUsbTransport, steppedClock } from '../../packages/dk-session/src/index.ts';
 import { cloneFile } from '../../packages/test-support/src/clone.ts';
-import { steppedClock } from '../../packages/test-support/src/emulated-clock.ts';
-import { MS, Session } from '../../packages/test-support/src/session.ts';
+import { MS, PROGRESS_HANG_S, Session } from '../../packages/test-support/src/session.ts';
 
 const FIRMWARE: Record<Device, string> = { dt2: '1.17', dn2: '1.12' };
 
@@ -135,7 +134,11 @@ try {
     const call = <T>(method: string, params?: Record<string, unknown>) => session!.client.call<T>(method, params);
     const stepSeconds = (s: number) => session!.client.step(s * 1000 * MS, { timeout_wall_s: 300 });
     const dk = new DkSession(new EmuUsbTransport(call, { stepInstructions: 20_000_000 }), {
-      clock: steppedClock(session),
+      clock: steppedClock(
+        () => session!.status() as never,
+        (instructions, limit) => session!.client.step(instructions, limit),
+        { hangMs: PROGRESS_HANG_S * 1000 },
+      ),
     });
     await stepSeconds(15);
     await dk.restart();

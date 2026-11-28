@@ -42,7 +42,7 @@ import {
 import { fxProfile, type FxProfile } from './device-data.ts';
 import { seedSettingsCard } from './project-kit.ts';
 import { runtimeWatchEnv } from './write-safety.ts';
-import { renderShots } from '@digi/test-support';
+import { PROGRESS_HANG_S, renderShots } from '@digi/test-support';
 
 export type { FxProfile };
 
@@ -138,7 +138,8 @@ export async function withPausedFxProtocol<T>(
   const dk = new DkSession(new EmuUsbTransport(guarded, { stepInstructions: 400_000 }), {
     clock: steppedClock(
       () => call(() => runtime.session.status()),
-      (instructions) => guarded('step', { instructions }),
+      (instructions, limit) => guarded('step', { instructions, ...limit }),
+      { hangMs: PROGRESS_HANG_S * 1000 },
     ),
   });
   try {

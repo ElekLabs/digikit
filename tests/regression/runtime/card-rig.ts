@@ -5,7 +5,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DkSession, EmuUsbTransport, frame, parseReply, steppedClock } from '@digi/dk-session';
 import { RpcError } from '@digi/control-client';
-import { resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
+import { PROGRESS_HANG_S, resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
 import { describe, expect } from 'vitest';
 import { expectNoGuardHits } from '../free-region-guard.ts';
 import { withReusablePatchedSession } from '../reusable-session.ts';
@@ -469,7 +469,8 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       });
       const clock = steppedClock(
         () => runtime.session.status(),
-        (instructions) => runtime.session.client.call('step', { instructions }),
+        (instructions, limit) => runtime.session.client.call('step', { instructions, ...limit }),
+        { hangMs: PROGRESS_HANG_S * 1000 },
       );
       stepping = { dk: new DkSession(transport, { timeoutMs: 60_000, clock }), transport };
       return stepping.dk;
