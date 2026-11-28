@@ -206,7 +206,11 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
       if (!sameTarget(t, target())) return;
       if (!ok) {
         if (silentInfo && connection.connection().state === 'noruntime') return;
-        noteConnection({ type: 'lost', reason: reason ?? 'No reply from the device.', ...(optional ? { optional } : {}) });
+        noteConnection({
+          type: 'lost',
+          reason: reason ?? 'No reply from the device.',
+          ...(optional ? { optional } : {}),
+        });
         return;
       }
       const state = connection.connection().state;

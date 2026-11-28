@@ -14,6 +14,7 @@ import {
 } from '../src/transfer/fake-app.ts';
 import type { TransferEnv } from '../src/transfer/env.ts';
 import { createSessionHub, type SessionHubOptions } from '../src/transfer/session-core.ts';
+import { runtimeDeviceIds } from '../src/data/device-profiles.ts';
 
 const opened: string[] = [];
 const closed: string[] = [];
@@ -181,7 +182,7 @@ test('a session reports its request outcomes: a failure marks the indicator lost
     return {
       info: async () => {
         infos++;
-        return { port: 'dt2', runtime: 0 };
+        return { port: runtimeDeviceIds[0]!, runtime: 0 };
       },
     };
   });
@@ -214,7 +215,7 @@ test('a lost optional request (LOG, PEEK, LOGCFG) never drops the connection or 
     return {
       info: async () => {
         infos++;
-        return { port: 'dt2', runtime: 0 };
+        return { port: runtimeDeviceIds[0]!, runtime: 0 };
       },
     };
   });

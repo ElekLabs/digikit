@@ -1,6 +1,6 @@
 // The preview's named MIDI ports. DkSession probes these devices and the firmware sender uses the same wire.
 import { decode8in7, encode8in7, RPC_PING, RPC_SOFTWARE_VERSION } from '@digi/dk-session';
-import { CAP, CMD, PROTO_VERSION, SERVICE_CMD } from '@digi/dk-session/gen_proto';
+import { CAP, CMD, PROTO_VERSION, SERVICE_CMD, STATUS } from '@digi/dk-session/gen_proto';
 import { deviceProfiles, runtimeDeviceIds, type DeviceProfile } from '@digi/workbench-core/data/device-profiles.ts';
 import type { PreparedFlash } from '@digi/workbench-core/patch/patchkit-core.ts';
 import { FakeUpgrade } from '@digi/workbench-core/testing/fakeflash.ts';
@@ -33,6 +33,10 @@ type Device = {
 };
 type CardModules = (key: string, profile: DeviceProfile) => Promise<readonly string[]>;
 type Link = { name: string; queue: Uint8Array[]; wake?: () => void };
+/** The reply's status byte of a runtime status name (sdk.toml `[protocol.status]`). */
+const statusByte = (name: string): number => STATUS.find(([, n]) => n === name)![0] & 0xff;
+const E_MSG = statusByte('E_MSG');
+const E_PROTO = statusByte('E_PROTO');
 
 export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixture) {
   const page = query.get('page');
@@ -141,7 +145,7 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
       be32(1),
       be32(1),
       be32(runtime),
-      be32(withDebug ? (1 << CAP.LOG) | (1 << CAP.PEEK) | (1 << CAP.LOGCFG) : 0),
+      be32((1 << CAP.SETTINGS) | (withDebug ? (1 << CAP.LOG) | (1 << CAP.PEEK) | (1 << CAP.LOGCFG) : 0)),
       id,
     );
     push(to, concat([0xf0, 0x7d, 0x64, 0x6b, 1, CMD.INFO | 0x40, seq], encode8in7(body), [0xf7]));
@@ -155,11 +159,19 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
   // The settings record of a runtime that has stored nothing: the `DKST` header (version 1, seq 0, used 18, crc 0), no entries.
   const settingsRecord = concat(new TextEncoder().encode('DKST'), [0, 1], be32(0), be32(18), be32(0));
 
-  /** SETTINGS (a read in pieces: offset u32, length u16; the reply is flags, copy, seq, the record length and the piece) and FAULT (no fault held). */
+  /**
+   * SETTINGS (a read in pieces: offset u32, length u16; the reply is flags, copy, seq, the record length and the piece) and FAULT as the runtime's
+   * `cmd_fault`: a body that is not one byte is E_MSG, a byte other than 1 is E_PROTO, and 1 makes the runtime fail on purpose, so no reply comes.
+   */
   function settings(to: Link, device: Device, msg: Uint8Array) {
     if (!device.runtime) return;
     const seq = msg[6]!;
-    if (msg[5] === CMD.FAULT) return reply(to, CMD.FAULT, seq, 0);
+    if (msg[5] === CMD.FAULT) {
+      const body = decode8in7(msg.subarray(7, msg.length - 1));
+      if (body.length !== 1) return reply(to, CMD.FAULT, seq, E_MSG);
+      if (body[0] !== 1) return reply(to, CMD.FAULT, seq, E_PROTO);
+      return; // the runtime panics on purpose: the fault path, no reply
+    }
     const request = decode8in7(msg.subarray(7, msg.length - 1));
     const offset = (request[0]! << 24) | (request[1]! << 16) | (request[2]! << 8) | request[3]!;
     const length = (request[4]! << 8) | request[5]!;
@@ -194,8 +206,14 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     if (op === 3) logConfig.cardOn = body[1] ? 1 : 0;
     if (op === 2 || op === 3)
       // u8 on, u8 file, u8 state, u8 0, u32 writes, i32 last_status, u32 ms_since_write
-      return reply(to, cmd, seq, 0, concat([logConfig.cardOn, 0, logConfig.cardOn], [0], be32(0), be32(0), be32(0xffffffff)));
-    reply(to, cmd, seq, 0xc4);
+      return reply(
+        to,
+        cmd,
+        seq,
+        0,
+        concat([logConfig.cardOn, 0, logConfig.cardOn], [0], be32(0), be32(0), be32(0xffffffff)),
+      );
+    reply(to, cmd, seq, E_PROTO);
   }
 
   async function answer(to: Link, msg: Uint8Array) {

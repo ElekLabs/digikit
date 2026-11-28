@@ -210,7 +210,9 @@ async function expectLiveMachine(rt: TestRuntime): Promise<void> {
   // 2% of the amplitude before, and the peak of the window is below 1e-4 (digital silence, no stock machine's sound). A control capture of the same note held without an
   // unload keeps at least 50% of it over the same window, so the window itself holds the sine when the module is loaded. AMP HOLD is NOTE and the FX sends are 0 (set above).
   await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
-  const WINDOW = [1100, 1700]; // blocks after the trigger: the unload ends before 1000 on both devices (the check below), the key is held to past the end
+  // blocks after the trigger: the window starts 50 blocks after the unload ended (measured, not assumed: its length depends on the firmware's load) and the key is held to past its end
+  const WINDOW = [0, 0];
+  const WINDOW_BLOCKS = 600;
   const leftOf = (pcm: Float32Array, a: number, b: number) => {
     const perBlock = pcm.length / CAPTURE_BLOCKS;
     const out = new Float32Array(Math.floor(((b - a) * perBlock) / 2));
@@ -229,20 +231,6 @@ async function expectLiveMachine(rt: TestRuntime): Promise<void> {
     }
     return (2 * Math.hypot(re, im)) / xs.length;
   };
-  const controlFile = path.join(artifacts, 'held-control.wav');
-  const controlTrigger = (await frames(rt.session)) + 300;
-  await captureNote(rt.session, {
-    file: controlFile,
-    trigger: controlTrigger,
-    tag: 'held note control',
-    length: CAPTURE_BLOCKS,
-    noPress: true,
-    during: async () => {
-      await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
-      await waitClock(rt.clock, 1400); // longer than the window ends (1700 blocks is 1130 ms)
-      await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
-    },
-  });
   const heldFile = path.join(artifacts, 'held.wav');
   const mark = { start: 0, end: 0 };
   const heldTrigger = (await frames(rt.session)) + 300;
@@ -265,7 +253,24 @@ async function expectLiveMachine(rt: TestRuntime): Promise<void> {
   await rt.session.expectNoFault('(c) unload with a note held');
   expect((await moduleRows(rt)).map((m) => m.name), '(c) the machine is gone').toEqual([]);
   expect(mark.start, '(c) the unload started after the note began').toBeGreaterThan(300);
-  expect(mark.end + 50, `(c) the unload (${mark.start}..${mark.end}) ended before the window (${WINDOW[0]}..${WINDOW[1]} blocks)`).toBeLessThanOrEqual(WINDOW[0]!);
+  WINDOW[0] = mark.end + 50;
+  WINDOW[1] = WINDOW[0] + WINDOW_BLOCKS;
+  expect(WINDOW[1], `(c) the window (${WINDOW[0]}..${WINDOW[1]} blocks) lies inside the capture`).toBeLessThan(CAPTURE_BLOCKS);
+  await liveChecked(rt, 'load', SINE_PATH, '(c) load after the held note', epoch);
+  const controlFile = path.join(artifacts, 'held-control.wav');
+  const controlTrigger = (await frames(rt.session)) + 300;
+  await captureNote(rt.session, {
+    file: controlFile,
+    trigger: controlTrigger,
+    tag: 'held note control',
+    length: CAPTURE_BLOCKS,
+    noPress: true,
+    during: async () => {
+      await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
+      await waitClock(rt.clock, Math.ceil(WINDOW[1]! / 1.5) + 100); // past the window's end (1500 blocks a second)
+      await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+    },
+  });
   const held = readFloatWav(heldFile);
   const control = readFloatWav(controlFile);
   const levelBefore = leftOf(held, mark.start - 200, mark.start);
@@ -280,7 +285,6 @@ async function expectLiveMachine(rt: TestRuntime): Promise<void> {
   const peakAfter = peakOf(held, Math.floor(WINDOW[0]! * (held.length / CAPTURE_BLOCKS)), Math.floor(WINDOW[1]! * (held.length / CAPTURE_BLOCKS)));
   expect(peakAfter, `(c) the held key renders silence after the unload (peak ${peakAfter.toExponential(2)})`).toBeLessThan(1e-4);
   expect(ampAfter, `(c) the module's sine is gone after the unload (${ampAfter.toFixed(5)} at ${hz} Hz against ${ampBefore.toFixed(4)} before)`).toBeLessThan(ampBefore * 0.02);
-  await liveChecked(rt, 'load', SINE_PATH, '(c) load after the held note', epoch);
   const third = await notePitch(rt, artifacts, 'after-held');
   expect(third.peak, `(c) a new note after the load is audible (peak ${third.peak.toFixed(4)})`).toBeGreaterThan(first.peak * 0.5);
 

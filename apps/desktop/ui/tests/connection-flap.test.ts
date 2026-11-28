@@ -4,12 +4,13 @@ import type { DkModule } from '@digi/dk-session';
 import { createFakeSessions, createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
 import { DISCONNECT_GRACE_MS } from '@digi/workbench-core/transfer/connection-state.ts';
 import { watchOpenModule } from '../src/shell/open-module';
+import { deviceProfiles, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
 
 const read = vi.hoisted(() => ({ next: undefined as undefined | (() => Promise<unknown[]>) }));
 vi.mock('@digi/workbench-core/modules/dktransfer.ts', () => ({ readLoadedModules: () => read.next!() }));
 
 const pm = { name: 'project-manager', index: 1, uiInstance: 3 } as DkModule;
-const device = { id: 'dt2', name: 'Digitakt II' };
+const device = { id: runtimeDeviceIds[0]!, name: deviceProfiles[runtimeDeviceIds[0]!].name };
 const lostReply = { type: 'lost', reason: 'no reply from the device' } as const;
 
 // The device: `info` answers or fails, as the cable does.
