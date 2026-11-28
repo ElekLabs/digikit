@@ -148,6 +148,62 @@
   gap: 6px;
   white-space: nowrap;
 }
+.pm-hex-cells {
+  display: inline-flex;
+  gap: 6px;
+  flex: none;
+  width: calc(16 * 2ch + 15 * 6px);
+}
+.pm-ascii {
+  display: inline-flex;
+  margin-left: 6px;
+  color: var(--ink-2, inherit);
+}
+.pm-ascii-cell {
+  display: inline-block;
+  width: 1ch;
+}
+.pm-hot {
+  background: var(--panel-2);
+  outline: 1px solid var(--action);
+}
+.pm-decoded {
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.pm-decoded h3,
+.pm-decoded h4 {
+  margin: 8px 0 4px;
+  font-size: 12px;
+}
+.pm-checksum {
+  margin-left: 10px;
+  font-weight: normal;
+}
+.pm-checksum.ok {
+  color: var(--status-ok, var(--action));
+}
+.pm-checksum.mismatch {
+  color: var(--status-err, var(--action));
+}
+.pm-field {
+  display: grid;
+  grid-template-columns: 14ch 1fr auto;
+  gap: 10px;
+  padding: 1px 4px;
+}
+.pm-field-label,
+.pm-field-size {
+  color: var(--ink-3);
+}
+.pm-field-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
 .pm-hex-offset {
   color: var(--ink-3);
   margin-right: 6px;

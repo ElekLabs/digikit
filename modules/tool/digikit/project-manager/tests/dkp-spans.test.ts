@@ -1,10 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { dkpSpans, kindAt, type Span, type SpanKind } from '../workbench/dkp-spans';
+import { decodeDkp, dkpSpans, kindAt, type Span, type SpanKind } from '../workbench/dkp-spans';
 
 interface Vector {
   name: string;
   hex: string;
+  device: number;
+  slot: number;
+  counter: number;
+  stamp: number;
   used: number;
   entries: [string, string, string][];
   modules: [string, number][];
@@ -104,6 +108,64 @@ describe('the project file highlighter against the dkp vectors', () => {
         expect(span.end).toBeLessThanOrEqual(bytes.length);
         at = span.end;
       }
+    }
+  });
+});
+
+describe('the decoded fields and checksum against the dkp vectors', () => {
+  const hex32 = (value: number) => value.toString(16).padStart(8, '0').toUpperCase();
+  const valueOf = (fields: { label: string; value: string }[], label: string) => fields.find((f) => f.label === label)?.value;
+
+  it('decodes the header of every valid file to the vector values and the checksum is ok', () => {
+    for (const vector of vectors.valid) {
+      const decoded = decodeDkp(bytesOf(vector.hex))!;
+      const header = decoded.fields.filter((f) => f.section === 'Header');
+      expect(valueOf(header, 'magic'), vector.name).toBe('DKPJ');
+      expect(valueOf(header, 'version'), vector.name).toBe('1');
+      expect(valueOf(header, 'device'), vector.name).toBe(String(vector.device));
+      expect(valueOf(header, 'slot'), vector.name).toBe(String(vector.slot));
+      expect(valueOf(header, 'name'), vector.name).toBe(vector.name === 'empty' || vector.name === 'one_owner' ? 'MY SONG' : valueOf(header, 'name'));
+      expect(valueOf(header, 'stamp'), vector.name).toBe(hex32(vector.stamp));
+      expect(valueOf(header, 'write counter'), vector.name).toBe(String(vector.counter));
+      expect(valueOf(header, 'used'), vector.name).toBe(String(vector.used));
+      expect(valueOf(header, 'crc'), vector.name).toBe(hex32(new DataView(bytesOf(vector.hex).buffer).getUint32(38)));
+      expect(decoded.checksum, vector.name).toBe('ok');
+    }
+  });
+
+  it('decodes each module and each settings entry of every valid file', () => {
+    for (const vector of vectors.valid) {
+      const decoded = decodeDkp(bytesOf(vector.hex))!;
+      const modules = decoded.fields.filter((f) => f.section === 'Modules');
+      expect(modules.filter((f) => f.label === 'module').map((f) => f.value), vector.name).toEqual(vector.modules.map(([id]) => id));
+      expect(modules.filter((f) => f.label === 'hash').map((f) => f.value), vector.name).toEqual(vector.modules.map(([, hash]) => hex32(hash)));
+      const entries = decoded.fields.filter((f) => f.section.startsWith('Settings ') && f.label !== 'owner');
+      expect(entries.map((f) => f.label), vector.name).toEqual(vector.entries.map(([, key]) => key));
+      expect(entries.map((f) => f.size), vector.name).toEqual(vector.entries.map(([, , value]) => value.length / 2));
+      expect(decoded.fields.filter((f) => f.label === 'owner').map((f) => f.value), vector.name).toEqual(
+        [...new Set(vector.entries.map(([owner]) => owner))],
+      );
+    }
+    const one = decodeDkp(bytesOf(vectors.valid.find((v) => v.name === 'one_owner')!.hex))!;
+    expect(valueOf(one.fields, 'test/owner/pool')).toBe('01 02 03');
+  });
+
+  it('reports a mismatch for a file with one byte flipped, in the header, the body or the stored crc', () => {
+    for (const vector of vectors.valid) {
+      const original = bytesOf(vector.hex);
+      for (const at of [0x09, 30, 38, original.length - 1].filter((i) => i < vector.used)) {
+        const bytes = original.slice();
+        bytes[at] ^= 0x01;
+        const decoded = decodeDkp(bytes);
+        // a flipped magic or version byte is no known file at all; the others decode and fail the checksum
+        if (decoded) expect(decoded.checksum, `${vector.name} at ${at}`).toBe('mismatch');
+      }
+    }
+  });
+
+  it('gives no fields for a file of another version', () => {
+    for (const vector of vectors.invalid.filter((v) => v.why === 'version')) {
+      expect(decodeDkp(bytesOf(vector.hex)), vector.name).toBeUndefined();
     }
   });
 });

@@ -1,6 +1,7 @@
 // The preview's answers to the Project Manager queries: a few fake projects with saved settings (a binary value, a long text, a short text). The module has no
 // settings of its own, so this file also gives the preview the (empty) schema it needs to load the module and open its page.
 import { memoryQueryService, type MemoryQueryService } from '@digi/module-ui';
+import { crc32 } from './dkp-spans';
 import { ProjectManager } from './gen/project_manager_pb.js';
 
 export const schema = { module: 'digikit/project-manager', name: 'Project manager', settings: [] } as const;
@@ -80,7 +81,10 @@ function dkpOf(p: FakeProject): Uint8Array {
     ...name, ...Array.from({ length: 16 - name.length }, () => 0),
     ...be(p.stamp ?? 0, 4), ...be(p.counter ?? 0, 4), ...be(42 + body.length, 4), ...be(0, 4),
   ];
-  return Uint8Array.from([...head, ...body]);
+  const file = Uint8Array.from([...head, ...body]);
+  // the stored CRC-32, over the file without its own four bytes
+  new DataView(file.buffer).setUint32(38, crc32(file, [[0, 38], [42, file.length]]));
+  return file;
 }
 
 export default function previewQueries(): MemoryQueryService {

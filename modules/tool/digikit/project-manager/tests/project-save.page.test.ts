@@ -65,6 +65,20 @@ describe('the Raw tab', () => {
     view.dispose();
   });
 
+  it('shows an ASCII column of 16 characters per row beside the hex cells', async () => {
+    const view = open();
+    await vi.waitFor(() => expect(view.rows()).toHaveLength(2));
+    view.rows()[0].click();
+    await vi.waitFor(() => expect(view.button('Raw')).toBeDefined());
+    view.button('Raw')!.click();
+    await vi.waitFor(() => expect(view.host.querySelectorAll('.pm-hex-line')).toHaveLength(63));
+    const first = view.host.querySelector('.pm-hex-line')!;
+    expect(first.querySelector('.pm-ascii')?.textContent).toHaveLength(16);
+    // byte 0 is 0x44 'D', byte 1 is 0x01 (not printable)
+    expect(first.querySelector('.pm-ascii')?.textContent?.slice(0, 2)).toBe('D.');
+    view.dispose();
+  });
+
   it('asks for the next page at the offset it has and joins them', async () => {
     const view = open();
     await vi.waitFor(() => expect(view.rows()).toHaveLength(2));
@@ -98,6 +112,42 @@ describe('the Raw tab', () => {
       for (const cell of cells) expect(cell.classList.length).toBeLessThanOrEqual(2);
     }
     expect([kinds('magic'), kinds('version'), kinds('device'), kinds('slot'), kinds('counter'), kinds('used'), kinds('crc')]).toEqual([4, 2, 2, 1, 4, 4, 4]);
+    view.dispose();
+  });
+
+  it('lists the decoded fields with the checksum state and marks the bytes of the hovered field in hex and ASCII', async () => {
+    const dkp = Uint8Array.from([
+      ...new TextEncoder().encode('DKPJ'), 0, 1, 0x12, 0x34, 3, 2, 0x41, 0x42, ...Array.from({ length: 14 }, () => 0),
+      0, 0, 0, 9, 0, 0, 0, 7, 0, 0, 0, 42, 1, 2, 3, 4,
+    ]);
+    const view = open({ readFile: () => ({ found: true, data: dkp, total: dkp.length }) });
+    await vi.waitFor(() => expect(view.rows()).toHaveLength(2));
+    view.rows()[1].click();
+    await vi.waitFor(() => expect(view.button('Raw')).toBeDefined());
+    view.button('Raw')!.click();
+    await vi.waitFor(() => expect(view.host.querySelector('.pm-decoded')).not.toBeNull());
+    expect(view.host.querySelector('.pm-checksum')?.textContent).toBe('checksum mismatch');
+    const row = [...view.host.querySelectorAll<HTMLElement>('.pm-field')].find((f) => f.textContent?.startsWith('device'))!;
+    expect(row.querySelector('.pm-field-value')?.textContent).toBe('4660');
+    row.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    row.dispatchEvent(new MouseEvent('mouseenter'));
+    const marked = (selector: string) => [...view.host.querySelectorAll<HTMLElement>(`${selector}.pm-hot`)].map((c) => c.dataset.offset);
+    await vi.waitFor(() => expect(marked('.pm-byte')).toEqual(['6', '7']));
+    expect(marked('.pm-ascii-cell')).toEqual(['6', '7']);
+    // hovering a byte marks its decoded row
+    view.host.querySelector<HTMLElement>('.pm-byte[data-offset="30"]')!.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.waitFor(() => expect([...view.host.querySelectorAll('.pm-field.pm-hot .pm-field-label')].map((l) => l.textContent)).toEqual(['write counter']));
+    view.dispose();
+  });
+
+  it('shows no decoded panel for a file of no known version', async () => {
+    const view = open();
+    await vi.waitFor(() => expect(view.rows()).toHaveLength(2));
+    view.rows()[1].click();
+    await vi.waitFor(() => expect(view.button('Raw')).toBeDefined());
+    view.button('Raw')!.click();
+    await vi.waitFor(() => expect(view.host.querySelectorAll('.pm-hex-line')).toHaveLength(2));
+    expect(view.host.querySelector('.pm-decoded')).toBeNull();
     view.dispose();
   });
 
