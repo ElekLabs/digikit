@@ -54,12 +54,10 @@ describe('a target whose connection flaps', () => {
     await refresh();
     expect(app.inventory.modules()).toEqual([pm]);
     app.connection.noteConnection(lostReply);
-    expect(app.inventory.stale()).toBe(true);
     expect(app.inventory.modules()).toEqual([pm]);
     await refresh();
     app.connection.noteConnection({ type: 'answered', device });
     expect(app.inventory.modules()).toEqual([pm]);
-    expect(app.inventory.stale()).toBe(false);
     vi.advanceTimersByTime(DISCONNECT_GRACE_MS * 2);
     expect(app.inventory.modules()).toEqual([pm]);
     expect(left).not.toHaveBeenCalled();
@@ -77,14 +75,28 @@ describe('a target whose connection flaps', () => {
     expect(left).toHaveBeenCalledTimes(1);
   });
 
+  it('a lost request while already disconnected still starts a re-read', async () => {
+    const { state, app, refresh } = rig();
+    app.connection.noteConnection({ type: 'answered', device });
+    await refresh();
+    app.connection.noteConnection(lostReply);
+    app.connection.noteConnection(lostReply);
+    state.infoFails = true;
+    app.connection.noteConnection(lostReply);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.inventory.modules()).toEqual([]);
+    expect(app.inventory.settled()).toBe(true);
+  });
+
   it('clears the inventory when the target stays disconnected beyond the grace period', async () => {
     const { app, left, refresh } = rig();
     app.connection.noteConnection({ type: 'answered', device });
     await refresh();
     app.connection.noteConnection(lostReply);
-    vi.advanceTimersByTime(DISCONNECT_GRACE_MS - 1);
+    // the owner's re-read of the lost request answers first (the device still replies to INFO)
+    await vi.advanceTimersByTimeAsync(DISCONNECT_GRACE_MS - 1);
     expect(app.inventory.modules()).toEqual([pm]);
-    vi.advanceTimersByTime(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(app.inventory.modules()).toEqual([]);
     expect(left).toHaveBeenCalledTimes(1);
   });

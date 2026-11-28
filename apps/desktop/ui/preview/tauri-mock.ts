@@ -144,7 +144,14 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
         } as T;
       if (method.startsWith('card.'))
         return (await cardCall(method, (args?.params as Record<string, unknown>) ?? {})) as T;
-      return {} as T; // midi.usb.in / midi.usb.out: nothing is ever answered
+      if (method === 'midi.usb.in') {
+        const text = String(args?.params?.bytes ?? '');
+        const bytes = Uint8Array.from(text.match(/../g) ?? [], (h) => parseInt(h, 16));
+        if (bytes.length) firmware.midi.usbIn(emulator.source.device, bytes);
+        return { queued: bytes.length } as T;
+      }
+      if (method === 'midi.usb.out') return { hex: firmware.midi.usbOut() } as T;
+      return {} as T;
     }
     case 'session_set_actions_enabled':
       return undefined as T; // the native Session menu; the preview has none

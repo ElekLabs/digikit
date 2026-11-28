@@ -105,6 +105,7 @@ export default function WorkbenchShell(
   },
 ) {
   const app = useTransferApp();
+  onCleanup(app.connection.dispose);
   const fw = useFirmwareApp();
   const { drawer, log, logWriter, emulatorActions } = untrack(() => props.tools);
   const { logEvent, logInput } = logWriter;

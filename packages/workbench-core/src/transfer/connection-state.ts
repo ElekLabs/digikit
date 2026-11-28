@@ -71,6 +71,12 @@ export function createConnection(
     }
   }
 
-  return { connection, setConnection, noteConnection, asked, noteReply };
+  /** The owner's cleanup: a pending grace timer must not fire into a disposed app. */
+  function dispose(): void {
+    if (graceTimer !== undefined) clearTimeout(graceTimer);
+    graceTimer = undefined;
+  }
+
+  return { connection, setConnection, noteConnection, asked, noteReply, dispose };
 }
 export type ConnectionApp = ReturnType<typeof createConnection>;

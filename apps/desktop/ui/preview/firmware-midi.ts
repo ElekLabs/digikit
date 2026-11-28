@@ -71,6 +71,8 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
   );
   const images = new Map<string, Image>();
   let link: Link | undefined;
+  // The emulator target's USB MIDI: the same responder, on a link of its own (`midi.usb.in` sends, `midi.usb.out` drains the replies).
+  const emulatorLink: Link = { name: '', queue: [] };
 
   const online = (device: Device) => device.state !== 'none' && Date.now() >= device.offlineUntil;
   const ports = () => [
@@ -79,7 +81,7 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
   ];
 
   function push(to: Link, message: Uint8Array) {
-    if (link !== to) return;
+    if (link !== to && emulatorLink !== to) return;
     to.queue.push(message);
     to.wake?.();
   }
@@ -151,7 +153,7 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
   // The settings record of a runtime that has stored nothing: the `DKST` header (version 1, seq 0, used 18, crc 0), no entries.
   const settingsRecord = concat(new TextEncoder().encode('DKST'), [0, 1], be32(0), be32(18), be32(0));
 
-  /** SETTINGS (a read in pieces: offset u32, length u16; the reply echoes both and gives the total) and FAULT (no fault held). */
+  /** SETTINGS (a read in pieces: offset u32, length u16; the reply is flags, copy, seq, the record length and the piece) and FAULT (no fault held). */
   function settings(to: Link, device: Device, msg: Uint8Array) {
     if (!device.runtime) return;
     const seq = msg[6]!;
@@ -160,7 +162,18 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     const offset = (request[0]! << 24) | (request[1]! << 16) | (request[2]! << 8) | request[3]!;
     const length = (request[4]! << 8) | request[5]!;
     const piece = settingsRecord.subarray(offset, offset + length);
-    reply(to, CMD.SETTINGS, seq, 0, concat(request.subarray(0, 6), be32(settingsRecord.length), piece));
+    // the runtime's body: u8 flags, u8 active copy, u32 seq, u32 record length, then the bytes
+    reply(to, CMD.SETTINGS, seq, 0, concat([0, 0], be32(0), be32(settingsRecord.length), piece));
+  }
+
+  function answer(to: Link, msg: Uint8Array) {
+    const device = devices.get(to.name);
+    if (!device || !online(device) || device.state === 'noreply' || sim.dev === 'noreply') return;
+    if (msg[1] === 0x00 && msg[2] === 0x20) stock(to, device, msg);
+    else if (msg[1] === 0x7d && msg[5] === CMD.INFO) info(to, device, msg[6]!);
+    else if (msg[1] === 0x7d && (msg[5] === CMD.SETTINGS || msg[5] === CMD.FAULT)) settings(to, device, msg);
+    // any other command is unknown to this runtime (no debug module): it answers E_PROTO (-60) instead of staying silent
+    else if (msg[1] === 0x7d && device.runtime) reply(to, msg[5]!, msg[6]!, 0xc4);
   }
 
   function close() {
@@ -181,11 +194,19 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     },
     send(msg: Uint8Array) {
       if (!link) throw new Error('The MIDI port is closed.');
-      const device = devices.get(link.name);
-      if (!device || !online(device) || device.state === 'noreply' || sim.dev === 'noreply') return;
-      if (msg[1] === 0x00 && msg[2] === 0x20) stock(link, device, msg);
-      else if (msg[1] === 0x7d && msg[5] === CMD.INFO) info(link, device, msg[6]!);
-      else if (msg[1] === 0x7d && (msg[5] === CMD.SETTINGS || msg[5] === CMD.FAULT)) settings(link, device, msg);
+      answer(link, msg);
+    },
+    /** The emulator target's `midi.usb.in`: one message to the runtime of `device`. */
+    usbIn(device: string, bytes: Uint8Array) {
+      emulatorLink.name = portOf(deviceProfiles[device]!);
+      answer(emulatorLink, bytes);
+    },
+    /** The emulator target's `midi.usb.out`: the replies so far, as hex. */
+    usbOut(): string {
+      return emulatorLink.queue
+        .splice(0)
+        .map((m) => Array.from(m, (b) => b.toString(16).padStart(2, '0')).join(''))
+        .join('');
     },
     async recv(timeoutMs: number): Promise<ArrayBuffer> {
       const from = link;
