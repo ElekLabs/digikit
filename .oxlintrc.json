@@ -34,6 +34,10 @@
               {
                 "name": "@tauri-apps/api/core",
                 "message": "Call the Tauri commands through the Host (packages/workbench-core/src/host/host.ts); only host/tauri-host.ts imports invoke."
+              },
+              {
+                "name": "@tauri-apps/api/event",
+                "message": "Listen to native events through the Host (packages/workbench-core/src/host/host.ts); only host/tauri-host.ts imports listen."
               }
             ],
             "patterns": [

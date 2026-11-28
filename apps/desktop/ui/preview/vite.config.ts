@@ -11,6 +11,7 @@ export default mergeConfig(desktop, {
     alias: [
       { find: './workbench-environment', replacement: here('./main.tsx') },
       { find: '@tauri-apps/api/core', replacement: here('./tauri-mock.ts') },
+      { find: '@tauri-apps/api/event', replacement: here('./tauri-event-mock.ts') },
       { find: /^\.\/memory-backend$/, replacement: here('./memory-backend.mock.ts') },
       { find: /^\.\/calibration-backend$/, replacement: here('./calibration-backend.mock.ts') },
       { find: /^\.\/recorder$/, replacement: here('./profile-backend.mock.ts') },
