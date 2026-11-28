@@ -17,6 +17,7 @@ import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 import { gateContext } from './gate-context.mjs';
 import { areaSelection, portAreaSelection } from './runtime-areas.mjs';
+import { confinedToSelection } from './selection-files.mjs';
 import { DEVICES, leavesOf, ownedConformance, ownershipSelection } from './device-owners.mjs';
 
 export { DEVICES };
@@ -61,6 +62,10 @@ export const whyText = (t) =>
   ].join(', ');
 
 // The tasks of a selection by DSP mode, and how many start at once with the machine's core budget and slots.
+// Whether the fixed device smoke set joins: `affected` selects a device half, unless the change is confined to the gate's own selection
+// files (selection-files.mjs), which no device run proves.
+export const smokeSelected = (changed, affected) => !confinedToSelection(changed) && deviceHalves(affected).length > 0;
+
 export const modeSummary = (tests, work = workCores()) => {
   const count = { sharc: 0, zero: 0 };
   for (const t of tests) count[t.dsp] += t.targets.length;
@@ -257,6 +262,8 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       deviceFiles: owned.devices,
       changed,
     };
+    // A change confined to the gate's own selection files selects no device test (selection-files.mjs).
+    if (confinedToSelection(changed)) selection = { ...selection, tests: [], deviceFiles: [] };
   } else
     selection = {
       ...namedSelection(names, projects),
@@ -284,7 +291,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   const affected = base ? affectedTasks(base) : new Set();
   const fixed = gate ? [] : affectedFixed(base ?? process.env.DIGI_GATE_BASE ?? 'main');
   // The device smoke set runs whenever `affected` selects a device half.
-  const smoke = base && deviceHalves(affected).length ? [DEVICE_SMOKE] : [];
+  const smoke = base && smokeSelected(selection.changed, affected) ? [DEVICE_SMOKE] : [];
   // A changed device file runs every device half `affected` selects of that device; the conformance tasks are those of
   // ownedConformance.
   const deviceHalvesOf = deviceFiles.length ? halvesOfDevices(deviceHalves(affected), deviceFiles) : [];
@@ -324,7 +331,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     console.log(
       smoke.length
         ? `  ${DEVICE_SMOKE.project}: ${DEVICE_SMOKE.target} (${smokeHalves(projects).length} halves)`
-        : `  ${DEVICE_SMOKE.project}: not selected (no device input changed)`,
+        : `  ${DEVICE_SMOKE.project}: not selected (${confinedToSelection(selection.changed) ? 'only gate selection files changed' : 'no device input changed'})`,
     );
   if (base) {
     const skipped = skippedHalves(affected, pairs, smokeHalves(projects));
