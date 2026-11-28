@@ -1,0 +1,5 @@
+{
+  "name": "nx-selection",
+  "dir": "tools/nx",
+  "include": "tests/*.test.mjs"
+}

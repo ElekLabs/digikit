@@ -36,6 +36,9 @@ export const entriesOf = (area, areas) =>
       : [entry],
   );
 
+// An entry file is `*` (all), a record file name, or a glob over the record file (`tests/shot-*-pool.device.test.ts`).
+const matches = (f, file) => file === '*' || file === f || (/[*?]/.test(file) && matchesGlob(f, file));
+
 /** The test records of a 'project:file' / 'project:*' entry: [{ project, file, dsp, targets }]; [] when it names none. */
 const recordsOf = (entry, projects) => {
   const at = entry.indexOf(':');
@@ -44,7 +47,7 @@ const recordsOf = (entry, projects) => {
   const out = [];
   for (const rec of project?.metadata?.runtimeAcceptance ?? [])
     for (const f of rec.files ?? []) {
-      if (file !== '*' && file !== f) continue;
+      if (!matches(f, file)) continue;
       const targets = leavesOf(f, project.targets);
       if (targets.length) out.push({ project: name, file: f, dsp: rec.dsp ?? 'zero', targets });
     }
@@ -93,6 +96,24 @@ export const areaSelection = (projects, changed, areas = loadAreas()) => {
   if (hit.has('image')) notes.push('area image: a whole-image file changed, so the tests of every area run');
   notes.push(...reasons);
   return { tests: [...byKey.values()], governed, notes, unclassified };
+};
+
+/** The tests of the platform areas that declare the changed port bindings: `mapped` is the `{ file, project }` list of ownershipSelection;
+ * a `ports/` file mapped to a project whose root is a platform module selects that module's area (its `module.toml` stands for it).
+ * Returns tests as areaSelection does, their `changed` naming the port file. */
+export const portAreaSelection = (projects, mapped, areas = loadAreas()) => {
+  const root = (name) => projects.find((p) => p.name === name)?.root;
+  const stand = mapped
+    .filter(({ file, project }) => file.startsWith('ports/') && root(project)?.startsWith('runtime/platform/'))
+    .map(({ file, project }) => ({ file, stand: `${root(project)}/module.toml` }));
+  const out = areaSelection(projects, [...new Set(stand.map((s) => s.stand))], areas);
+  const from = (f) => stand.filter((s) => s.stand === f).map((s) => s.file);
+  return {
+    tests: out.tests.map((t) => ({ ...t, changed: [...new Set(t.changed.flatMap(from))] })),
+    notes: stand.length
+      ? [...new Set(stand.map((s) => `${s.file} -> declaring area of ${s.stand.split('/').slice(0, 3).join('/')}`))]
+      : [],
+  };
 };
 
 /** The files among `files` under the runtime scope that are in no area and not host-proven. */

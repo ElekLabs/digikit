@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 import { gateContext } from './gate-context.mjs';
-import { areaSelection } from './runtime-areas.mjs';
+import { areaSelection, portAreaSelection } from './runtime-areas.mjs';
 import { DEVICES, leavesOf, ownedConformance, ownershipSelection } from './device-owners.mjs';
 
 export { DEVICES };
@@ -239,18 +239,21 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       changed: changed.filter((f) => !area.governed.has(f)),
       closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
       portUsers: ctx.portUsers,
+      portEntries: ctx.portEntries,
       deviceOf: ctx.deviceOf,
       projectJsonOf: (file) => ({ before: gitShow(root, base, file), after: readIfExists(resolve(root, file)) }),
     });
+    // A changed port binding also selects the area of the platform module that declares it.
+    const declaring = portAreaSelection(projects, owned.mapped);
     const named = namedSelection(names, projects);
     const seen = new Set();
     selection = {
       ...owned,
-      tests: [...area.tests, ...owned.tests, ...named.tests].filter(
+      tests: [...area.tests, ...declaring.tests, ...owned.tests, ...named.tests].filter(
         (t) => !seen.has(`${t.project}:${t.file}`) && seen.add(`${t.project}:${t.file}`),
       ),
       unknown: named.unknown,
-      areaNotes: area.notes,
+      areaNotes: [...area.notes, ...declaring.notes],
       deviceFiles: owned.devices,
       changed,
     };
