@@ -16,8 +16,7 @@ mod toast;
 
 pub use exports::{
     dk_project_current, dk_project_get, dk_project_list, dk_project_read, dk_project_settings,
-    dk_project_status,
-    DK_STATUS,
+    dk_project_status, DK_STATUS,
 };
 pub use files::{io_done, io_step, DK_JOB};
 pub use host::{DkHost, Owner};
