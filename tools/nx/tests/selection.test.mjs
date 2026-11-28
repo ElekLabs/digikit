@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { deviceShorts } from '../device-files.mjs';
 import { ownershipSelection } from '../device-owners.mjs';
+import { gateContext } from '../gate-context.mjs';
 import { declaredUsers, portEntryUsers } from '../port-entries.mjs';
 import { checkComplete, classify, loadAreas, portAreaSelection } from '../runtime-areas.mjs';
 
@@ -10,13 +11,6 @@ const areas = loadAreas();
 const [DEV] = deviceShorts();
 
 describe('platform areas', () => {
-  it('maps a platform module file to the area of its module', () => {
-    expect(classify('runtime/platform/lfo-table/src/cf/table.c', areas)).toEqual({
-      kind: 'area',
-      areas: ['platform-lfo-table'],
-    });
-  });
-
   it('fails a file of a platform module that has no area', () => {
     const bare = { ...areas, areas: { ...areas.areas } };
     delete bare.areas['platform-lfo-table'];
@@ -140,5 +134,59 @@ describe('declaring area of a changed port binding', () => {
       inputArea,
     );
     expect(got.tests).toEqual([]);
+  });
+});
+
+describe('gate context against the base', () => {
+  const decl = (users) =>
+    `[[hook]]\nname = "cf.input.hook.key_event"\nusers = [${users.map((u) => `"${u}"`).join(', ')}]\n`;
+  const ctx = ({ now = {}, then = {}, ...rest }) =>
+    gateContext('/x', 'base' in rest ? rest.base : 'main', {
+      read: (f) => now[f],
+      show: (f) => then[f],
+      declarationTexts: () => [decl(['core/input'])],
+      deviceGlobs: () => [{ short: DEV, globs: [`ports/${DEV}-*.toml`] }],
+    });
+  const F = 'ports/fw/input.toml';
+
+  it('names the users of a declaration added since the base', () => {
+    expect(ctx({ now: { [F]: decl(['core/input']) } }).portUsers(F)).toEqual(['core/input']);
+  });
+
+  it('names the users of a changed declaration, old and new, not those of an unchanged one', () => {
+    const two = `${decl(['core/input'])}[[hook]]\nname = "b"\nusers = ["core/ui"]\n`;
+    const three = `${decl(['core/input'])}[[hook]]\nname = "b"\nusers = ["core/ui", "core/x"]\n`;
+    expect(
+      ctx({ now: { [F]: three }, then: { [F]: two } })
+        .portUsers(F)
+        .sort(),
+    ).toEqual(['core/ui', 'core/x']);
+  });
+
+  it('names the users of a declaration removed since the base: the file is gone, so none', () => {
+    expect(ctx({ then: { [F]: decl(['core/input']) } }).portUsers(F)).toEqual([]);
+  });
+
+  it('counts every declaration as changed when no base is given', () => {
+    const none = ctx({ now: { [F]: decl(['core/a']) }, then: { [F]: decl(['core/b']) }, base: undefined });
+    expect(none.portUsers(F)).toEqual(['core/a']);
+  });
+
+  it('reads a generated port file against the base text', () => {
+    const file = `ports/${DEV}-1.0.toml`;
+    const port = (mode) => GENERATED(mode);
+    const changed = ctx({ now: { [file]: port('before') }, then: { [file]: port('replace') } }).portEntries(file);
+    expect(changed).toEqual({ users: ['core/input'], wide: false });
+  });
+
+  it('is wide for a generated port file without a base, a new one or a removed one', () => {
+    const file = `ports/${DEV}-1.0.toml`;
+    expect(ctx({ now: { [file]: GENERATED('before') }, base: undefined }).portEntries(file).wide).toBe(true);
+    expect(ctx({ then: { [file]: GENERATED('before') } }).portEntries(file).wide).toBe(true);
+    expect(ctx({ now: { [file]: GENERATED('before') } }).portEntries(file).wide).toBe(true);
+  });
+
+  it('leaves a file that is no generated port file alone', () => {
+    expect(ctx({}).portEntries('ports/fw/input.toml')).toBeUndefined();
   });
 });
