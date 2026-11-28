@@ -44,10 +44,14 @@ export function createTransferApp(
   const inventory = createModuleInventory();
   const jobs = createJobs();
   const state = createTransferState({ env, storage, jobs });
-  const connection = createConnection(env, () => {
-    inventory.clear();
-    state.forgetDevice();
-  });
+  const connection = createConnection(
+    env,
+    () => {
+      inventory.clear();
+      state.forgetDevice();
+    },
+    { lost: () => inventory.markStale(), expired: () => inventory.empty() },
+  );
   const target = createTarget({ env, storage, sessions, connection });
   const { transferBackend, loadLibrary, installDeps } = createTransferBackend({
     env,

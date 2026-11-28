@@ -263,15 +263,12 @@ export default function WorkbenchShell(
     )
       return;
     const binding = app.target.bindSession();
-    const read = app.inventory.reader();
-    void binding
-      .session()
-      .then(async (s) => {
-        const info = await s.info(true);
-        binding.check();
-        await read(s, info);
-      })
-      .catch(() => {});
+    void app.inventory.refresh(async () => {
+      const session = await binding.session();
+      const info = await session.info(true);
+      binding.check();
+      return { session, info };
+    });
   });
   const pollAudio = async () => {
     try {

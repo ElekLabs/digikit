@@ -143,6 +143,26 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     push(to, concat([0xf0, 0x7d, 0x64, 0x6b, 1, CMD.INFO | 0x40, seq], encode8in7(body), [0xf7]));
   }
 
+  /** One reply of the runtime: status byte, then the body. */
+  function reply(to: Link, cmd: number, seq: number, status: number, body: ArrayLike<number> = []) {
+    push(to, concat([0xf0, 0x7d, 0x64, 0x6b, 1, cmd | 0x40, seq], encode8in7(concat([status], body)), [0xf7]));
+  }
+
+  // The settings record of a runtime that has stored nothing: the `DKST` header (version 1, seq 0, used 18, crc 0), no entries.
+  const settingsRecord = concat(new TextEncoder().encode('DKST'), [0, 1], be32(0), be32(18), be32(0));
+
+  /** SETTINGS (a read in pieces: offset u32, length u16; the reply echoes both and gives the total) and FAULT (no fault held). */
+  function settings(to: Link, device: Device, msg: Uint8Array) {
+    if (!device.runtime) return;
+    const seq = msg[6]!;
+    if (msg[5] === CMD.FAULT) return reply(to, CMD.FAULT, seq, 0);
+    const request = decode8in7(msg.subarray(7, msg.length - 1));
+    const offset = (request[0]! << 24) | (request[1]! << 16) | (request[2]! << 8) | request[3]!;
+    const length = (request[4]! << 8) | request[5]!;
+    const piece = settingsRecord.subarray(offset, offset + length);
+    reply(to, CMD.SETTINGS, seq, 0, concat(request.subarray(0, 6), be32(settingsRecord.length), piece));
+  }
+
   function close() {
     const previous = link;
     link = undefined;
@@ -165,6 +185,7 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
       if (!device || !online(device) || device.state === 'noreply' || sim.dev === 'noreply') return;
       if (msg[1] === 0x00 && msg[2] === 0x20) stock(link, device, msg);
       else if (msg[1] === 0x7d && msg[5] === CMD.INFO) info(link, device, msg[6]!);
+      else if (msg[1] === 0x7d && (msg[5] === CMD.SETTINGS || msg[5] === CMD.FAULT)) settings(link, device, msg);
     },
     async recv(timeoutMs: number): Promise<ArrayBuffer> {
       const from = link;
