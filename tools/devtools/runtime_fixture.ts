@@ -26,9 +26,9 @@ import {
   repoRoot,
   type Device,
 } from '../../packages/test-support/src/firmware-inputs.ts';
-import { DkSession, EmuUsbTransport } from '../../packages/dk-session/src/index.ts';
-import { steppedClock } from '../../packages/test-support/src/emulated-clock.ts';
-import { MS, Session } from '../../packages/test-support/src/session.ts';
+import { DkSession, EmuUsbTransport, steppedClock } from '../../packages/dk-session/src/index.ts';
+import { cloneFile } from '../../packages/test-support/src/clone.ts';
+import { MS, PROGRESS_HANG_S, Session } from '../../packages/test-support/src/session.ts';
 
 const FIRMWARE: Record<Device, string> = { dt2: '1.17', dn2: '1.12' };
 
@@ -134,7 +134,11 @@ try {
     const call = <T>(method: string, params?: Record<string, unknown>) => session!.client.call<T>(method, params);
     const stepSeconds = (s: number) => session!.client.step(s * 1000 * MS, { timeout_wall_s: 300 });
     const dk = new DkSession(new EmuUsbTransport(call, { stepInstructions: 20_000_000 }), {
-      clock: steppedClock(session),
+      clock: steppedClock(
+        () => session!.status() as never,
+        (instructions, limit) => session!.client.step(instructions, limit),
+        { hangMs: PROGRESS_HANG_S * 1000 },
+      ),
     });
     await stepSeconds(15);
     await dk.restart();
@@ -178,8 +182,8 @@ try {
       sha256[key] = null;
       continue;
     }
-    // A clone on APFS (the card is 3.8 GB), else a plain copy.
-    fs.copyFileSync(sources[key]!, path.join(tmpDir, name), fs.constants.COPYFILE_FICLONE);
+    // Shares blocks on APFS, else a sparse copy (the card is 24.8 GB apparent size).
+    cloneFile(sources[key]!, path.join(tmpDir, name));
     sha256[key] = sha256File(path.join(tmpDir, name));
   }
   const provenance = {

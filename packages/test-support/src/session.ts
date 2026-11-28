@@ -47,7 +47,17 @@ export const cardCacheRoot = (): string =>
 /** ColdFire instructions per emulated millisecond (the oracle clock). */
 export const MS = 132_000;
 /** A session refuses to start on a volume with less free space (card images and run dirs add up). */
-const MIN_FREE_GB = 50;
+// Measured need is well under 1 GB per run (run dir 4 KB-107 MB, shared cards 562 MB); the margin covers parallel slots and snapshots, and leaked dirs are cleaned by `mise run clean:runs`.
+const DEFAULT_MIN_FREE_GB = 5;
+
+/** The free space a session needs: `DIGI_MIN_FREE_GB` (a non-negative number) or the default. */
+export function minFreeGb(env: string | undefined = process.env.DIGI_MIN_FREE_GB): number {
+  if (env === undefined) return DEFAULT_MIN_FREE_GB;
+  const text = env.trim();
+  if (!/^\d+(\.\d+)?$/.test(text))
+    throw new Error(`DIGI_MIN_FREE_GB must be a non-negative decimal number, got "${env}"`);
+  return Number(text);
+}
 const MAX_STEP = 200_000_000;
 const FAULT_KINDS = new Set(['halt', 'fault', 'stall', 'stall.end', 'lagged']);
 
@@ -312,9 +322,10 @@ export class Session {
     const volume = options.runDir && fs.existsSync(options.runDir) ? options.runDir : os.tmpdir();
     const { bavail, bsize } = fs.statfsSync(volume);
     const freeGb = (bavail * bsize) / 1e9;
-    if (freeGb < MIN_FREE_GB) {
+    const minFree = minFreeGb();
+    if (freeGb < minFree) {
       throw new Error(
-        `refusing to start: ${freeGb.toFixed(1)} GB free under ${volume}, need ${MIN_FREE_GB} GB (mise run clean:runs)`,
+        `refusing to start: ${freeGb.toFixed(1)} GB free under ${volume}, need ${minFree} GB (mise run clean:runs)`,
       );
     }
     const ownedDir = options.runDir ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'digi-session-'));

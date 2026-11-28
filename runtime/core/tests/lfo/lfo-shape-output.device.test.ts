@@ -1,9 +1,10 @@
 import { expect, test } from 'vitest';
+import { RuntimeEvents } from '@digi/dk-session';
 import { pollUntil } from '@digi/test-support';
 import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
 import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { sendCc } from '@digi/regression/runtime/midi.ts';
-import { bootWith, shapeWords, SHAPE_A } from './lfo-cards.ts';
+import { bootWith, shapeWords, SHAPE_A, storePath } from './lfo-cards.ts';
 import {
   BAD,
   evalSine,
@@ -37,7 +38,7 @@ import {
  * - capacity: loading the shape adds one MODULES record and arena and no load failure; unselecting it and restarting restores MODULES and CAPACITY;
  * - start phase: on a note in MODE TRG the shape starts at the phase of SPH (item 4); each note takes a voice slot (with voice rotation the next slot, with one voice per track slot 0), whose phase is checked exactly;
  * - number kept: a restart with the same module keeps the wave number in `lfo.shapes` and the output follows the table again (item 5);
- * - reload: `RELOAD services/lfo.dks` answers 0, the shape table is republished and the output follows it again (the order of the steps and the refusals are host tests).
+ * - reload: with the debug module on the card and the runtime log listener open, `RELOAD services/lfo.dks` answers 0, the LIFECYCLE detach and attach of the shape module begin and end with status 0 in the runtime log, the shape table is republished and the output follows it again (step order and refusals are host tests).
  * The refusals are assembly tests.
  */
 const READS = 100;
@@ -191,13 +192,25 @@ cardRigs(
     }, 900_000);
 
     test('reload: RELOAD services/lfo.dks answers OK and the output follows the shape table again', async () => {
-      const rt = await bootWith(h, 'reload', [SHAPE_A]);
+      const rt = await bootWith(h, 'reload', ['digikit/debug', SHAPE_A]);
       const before = await shapeWords(h, rt);
       const rig = new LfoRig(rt);
       const dest = await rig.run();
       await rig.setWave(FIRST_SHAPE);
       const waveBefore = await rig.word(KNOB_WORD.WAVE);
-      const end = await h.usb(rt, (dk) => dk.reloadAndWait('services/lfo.dks'));
+      const shapeFile = storePath(h.device, SHAPE_A);
+      const end = await h.usb(rt, async (dk) => {
+        const events = new RuntimeEvents(dk, dk.clock);
+        await events.listen();
+        const reloaded = await dk.reloadAndWait('services/lfo.dks');
+        // take-down, then bring-up: the firmware fact is that both reach the runtime log
+        for (const step of ['detach', 'attach']) {
+          const begin = await events.untilLifecycle(shapeFile, step, 'begin', { withinMs: 5000 });
+          const done = await events.untilLifecycle(shapeFile, step, 'end', { withinMs: 5000 });
+          expect({ step, status: done.fields.status, op: done.fields.op }, `the end of ${step} of the shape module`).toEqual({ step, status: 0, op: begin.fields.op });
+        }
+        return reloaded;
+      });
       expect(end.result, 'the reload of the lfo service answers OK').toBe(0);
       expect(await rig.word(KNOB_WORD.WAVE), 'the WAVE knob word is unchanged').toBe(waveBefore);
       const samples = await rig.sample(dest, READS, GAP_MS);

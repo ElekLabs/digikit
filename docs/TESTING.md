@@ -129,7 +129,7 @@ A `runtimeAcceptance` record of a device test of the runtime loading and lifecyc
 | `mise run test` | Complete affected verification and merge gate: `nx affected` against `DIGI_GATE_BASE` (default `main`). |
 | `mise run test:plan` | The `affected` selection of all gate targets, device and conformance included, with native Nx `--explain`; no tasks execute. |
 | `mise run test:full` | Every gate target on every project, plus `tier-sweep` and `dt2-tier-sweep`; device tests run as `test-device-all` (full inputs for every file). It runs only when Em asks for it. A merge needs the merge gate in AGENTS.md "Checks": `mise run test` plus the static checks, or, when a change reaches most device tests through a shared input, a named device subset on DT2 and DN2 (one gate for a stack of PRs). |
-| `mise run clean:runs` | Lists old `digi-*` run directories under the temp dir (older than 24 h, not used by a running `digi-emud` or node process) and orphan `digi-emud` processes; `-- --yes` deletes the directories, `-- --hours N` sets the age. It never kills a process. A Session refuses to start with less than 50 GB free. |
+| `mise run clean:runs` | Lists old `digi-*` run directories under the temp dir (older than 24 h, not used by a running `digi-emud` or node process) and orphan `digi-emud` processes; `-- --yes` deletes the directories, `-- --hours N` sets the age. It never kills a process. A Session refuses to start with less than 5 GB free (`DIGI_MIN_FREE_GB` overrides). |
 
 ### Nx gate
 

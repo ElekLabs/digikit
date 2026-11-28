@@ -3,7 +3,7 @@
 // reply without `elapsed` falls back to the DSP frame counter (1500 frames a second). The ColdFire runs whenever the daemon runs, so the clock
 // still rises after a deliberate DSP stop and a wait ends by emulated time instead of hanging.
 import type { EmulatedProbe } from './dkupload-core.ts';
-import { EMULATED_POLL_MS, type Clock } from './waits.ts';
+import { DEFAULT_HANG_MS, EMULATED_POLL_MS, type Clock } from './waits.ts';
 
 /** ColdFire instructions per emulated ms (132 M a second). */
 export const INSNS_PER_MS = 132_000;
@@ -133,6 +133,65 @@ export function emulatedClock(status: () => Promise<EmuStatus>): Clock {
     },
     progress: () => progress,
     pollMs: EMULATED_POLL_MS,
+  };
+}
+
+/** Emulated ms one `step` rpc of a stepped clock covers: a long window stays several short rpcs, none near the control client's timeout. */
+const STEP_CHUNK_MS = 250;
+
+/** What a `step` call is told: the wall seconds the daemon may spend on this one chunk. */
+export interface StepLimit {
+  timeout_wall_s: number;
+}
+
+/** Wall ms one step chunk may take before the clock fails (a wedged daemon), and the `timeout_wall_s` the daemon is given for it. */
+export interface SteppedClockOptions {
+  hangMs?: number;
+}
+
+async function stepEmulated(
+  step: (instructions: number, limit: StepLimit) => Promise<unknown>,
+  ms: number,
+  hangMs: number,
+): Promise<void> {
+  for (let left = ms; left > 0; left -= STEP_CHUNK_MS) {
+    const instructions = Math.ceil(Math.min(left, STEP_CHUNK_MS) * INSNS_PER_MS);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        step(instructions, { timeout_wall_s: hangMs / 1000 }),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(`stepped clock: a step of ${instructions} instructions took over ${hangMs} ms of wall time`),
+              ),
+            hangMs,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/**
+ * A paused daemon: time passes only when stepped. `now` is the emulated ms of `status()`; `pause(ms)` steps the daemon by `ms` emulated ms
+ * (`step(instructions, { timeout_wall_s })`, the daemon's `step`) instead of waiting wall time, so a wait bounded by N ms of emulated time ends when the
+ * emulated clock has moved N ms, on any host speed and however many reads that takes. A chunk that takes over `hangMs` of wall time
+ * (default `DEFAULT_HANG_MS`) fails the pause.
+ */
+export function steppedClock(
+  status: () => Promise<EmuStatus>,
+  step: (instructions: number, limit: StepLimit) => Promise<unknown>,
+  { hangMs = DEFAULT_HANG_MS }: SteppedClockOptions = {},
+): Clock {
+  const base = emulatedClock(status);
+  return {
+    ...base,
+    pause: (ms) => stepEmulated(step, ms, hangMs),
+    pauseEmulated: (ms) => stepEmulated(step, ms, hangMs),
   };
 }
 

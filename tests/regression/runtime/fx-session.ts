@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect } from 'vitest';
-import { DkSession, EmuUsbTransport } from '@digi/dk-session';
+import { DkSession, EmuUsbTransport, steppedClock } from '@digi/dk-session';
 import {
   PROGRESS_HANG_S,
   repoRoot,
@@ -129,17 +129,19 @@ export async function withPausedFxProtocol<T>(
   if (status.mode !== 'paused') throw new Error('route protocol reads require a paused runtime');
   let active = true;
   // The daemon is paused: its emulated clock moves only by the transport's steps.
-  const dk = new DkSession(
-    new EmuUsbTransport(
-      async <R>(method: string, params?: Record<string, unknown>) => {
-        if (!active) throw new Error('route protocol is no longer active');
-        const result = await call(() => runtime.session.client.call<R>(method, params));
-        if (!active) throw new Error('route protocol is no longer active');
-        return result;
-      },
-      { stepInstructions: 400_000 },
+  const guarded = async <R>(method: string, params?: Record<string, unknown>) => {
+    if (!active) throw new Error('route protocol is no longer active');
+    const result = await call(() => runtime.session.client.call<R>(method, params));
+    if (!active) throw new Error('route protocol is no longer active');
+    return result;
+  };
+  const dk = new DkSession(new EmuUsbTransport(guarded, { stepInstructions: 400_000 }), {
+    clock: steppedClock(
+      () => call(() => runtime.session.status()),
+      (instructions, limit) => guarded('step', { instructions, ...limit }),
+      { hangMs: PROGRESS_HANG_S * 1000 },
     ),
-  );
+  });
   try {
     return await operation(dk);
   } finally {
