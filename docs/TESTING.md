@@ -70,7 +70,7 @@ affected tasks using their declared inputs and dependencies. Both local plugins 
 and `cargo.mjs`) discover projects without running Cargo. Explicit Rust targets use their pinned commands.
 `nx.json` owns shared inputs, target defaults and plugin registration. `tools/nx/modules.mjs` infers
 module targets and patch-set inputs; `tools/nx/cargo.mjs` infers Rust targets and path dependencies.
-Each owner's `project.json` supplies its explicit targets and overrides. The Nx tooling has no tests of its own (tests test functionality, not task wiring or layout): the gate commands `workspace:device-keys` (`tools/nx/check-keys.mjs`), `workspace:runtime-areas` (`tools/nx/check-areas.mjs`), `workspace:test-source`, `workspace:vitest-host`, `workspace:device-literals` and `patchkit:repo-check` check the declarations against the repository, and `nx show target inputs PROJECT:TARGET --check PATH` answers whether one file is an input.
+Each owner's `project.json` supplies its explicit targets and overrides. The Nx tooling has no tests of its own (tests test functionality, not task wiring or layout): the gate commands `workspace:device-keys` (`tools/nx/check-keys.mjs`), `workspace:runtime-areas` (`tools/nx/check-areas.mjs`), `workspace:test-source`, `workspace:vitest-host`, `workspace:device-literals`, `workspace:key-abi` (`tools/nx/key-abi.mjs`: the numbers of `services/shortcuts/src/key_abi.rs` against `key_subscribers.h`) and `patchkit:repo-check` check the declarations against the repository, and `nx show target inputs PROJECT:TARGET --check PATH` answers whether one file is an input.
 Device targets may build their declared packs, CLIs and daemons on demand; direct Vitest invocations
 require those artifacts to exist already (see "Inputs").
 

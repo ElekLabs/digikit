@@ -51,18 +51,17 @@ cpu = "cf"
 rule.dt2 = { kind = "cf_func", hash = "e741aa3500a20d22aa97ee402dcf9e43", offset = 0x0, len = 8 }
 rule.dn2 = { kind = "cf_func", hash = "e741aa3500a20d22aa97ee402dcf9e43", offset = 0x0, len = 8 }
 mark = "V"
-users = ["core/services/shortcuts"]
+users = ["core/input"]
 doc = "Entry of `bool f(ViewController *vc, KeyEvent *ev)`, the walker every key event passes: it runs the release callbacks of the key code, then offers the event to the views top down. DT2 0x4011c79c, DN2 0x4011e110. `lea (-0x60,SP),SP; movem.l {D2-D7 A2-A6},(SP)` (8 bytes, no PC-relative form). 4(SP) = vc, 8(SP) = KeyEvent (+0xc code, +0x10 flags, bit 0 set on a press)."
 
 [[hook]]
 name = "cf.input.hook.key_event"
 site = "cf.input.site.key_event_walk"
 cpu = "cf"
-mode = "replace"
-tail = true
+mode = "before"
 regs = { in = [], clobbers = ["ccr"] }   # strict liveness (tools.coldfire.liveness, dt2-1.17, dn2-1.12, dn2-1.11) after the displaced instructions: the flags are dead, d0, d1, a0 and a1 are live
 devices = ["dt2", "dn2"]
 mark = "D"
 context = "ui"
-users = ["core/services/shortcuts"]
-doc = "The routine decides. Consume: `moveq #1,%d0; rts` (the event reaches no view and no release callback; the runner's idle reset and the Brain+0x94 listeners already ran). Pass: the displaced `lea; movem` and a jump to the end of the site (the tail). Strict liveness at the tail: only the flags (N, Z, V, C) are dead; D0, D1, A0 and A1 are live (the stock code calls a function that may read them), so a routine saves them; D2 and A2 are saved by the displaced `movem` itself."
+users = ["core/input"]
+doc = "core/input's walker decides (it offers the event to its key subscribers, `input_keys_info`: the services that react to a key subscribe, none takes the site). Consume: `moveq #1,%d0; rts` (the event reaches no view and no release callback; the runner's idle reset and the Brain+0x94 listeners already ran). Pass: the displaced `lea; movem` and a jump to the end of the site (the tail). Strict liveness at the tail: only the flags (N, Z, V, C) are dead; D0, D1, A0 and A1 are live (the stock code calls a function that may read them), so a routine saves them; D2 and A2 are saved by the displaced `movem` itself."

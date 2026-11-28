@@ -4462,11 +4462,8 @@ check = "ca2fd00fa0011907"
 [[hook]]
 name = "cf.input.hook.key_event"
 site = "cf.input.site.key_event_walk"
-mode = "replace"
+mode = "before"
 clobbers = ["ccr"]
-len = 8
-kind = "tail"
-check = "3d25d06bf11f3a7b"
 
 [[hook]]
 name = "cf.lfo.hook.graph_vec"

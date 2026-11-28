@@ -1,0 +1,177 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text",
+   "symbol": "key_walk",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 60,
+   "section": ".text",
+   "symbol": "input_key_tail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.key_subscribe",
+   "symbol": ".sec..bss.slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.key_unsubscribe",
+   "symbol": ".sec..bss.slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4,
+   "section": ".text.key_walk",
+   "symbol": ".sec..bss.slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 18,
+   "section": ".text.key_walk",
+   "symbol": ".sec..bss.slots",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".rodata.input_keys_info",
+   "symbol": ".sec..text.key_subscribe",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".rodata.input_keys_info",
+   "symbol": ".sec..text.key_unsubscribe",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "4feffff048d7030340c002800000070066202f2f00182f2f00184eb900000000508f4a80670c4cd703034fef001070014e754cd703034fef00104ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 64
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02226f000c4a89673841f90000000070ff428124482410b489672a58884a82660874ffb4806602200152817404b48166e472ffb280670425890c00241f245f4e7570fd60f670fe60f2",
+   "kind": "text",
+   "name": ".text.key_subscribe",
+   "size": 76
+  },
+  {
+   "align": 2,
+   "hex": "2f02222f00084a81660670fd241f4e7541f90000000042802248b290660842b10c00428060e6588852807404b48066ea60d8",
+   "kind": "text",
+   "name": ".text.key_unsubscribe",
+   "size": 50
+  },
+  {
+   "align": 2,
+   "hex": "2f0a45f90000000020524a886610588ab5fc0000000066f04280245f4e752f2f000c2f2f000c4e90508f4a8067e0700160e8",
+   "kind": "text",
+   "name": ".text.key_walk",
+   "size": 50
+  },
+  {
+   "align": 2,
+   "hex": "4b45595300000001000000040000000000000000",
+   "kind": "data",
+   "name": ".rodata.input_keys_info",
+   "size": 20
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.slots",
+   "size": 16
+  }
+ ],
+ "source_sha256": "61bb36df89678fc64186afe79c305e52f41d401ba36477c41d29ca7e72240b50",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.slots",
+   "section": ".bss.slots",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.key_subscribe",
+   "section": ".text.key_subscribe",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.key_unsubscribe",
+   "section": ".text.key_unsubscribe",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "input_key_tail",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "input_key_walk_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "input_keys_info",
+   "section": ".rodata.input_keys_info",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "key_subscribe",
+   "section": ".text.key_subscribe",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "key_unsubscribe",
+   "section": ".text.key_unsubscribe",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "key_walk",
+   "section": ".text.key_walk",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "slots",
+   "section": ".bss.slots",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "92",
+  "isa_check": "425c9b701db4893d440f461899c49ce5d4f082429e8094566dacf72056662664",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

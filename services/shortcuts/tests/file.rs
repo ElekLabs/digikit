@@ -7,7 +7,7 @@ use dkrt_sdk::keys::{TRK, YES};
 use dkrt_sdk::{E_CONTEXT, E_FORMAT};
 use dkrt_svc_rt::ImportCore;
 use dkrt_svc_shortcuts::bindings::Binding;
-use dkrt_svc_shortcuts::shortcuts::Shortcuts;
+
 use dkrt_test_support::hook_context::HookContext;
 use std::sync::Mutex;
 
@@ -15,14 +15,24 @@ use std::sync::Mutex;
 #[path = "../dks/src/lib.rs"]
 pub mod file;
 use file::builder::dk_shortcut_add;
-use file::hooks::dk_shortcuts_key;
+use file::key_routine::dk_shortcuts_key;
 pub use file::{builder, DK_SVC_OWNER};
+
+/// The owner of the file: the service over the fake subscription of a host build.
+type Shortcuts = file::Owner;
 use file::{dk_svc_start, dk_svc_stop};
 
 // the core imports (`dkc_*`) of the service file, as host functions (this test links no runtime)
 #[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
 mod stubs;
 use stubs::{DEVICE, RUNNING};
+
+/// One key event as the walker hands it over: the firmware's `KeyEvent` has the key code at +0xc and the flags at +0x10.
+fn key(code: u32, flags: u32) -> u32 {
+    let ev = [0u32, 0, 0, code, flags];
+    // SAFETY: `ev` is as long as the words the routine reads; it runs no module code
+    unsafe { dk_shortcuts_key(core::ptr::null_mut(), ev.as_ptr().cast()) }
+}
 
 /// The cell is one per process: the tests take turns.
 static TURN: Mutex<()> = Mutex::new(());
@@ -36,11 +46,7 @@ fn without_an_owner_the_export_and_the_hook_answer_the_neutral_way() {
         unsafe { dk_shortcut_add(core::ptr::null_mut(), core::ptr::null()) },
         E_CONTEXT
     );
-    assert_eq!(
-        unsafe { dk_shortcuts_key(1, 0) },
-        0,
-        "the stock walker runs"
-    );
+    assert_eq!(key(1, 0), 0, "the stock walker runs");
 }
 
 #[test]
@@ -75,22 +81,10 @@ fn the_export_reaches_the_started_owner_and_the_hook_swallows_a_completed_bindin
     let (trk, yes) = (p.key_code(TRK), p.key_code(YES));
     // the press flag of the device's key word is set for a press (`[input.key_flags]`)
     let press = 1u32 << p.key_flags.press;
-    assert_eq!(
-        unsafe { dk_shortcuts_key(trk, press) },
-        0,
-        "the first key passes"
-    );
-    assert_eq!(
-        unsafe { dk_shortcuts_key(yes, press) },
-        1,
-        "the second key is swallowed"
-    );
+    assert_eq!(key(trk, press), 0, "the first key passes");
+    assert_eq!(key(yes, press), 1, "the second key is swallowed");
     dk_svc_stop();
-    assert_eq!(
-        unsafe { dk_shortcuts_key(yes, press) },
-        0,
-        "after fini the stock walker runs"
-    );
+    assert_eq!(key(yes, press), 0, "after fini the stock walker runs");
 }
 
 #[test]
@@ -115,12 +109,8 @@ fn a_key_in_the_ui_task_with_the_owner_idle_enters_the_owner_and_is_not_refused(
         DK_SVC_OWNER.run((), |_| f());
     };
     let refused = || DK_SVC_OWNER.refused();
-    let first = HookContext::UiTask.fire(&hold, &refused, &mut || unsafe {
-        dk_shortcuts_key(trk, press)
-    });
-    let second = HookContext::UiTask.fire(&hold, &refused, &mut || unsafe {
-        dk_shortcuts_key(yes, press)
-    });
+    let first = HookContext::UiTask.fire(&hold, &refused, &mut || key(trk, press));
+    let second = HookContext::UiTask.fire(&hold, &refused, &mut || key(yes, press));
     assert_eq!(
         (first.result, second.result),
         (0, 1),
@@ -153,13 +143,11 @@ fn a_key_that_arrives_inside_a_call_of_the_service_is_refused_and_counted() {
         DK_SVC_OWNER.run((), |_| f());
     };
     let refused = || DK_SVC_OWNER.refused();
-    let inside = HookContext::InPartCall.fire(&hold, &refused, &mut || unsafe {
-        dk_shortcuts_key(trk, press)
-    });
+    let inside = HookContext::InPartCall.fire(&hold, &refused, &mut || key(trk, press));
     assert_eq!(inside.result, 0, "the key passes to the stock walker");
     assert_eq!(inside.refused, 1, "refused and counted");
     assert_eq!(
-        unsafe { dk_shortcuts_key(yes, press) },
+        key(yes, press),
         0,
         "the refused first key was not seen: the second key alone completes nothing"
     );

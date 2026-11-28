@@ -36,11 +36,7 @@ conflicts = []
 # entry = "x_fill"
 # devices = ["dn2"]
 
-# The hook it takes (ports/fw/input.toml): the entry of the firmware's key walker, a routine of this file (`src/hooks.s`) that runs in place of the first 8 bytes of the walker and leaves
-# into the stock code through the tail of its site. `init` repeats it with dk_service_declare_hook (`service!`).
-[[hook]]
-name = "cf.input.hook.key_event"
-entry = "shortcuts_key_hook"
+# No hook: the service subscribes its key routine to the key walk of core/input (`input_keys_info`) when it starts and unsubscribes when it stops.
 
 # Rust, built with rustc_codegen_gcc for -mcpu=54418 (`patchkit build`). Packed as a .dks (`patchkit pack core/services/shortcuts`): the file is `shortcuts.dks`.
 [[object]]
@@ -48,6 +44,3 @@ path = "build/shortcuts.dko.json"
 sources = ["Cargo.toml"]
 place = "cf.expansion"
 
-# The tail of the hook of ports/fw/input.toml (`hook.<hook>.tail`: the displaced instructions, then the end of the site), as an alias `patchkit pack` makes into an import.
-[object.externs]
-shortcuts_t_key = "hook.cf.input.hook.key_event.tail"

@@ -9,7 +9,8 @@ use dkrt_sdk::*;
 use dkrt_svc_shortcuts::bindings::Callback;
 use dkrt_svc_shortcuts::builder::ShortcutDef;
 use dkrt_svc_shortcuts::rule::{at, check_set, BODY_LEN};
-use dkrt_svc_shortcuts::shortcuts::{Shortcuts, Verdict};
+use dkrt_svc_shortcuts::shortcuts::{self, Verdict};
+use dkrt_svc_shortcuts::unwired_keys::UnwiredKeys;
 use dkrt_test_support::{Call, FakeCore};
 use std::sync::Mutex;
 
@@ -17,6 +18,9 @@ const BASE: u32 = 0x4000;
 const IMAGE: u32 = 0x1000;
 /// The logical keys of these tests: the generated numbers of `[keys] order` (sdk/sdk.toml).
 use dkrt_sdk::keys::{NO as OTHER, TRK, YES};
+
+/// The owner over the fake subscription: nothing here reaches a platform.
+type Shortcuts = shortcuts::Shortcuts<UnwiredKeys>;
 
 /// An address of the module image that stands for a callback (never called here).
 fn code(offset: u32) -> Option<Callback> {

@@ -5,6 +5,7 @@
 //! the binding completes and `off` when either key is released; every other event passes, so a trig key pressed under [TRK] still selects a track.
 use crate::bindings::{Binding, BindingTable, Callback};
 use crate::builder::Builder;
+use crate::key_events::KeyEvents;
 use crate::keys::KeyState;
 use core::ffi::c_void;
 use core::mem::MaybeUninit;
@@ -56,7 +57,7 @@ struct Pending {
 
 /// The owner object of the service: no key held, no binding, nothing active, nothing pending. The file's cell holds the one instance (`Provider::start_in`), and everything
 /// that reaches it (the part functions, the key hook, the builder call) runs in the UI task, so the fields need no lock.
-pub struct Shortcuts {
+pub struct Shortcuts<K: KeyEvents> {
     /// The calls to make, oldest first: `head` is the oldest and `len` the count (a ring).
     pending: [Pending; PENDING_MAX],
     head: usize,
@@ -67,13 +68,15 @@ pub struct Shortcuts {
     active: usize,
     /// The builder call `dk_shortcut_add` and its collection (`Records::begin`, `commit`).
     builder: Builder,
+    /// The subscription of the key routine to the platform's key walk: made in `start_in`, ended in `stop`.
+    keys: K,
 }
 
 /// No binding is active.
 const NONE: usize = 0;
 
-impl Shortcuts {
-    pub const fn new() -> Shortcuts {
+impl<K: KeyEvents> Shortcuts<K> {
+    pub const fn new() -> Shortcuts<K> {
         Shortcuts {
             pending: [Pending {
                 owner: 0,
@@ -86,7 +89,18 @@ impl Shortcuts {
             table: BindingTable::new(),
             active: NONE,
             builder: Builder::new(),
+            keys: K::IDLE,
         }
+    }
+
+    /// The key subscription (for a test of `UnwiredKeys`).
+    pub fn keys(&self) -> &K {
+        &self.keys
+    }
+
+    /// The key subscription, for a test.
+    pub fn keys_mut(&mut self) -> &mut K {
+        &mut self.keys
     }
 
     /// Remember a call of `owner`'s module code for `run_pending`. A full queue drops the call (a module that does not get its UI pass for 16 key events has other trouble).
@@ -221,13 +235,27 @@ impl Shortcuts {
     }
 }
 
-impl<C: CoreApi> Provider<C> for Shortcuts {
+impl<C: CoreApi, K: KeyEvents> Provider<C> for Shortcuts<K> {
     /// The state is made where it lives: all-zero bytes are the initial state (see `Shortcuts::new`; `tests/state.rs` checks it), so this is one fill and no copy of
     /// the 1.4 kB through the stack.
-    fn start_in(_core: &C, slot: &mut MaybeUninit<Shortcuts>) -> Result<(), Status> {
-        // SAFETY: every field of `Shortcuts` is valid as zero bytes (integers, `None` callbacks, null pointers, the closed gate).
-        unsafe { slot.as_mut_ptr().write_bytes(0, 1) };
-        Ok(())
+    ///
+    /// Then the key routine is subscribed to the platform's key walk: a refusal (the image has no table of key subscribers, or it is full) fails the start, so a module that needs
+    /// the service is refused instead of binding keys that no one delivers. Subscribe and unsubscribe run in the UI task only, the one task of the key walk, so the platform's plain
+    /// table of subscribers is never read and written at once (`key_subscribers.h`). The routine may fire before the file's cell holds the instance: it finds none and the stock walker runs.
+    fn start_in(core: &C, slot: &mut MaybeUninit<Shortcuts<K>>) -> Result<(), Status> {
+        // SAFETY: every field of `Shortcuts` is valid as zero bytes (integers, `None` callbacks, null pointers, the closed gate, and a `KeyEvents` by its contract).
+        let this = unsafe {
+            slot.as_mut_ptr().write_bytes(0, 1);
+            &mut *slot.as_mut_ptr()
+        };
+        this.keys.subscribe(core)
+    }
+
+    /// The file's `fini` (also after a refused declaration): the key routine leaves the platform's table before the file's image goes. The take-down of the file runs in the UI task,
+    /// as the key walk does, and the routine runs no module code and starts no unload, so the walk is not inside the routine now; the owner's cell is closed while this runs, so a
+    /// walk that comes after finds no owner (the routine answers pass) until the unsubscribe is done. The stock hook of the site needed the same: the restore of a `ui` site never waits.
+    fn stop(&mut self, _core: &C) {
+        self.keys.unsubscribe();
     }
 
     /// A module unloads (also one that never attached, or only in part): close its collection and drop its bindings and queued calls (`drop_owner`). It never calls module
@@ -238,7 +266,7 @@ impl<C: CoreApi> Provider<C> for Shortcuts {
     }
 }
 
-impl<C: CoreApi> Ticker<C> for Shortcuts {
+impl<C: CoreApi, K: KeyEvents> Ticker<C> for Shortcuts<K> {
     /// The UI pass: make the `on` and `off` calls that the key hook queued, in order, in the early phase only.
     fn tick(&mut self, _core: &C, phase: u32) {
         if phase == tick_phase::EARLY {

@@ -4,7 +4,7 @@
 //! - `lfo_table_set` and `lfo_table_clear` change the function table and the cells as the contract says, under the interrupt mask, and refuse a wave outside the range;
 //! - the patched images (skipped when a stock image is absent): the two clamp immediates, the eight `lea` operands, the stock cells and the added cells of the four tables, `lfo_table_info`.
 
-use coldfire::{Bus, BusError, Cpu};
+use coldfire::{Bus, Cpu};
 use patchkit::apply::{self, Applied, Options};
 use patchkit::devdata;
 use patchkit::dko::Dko;
@@ -42,49 +42,8 @@ fn waves(dev: &str) -> u32 {
 
 // ---- the objects on the ColdFire core ------------------------------------------------------------------------------
 
-struct Ram(Vec<u8>);
-
-impl Bus for Ram {
-    fn read8(&mut self, addr: u32) -> Result<u8, BusError> {
-        self.0
-            .get(addr as usize)
-            .copied()
-            .ok_or(BusError { addr, write: false })
-    }
-    fn read16(&mut self, addr: u32) -> Result<u16, BusError> {
-        Ok(u16::from_be_bytes([
-            self.read8(addr)?,
-            self.read8(addr + 1)?,
-        ]))
-    }
-    fn read32(&mut self, addr: u32) -> Result<u32, BusError> {
-        Ok(u32::from_be_bytes([
-            self.read8(addr)?,
-            self.read8(addr + 1)?,
-            self.read8(addr + 2)?,
-            self.read8(addr + 3)?,
-        ]))
-    }
-    fn write8(&mut self, addr: u32, value: u8) -> Result<(), BusError> {
-        *self
-            .0
-            .get_mut(addr as usize)
-            .ok_or(BusError { addr, write: true })? = value;
-        Ok(())
-    }
-    fn write16(&mut self, addr: u32, value: u16) -> Result<(), BusError> {
-        for (i, b) in value.to_be_bytes().iter().enumerate() {
-            self.write8(addr + i as u32, *b)?;
-        }
-        Ok(())
-    }
-    fn write32(&mut self, addr: u32, value: u32) -> Result<(), BusError> {
-        for (i, b) in value.to_be_bytes().iter().enumerate() {
-            self.write8(addr + i as u32, *b)?;
-        }
-        Ok(())
-    }
-}
+mod common;
+use common::Ram;
 
 const BASE: u64 = 0x1000;
 const FN_TABLE: u32 = 0x8000; // the section lfo_fn: 7 stock entries, then N
