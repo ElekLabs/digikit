@@ -36,3 +36,6 @@ param_rows = 0
 page_rows = 0
 record_bytes = 436
 dsp_cost_fx = 6958
+
+[uses.dt2]
+dsp_cost_fx = 6958
