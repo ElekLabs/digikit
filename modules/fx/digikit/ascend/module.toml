@@ -1,0 +1,38 @@
+[module]
+id = "digikit/ascend"
+version = "0.1.0"
+name = "Ascend"
+category = "fx"
+type = "fx"
+author = "digikit"
+status = "experimental"
+summary = "A barber-pole phaser that sweeps continuously up or down."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+[[fx]]
+id = "ascend"
+
+[[object]]
+path = "build/ascend-cf.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"
+
+[[object]]
+path = "build/ascend-dsp.dko.json"
+sources = ["src/dsp/ascend.s"]
+place = "dsp.l2"
+devices = ["dt2", "dn2"]
+
+[uses.dn2]
+machine_rows = 0
+param_rows = 0
+page_rows = 0
+record_bytes = 436
+dsp_cost_fx = 6958

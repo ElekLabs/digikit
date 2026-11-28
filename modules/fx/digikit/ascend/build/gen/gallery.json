@@ -1,0 +1,49 @@
+{
+  "effects": [
+    {
+      "id": "ascend",
+      "knobs": [
+        {
+          "default": 0.10000000149011612,
+          "display": 0,
+          "max": 0.30000001192092896,
+          "min": 0.03999999910593033,
+          "name": "Sweep Rate",
+          "short": "RATE"
+        },
+        {
+          "default": 63,
+          "display": 1,
+          "max": 63,
+          "min": -64,
+          "name": "Sweep Direction",
+          "short": "DIR"
+        },
+        {
+          "default": 0.5,
+          "display": 0,
+          "max": 1,
+          "min": 0,
+          "name": "Notch Density",
+          "short": "DENS"
+        },
+        {
+          "default": 0.44999998807907104,
+          "display": 0,
+          "max": 1,
+          "min": 0,
+          "name": "Notch Depth",
+          "short": "DEPTH"
+        }
+      ],
+      "mix": 127,
+      "tab": "ASC",
+      "title": "Ascend"
+    }
+  ],
+  "machines": [],
+  "module": "digikit/ascend",
+  "params": {
+    "dn2": []
+  }
+}
