@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8" /><title>browser module build</title>
+<body>
+  <script type="module">
+    const w = new Worker('/worker.mjs', { type: 'module' });
+    w.onmessage = (e) => {
+      window.__result = e.data;
+    };
+    w.postMessage({
+      root: new URLSearchParams(location.search).get('root'),
+      device: new URLSearchParams(location.search).get('device'),
+      count: Number(new URLSearchParams(location.search).get('count')),
+      modBase: new URLSearchParams(location.search).get('modBase') || undefined,
+    });
+  </script>
+</body>

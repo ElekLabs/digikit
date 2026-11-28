@@ -361,6 +361,108 @@ pub unsafe extern "C" fn pk_prepare(
     self::set(prepare_bundle(stock, bundle, &set, restore != 0))
 }
 
+/// What `pk_cf_object` takes besides the ELF: the object's `source_sha256` and toolchain record.
+#[derive(Deserialize)]
+struct CfMeta {
+    source_sha256: String,
+    #[serde(default)]
+    toolchain: BTreeMap<String, String>,
+}
+
+/// The merged relocatable ELF of ColdFire C sources (what `ld -r` leaves after the compiler helpers are resolved) to the text of
+/// the `.dko.json` object `patchkit build` writes: prototype, link at the placeholder base, ISA re-decode, stamp. The compile and link
+/// steps run outside (the page drives cc1, as and ld as WebAssembly).
+pub fn cf_object_json(elf: &[u8], meta: &[u8]) -> Result<String> {
+    let m: CfMeta = serde_json::from_slice(meta)?;
+    let proto = crate::build::elf::proto_from_elf(elf)?;
+    crate::build::to_text(&crate::build::cf::dko_from_proto(
+        &proto,
+        m.source_sha256,
+        m.toolchain,
+    )?)
+}
+
+/// Pack module `id` of the bundle as a `.dkm` for `device` (empty: none), as `patchkit pack` does for its objects.
+pub fn pack_bundle(bundle: &[u8], id: &str, device: &str) -> Result<Vec<u8>> {
+    let (_, lib) = load(bundle)?;
+    let o = crate::pack::PackOptions {
+        device: (!device.is_empty()).then(|| device.to_string()),
+        ..Default::default()
+    };
+    Ok(crate::pack::pack_module(&lib, id, &o)?.bytes)
+}
+
+/// ColdFire object from a merged ELF (see `cf_object_json`): the text is in `pk_plan_*`.
+///
+/// # Safety
+/// The two ranges must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pk_cf_object(
+    elf: *const u8,
+    elf_len: usize,
+    meta: *const u8,
+    meta_len: usize,
+) -> i32 {
+    let (elf, meta) = unsafe { (slice(elf, elf_len), slice(meta, meta_len)) };
+    set(cf_object_json(elf, meta).map(|j| (vec![], j)))
+}
+
+/// Pack a module of the bundle as a `.dkm`: the file is in `pk_out_*`.
+///
+/// # Safety
+/// The three ranges must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pk_pack(
+    bundle: *const u8,
+    bundle_len: usize,
+    id: *const u8,
+    id_len: usize,
+    device: *const u8,
+    device_len: usize,
+) -> i32 {
+    let (bundle, id, device) = unsafe {
+        (
+            slice(bundle, bundle_len),
+            slice(id, id_len),
+            slice(device, device_len),
+        )
+    };
+    let (id, device) = (
+        String::from_utf8_lossy(id).to_string(),
+        String::from_utf8_lossy(device).to_string(),
+    );
+    set(pack_bundle(bundle, &id, &device).map(|b| (b, String::new())))
+}
+
+/// `build/gen/module_ids.h` of a module.toml (what `patchkit gen` writes before the build; empty when the module declares no machines, effects or
+/// records). The manifest is loaded without its objects: they are the build's output.
+pub fn module_ids_text(manifest: &str, id: &str) -> Result<String> {
+    let m = Module::from_parts_lenient(manifest, &|p| Err(Error(format!("no file {p}"))))?;
+    let lib = Library { modules: vec![m] };
+    Ok(crate::modgen::module_ids(&lib, id)?
+        .map(|(_, text)| text)
+        .unwrap_or_default())
+}
+
+/// The generated `module_ids.h` of a manifest: the text is in `pk_plan_*` (empty: the module has none).
+///
+/// # Safety
+/// The two ranges must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pk_module_ids(
+    manifest: *const u8,
+    manifest_len: usize,
+    id: *const u8,
+    id_len: usize,
+) -> i32 {
+    let (manifest, id) = unsafe { (slice(manifest, manifest_len), slice(id, id_len)) };
+    let (manifest, id) = (
+        String::from_utf8_lossy(manifest).to_string(),
+        String::from_utf8_lossy(id).to_string(),
+    );
+    set(module_ids_text(&manifest, &id).map(|t| (vec![], t)))
+}
+
 // ---- the sender -------------------------------------------------------------------------------------------------------------
 
 thread_local! {

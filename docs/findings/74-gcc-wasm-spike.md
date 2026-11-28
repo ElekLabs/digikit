@@ -87,8 +87,7 @@ cc1) took 7 minutes on this machine with 6 jobs; the rebuilt binaries pass the s
 
 ## Open
 
-- **[O]** `ld`: the same recipe should build binutils `ld` (`--disable-ld` was set here). pk build links modules, so
-  phase 6c needs it or an own linker step. Not tried.
+- **[C]** `ld` builds with the same recipe and the browser run works: see [finding 160](160-browser-module-compile.md).
 - **[O]** Rust modules (rustc_codegen_gcc / libgccjit) are not covered; this is C only.
 - **[O]** Browser run, wasm-opt size, a pinned wasi-sdk hash, Linux and x86 build hosts.
 - **[O]** Byte identity was proven for 32 files. A bigger corpus belongs in the gate if this ships: compile every

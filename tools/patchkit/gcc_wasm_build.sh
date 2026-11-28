@@ -3,7 +3,7 @@
 # Spike, finding 74. Needs: the sources from `pk_toolchains` in out/tools/src, curl, clang/clang++ (native, for the build
 # side), python3, GNU make, and the native m68k-elf as/ld (only so gcc's configure probes the right assembler features:
 # without them the wasm cc1 writes different section names).
-#   usage: gcc_wasm_build.sh WORKDIR [NATIVE_M68K_BIN]      -> WORKDIR/out/{as,cc1}.wasm
+#   usage: gcc_wasm_build.sh WORKDIR [NATIVE_M68K_BIN]      -> WORKDIR/out/{as,cc1,ld,nm,objcopy}.wasm
 set -euo pipefail
 WORK=$(mkdir -p "$1" && cd "$1" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -59,14 +59,18 @@ wasi_env() {
 }
 wasi_env
 
-# 3. binutils: gas only
-if [ ! -s "$WORK/out/as.wasm" ]; then
+# 3. binutils: gas, ld, nm, objcopy (the tools pk build runs besides gcc; finding 75)
+if [ ! -s "$WORK/out/objcopy.wasm" ]; then
   mkdir -p "$WORK/bu" && cd "$WORK/bu"
   "$BU/configure" --build="$BUILD" --host=wasm32-wasip1 --target=m68k-elf --disable-nls --disable-werror --disable-gdb \
-    --disable-sim --disable-gprof --disable-gprofng --disable-ld --disable-gold --disable-binutils --disable-shared \
+    --disable-sim --disable-gprof --disable-gprofng --disable-gold --disable-shared \
     --enable-static --without-zstd --disable-plugins --disable-libctf > cfg.log 2>&1
-  make -j"$JOBS" all-gas > make.log 2>&1
+  # wasi-libc's struct rusage has no ru_maxrss (ld --stats); ld has its own configure
+  make -j"$JOBS" configure-ld > make.log 2>&1
+  sed -i.bak 's|#define HAVE_GETRUSAGE 1|/* no ru_maxrss in WASI */|' ld/config.h
+  make -j"$JOBS" all-gas all-ld all-binutils >> make.log 2>&1
   cp gas/as-new "$WORK/out/as.wasm"
+  cp ld/ld-new "$WORK/out/ld.wasm"; cp binutils/nm-new "$WORK/out/nm.wasm"; cp binutils/objcopy "$WORK/out/objcopy.wasm"
 fi
 
 # 4. gmp, mpfr, mpc as static wasm libraries (versions and hashes from gcc's contrib/prerequisites.sha512)
