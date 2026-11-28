@@ -4,14 +4,14 @@
  "relocs": [
   {
    "addend": 0,
-   "offset": 18,
+   "offset": 28,
    "section": ".text",
    "symbol": "key_walk",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 50,
+   "offset": 60,
    "section": ".text",
    "symbol": "input_key_tail",
    "type": "cf.32"
@@ -62,10 +62,10 @@
  "sections": [
   {
    "align": 4,
-   "hex": "4feffff048d703032f2f00182f2f00184eb900000000508f4a80670c4cd703034fef001070014e754cd703034fef00104ef900000000",
+   "hex": "4feffff048d7030340c002800000070066202f2f00182f2f00184eb900000000508f4a80670c4cd703034fef001070014e754cd703034fef00104ef900000000",
    "kind": "text",
    "name": ".text",
-   "size": 54
+   "size": 64
   },
   {
    "align": 2,
@@ -103,7 +103,7 @@
    "size": 16
   }
  ],
- "source_sha256": "69a56bccb59146a800758f2a8220b7d574c3477341ddcea973b350bd7ee3d0bb",
+ "source_sha256": "be377d0b2e163f3aae5f5d140ac78b8495dc1a10f8039d11b7fe7ea192e85386",
  "symbols": [
   {
    "global": false,
@@ -170,8 +170,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "89",
-  "isa_check": "960e4064c0af677cf3be6459941b3a1479cf3aa66926906633a0dfc289ddd5d5",
+  "instructions_redecoded": "92",
+  "isa_check": "425c9b701db4893d440f461899c49ce5d4f082429e8094566dacf72056662664",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

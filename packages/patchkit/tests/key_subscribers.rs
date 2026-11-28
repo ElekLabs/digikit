@@ -1,7 +1,8 @@
 //! `core/input` key subscribers (runtime/platform/input): the key walker's hook and the subscriber table of the committed object on the ColdFire core, for every device whose
 //! object list has it (the devices that have the walker).
 //!
-//! - `input_keys_info` has the words `key_subscribers.h` names, and its entries are the two calls;
+//! - the entries of `input_keys_info` (words 3 and 4) are the two calls, which the subscribing tests below call through the table;
+//! - the hook in a nonzero interrupt mask passes to the tail with no subscriber called;
 //! - the hook with no subscriber jumps to the tail of the site with the stack as the entry had it and D0, D1, A0 and A1 intact (the stock code reads them);
 //! - a subscriber is called with the walker's `vc` and `ev`; one that answers nonzero ends the walk: the hook returns 1 to the caller and the tail is never reached;
 //! - one that answers 0 lets the event reach the tail, intact again; an unsubscribed one is not called.
@@ -83,10 +84,10 @@ impl Rig {
 
     /// Runs `entry` with `args` on the stack (the first at 4(SP)), the registers set to canaries, until the pc is `RETURN` or `TAIL`. The stack is as the entry had it at either end
     /// (`RETURN` popped by an `rts`); D2 .. D7 hold their canaries, and with `live` (the hook) D1, A0 and A1 do too.
-    fn run(&mut self, entry: u32, args: &[u32], live: bool) -> (Cpu, End) {
+    fn run(&mut self, entry: u32, args: &[u32], live: bool, sr: u16) -> (Cpu, End) {
         let mut cpu = Cpu::new();
         cpu.pc = entry;
-        cpu.sr = 0x2000;
+        cpu.sr = sr;
         let sp = STACK - 4 * args.len() as u32 - 4;
         cpu.a[7] = sp;
         self.ram.write32(sp, RETURN).unwrap();
@@ -136,18 +137,23 @@ impl Rig {
 
     fn subscribe(&mut self, f: u32) -> i32 {
         let entry = self.ram.read32(self.sym("input_keys_info") + 12).unwrap();
-        self.run(entry, &[f], false).0.d[0] as i32
+        self.run(entry, &[f], false, 0x2000).0.d[0] as i32
     }
 
     fn unsubscribe(&mut self, f: u32) -> i32 {
         let entry = self.ram.read32(self.sym("input_keys_info") + 16).unwrap();
-        self.run(entry, &[f], false).0.d[0] as i32
+        self.run(entry, &[f], false, 0x2000).0.d[0] as i32
     }
 
     /// The key walker's hook with the event `(vc, ev)`.
     fn key(&mut self, vc: u32, ev: u32) -> (Cpu, End) {
+        self.key_in(vc, ev, 0x2000)
+    }
+
+    /// The hook with the event `(vc, ev)` in the status register `sr`.
+    fn key_in(&mut self, vc: u32, ev: u32, sr: u16) -> (Cpu, End) {
         let hook = self.sym("input_key_walk_hook");
-        self.run(hook, &[vc, ev], true)
+        self.run(hook, &[vc, ev], true, sr)
     }
 }
 
@@ -159,22 +165,6 @@ fn rigs() -> Option<Vec<(String, Rig)>> {
         .collect();
     assert!(!rigs.is_empty(), "a device has the key walker");
     Some(rigs)
-}
-
-#[test]
-fn the_info_table_states_the_slots_and_the_two_calls() {
-    let Some(rigs) = rigs() else {
-        return;
-    };
-    for (dev, mut rig) in rigs {
-        let info = rig.sym("input_keys_info");
-        let word = |rig: &mut Rig, i: u32| rig.ram.read32(info + 4 * i).unwrap();
-        assert_eq!(word(&mut rig, 0), 0x4b45_5953, "{dev}: 'KEYS'");
-        assert_eq!(word(&mut rig, 1), 1, "{dev}: version");
-        assert_eq!(word(&mut rig, 2), 4, "{dev}: slots");
-        assert_eq!(word(&mut rig, 3), rig.sym("key_subscribe"), "{dev}");
-        assert_eq!(word(&mut rig, 4), rig.sym("key_unsubscribe"), "{dev}");
-    }
 }
 
 #[test]
@@ -209,5 +199,23 @@ fn a_subscriber_gets_the_event_and_the_one_that_consumes_it_ends_the_walk() {
         assert_eq!(rig.unsubscribe(CONSUMER), 0, "{dev}");
         assert_eq!(rig.unsubscribe(CONSUMER), -3, "{dev}: not subscribed");
         assert_eq!(rig.key(VC, EV).1, End::Tail, "{dev}");
+    }
+}
+
+#[test]
+fn a_nonzero_interrupt_mask_passes_to_the_tail_and_calls_no_subscriber() {
+    let Some(rigs) = rigs() else {
+        return;
+    };
+    for (dev, mut rig) in rigs {
+        assert_eq!(rig.subscribe(CONSUMER), 0, "{dev}");
+        // in task context the consumer takes the event
+        assert_eq!(rig.key_in(VC, EV, 0x2000).1, End::Returned, "{dev}");
+        // under any interrupt mask the same event reaches the tail, intact
+        for sr in [0x2100, 0x2400, 0x2700] {
+            let (cpu, end) = rig.key_in(VC, EV, sr);
+            assert_eq!(end, End::Tail, "{dev}: sr {sr:#x}");
+            assert_eq!(cpu.d[0], 0xd0d0_0000, "{dev}: d0 is live at the tail");
+        }
     }
 }

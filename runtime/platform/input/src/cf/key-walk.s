@@ -5,6 +5,7 @@
 |   pass: `jmp input_key_tail`, the tail of the site (the displaced instructions, then the stock walker).
 | At the entry 4(sp) = vc and 8(sp) = ev. The decision is `key_walk(vc, ev)` of key_subscribers.c. Strict liveness at the tail (tools.coldfire.liveness): only the flags are dead and
 | d0, d1, a0 and a1 are live, so the four are saved around the call and restored on every path; the flags are not restored.
+| The walker never runs a subscriber outside task context: the status register is read first, and a non-zero interrupt mask goes to the stock walker.
 
     .text
     .balignw 4, 0x4e71
@@ -13,6 +14,9 @@
 input_key_walk_hook:
     lea     -16(%sp),%sp
     movem.l %d0/%d1/%a0/%a1,(%sp)       | vc is now at 20(sp), ev at 24(sp)
+    move.w  %sr,%d0
+    andi.l  #0x700,%d0
+    bne.b   9f                          | not in task context: the stock walker
     move.l  24(%sp),-(%sp)              | argument 2: ev
     move.l  24(%sp),-(%sp)              | argument 1: vc (the frame is a word deeper)
     jsr     key_walk

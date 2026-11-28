@@ -1,6 +1,11 @@
 /* core/input: the key subscribers (version 1). Every key event of the panel passes the firmware's key walker once, in the UI task, before any view; the walker of this module
  * (key-walk.s, entered by the hook `cf.input.hook.key_event`) offers the event to the subscribers below in slot order. The words of `input_keys_info` (the image's info table, name
- * "input_keys_info") are the first lines of the enum; the two calls are key_subscribers.c. Both calls and the walk run in the UI task, so the slots need no mask. */
+ * "input_keys_info") are the first lines of the enum; the two calls are key_subscribers.c.
+ *
+ * Context: key_subscribe and key_unsubscribe run in the UI task only (a service file subscribes in its start and unsubscribes in its stop, both in the UI task), and so does the walk
+ * (the walker's hook passes to the stock walker when the interrupt mask is nonzero). One task reads and writes the slots, so the plain array needs no mask, lock or atomic: a walk
+ * is never inside a subscriber when a subscribe or unsubscribe runs, and a subscriber that unsubscribes itself during the walk only empties its own slot. The numbers of this
+ * header (magic, version, KEYS_FULL, KEYS_DUPLICATE) are copied once in the Rust service's `key_abi`, which services/shortcuts/tests/key_header.rs checks against this file. */
 #ifndef KEY_SUBSCRIBERS_H
 #define KEY_SUBSCRIBERS_H
 

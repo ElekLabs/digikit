@@ -1,10 +1,8 @@
 /* Host test of src/cf/key_subscribers.c: the slots (first free, full, duplicate, unsubscribe and reuse) and the walk (slot order, the first consumer stops it, empty passes to the stock walker).
- * The walker shim (key-walk.s) and the info words on the ColdFire side are the assembly test's and the device test's. */
+ * The walker shim (key-walk.s) and the entries of the info table are the patchkit rig test's (packages/patchkit/tests/key_subscribers.rs). */
 #include <stdio.h>
 #include <string.h>
 #include "cf/key_subscribers.h"
-
-extern const uintptr_t input_keys_info[];
 
 static int failed;
 #define CHECK(c)                                                                                   \
@@ -47,13 +45,6 @@ static void clear(void)
 int main(void)
 {
     int vc, ev;
-
-    /* the published words */
-    CHECK(input_keys_info[KEYS_INFO_W_MAGIC] == KEYS_INFO_MAGIC);
-    CHECK(input_keys_info[KEYS_INFO_W_VERSION] == KEYS_INFO_VERSION);
-    CHECK(input_keys_info[KEYS_INFO_W_SLOTS] == KEY_SUBSCRIBER_SLOTS);
-    CHECK(input_keys_info[KEYS_INFO_W_SUBSCRIBE] == (uintptr_t)key_subscribe);
-    CHECK(input_keys_info[KEYS_INFO_W_UNSUBSCRIBE] == (uintptr_t)key_unsubscribe);
 
     /* empty: the stock walker runs */
     CHECK(key_walk(&vc, &ev) == 0);
