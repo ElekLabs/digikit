@@ -12,11 +12,8 @@ static key_subscriber slots[KEY_SUBSCRIBER_SLOTS];
 
 /* the data table of this module (the image's info table, name "input_keys_info"): the addresses are link-time constants, so the words are pointer-sized */
 const uintptr_t input_keys_info[KEYS_INFO_WORDS] = {
-    KEYS_INFO_MAGIC,
-    KEYS_INFO_VERSION,
-    KEY_SUBSCRIBER_SLOTS,
-    (uintptr_t)key_subscribe,
-    (uintptr_t)key_unsubscribe,
+    KEYS_INFO_MAGIC,          KEYS_INFO_VERSION,          KEY_SUBSCRIBER_SLOTS,
+    (uintptr_t)key_subscribe, (uintptr_t)key_unsubscribe,
 };
 
 int32_t key_subscribe(key_subscriber fn)

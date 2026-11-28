@@ -1,5 +1,5 @@
 //! `KeyEvents`: the seam through which the service listens to the panel's keys. The platform (`core/input`) walks the key events of the firmware once, in the UI task, and offers each
-//! to its subscribers; the service file holds the routine and the implementation over the image's table (`input_keys_info`), a unit test holds [`crate::fake_keys::FakeKeys`].
+//! to its subscribers; the service file holds the routine and the implementation over the image's table (`input_keys_info`), a unit test and a host build hold [`crate::unwired_keys::UnwiredKeys`].
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::Status;
 

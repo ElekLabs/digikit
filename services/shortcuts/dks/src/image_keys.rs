@@ -1,6 +1,6 @@
 //! `ImageKeys`: the subscription of the key routine over the image's table of key subscribers (`core/input`, `input_keys_info`), as the owner's `KeyEvents`. The service finds the table at
 //! `start` (`KeyTable::find`) and calls `key_subscribe(routine)`; `key_unsubscribe(routine)` takes it out at `stop`. The ColdFire build only: a host build (the tests of the file) has the owner
-//! over `FakeKeys`.
+//! over `UnwiredKeys`.
 use crate::key_routine::dk_shortcuts_key;
 use dkrt_sdk::{E_EXISTS, E_NO_REGISTRY, E_TABLE_FULL};
 use dkrt_svc_rt::dkrt_abi::core_api::CoreApi;

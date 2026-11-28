@@ -9,7 +9,7 @@
 //! - [`bindings::BindingTable`]: the bindings of all modules, by owner; the first owner of a key pair keeps the binding.
 //! - [`builder::Builder`]: the collection of the builder call `dk_shortcut_add` while a module's `init` runs.
 //! - [`key_events::KeyEvents`]: the seam to the platform's key subscribers (`core/input`): the service subscribes its key routine when it starts and unsubscribes when it stops.
-//!   [`fake_keys::FakeKeys`] stands in for it in a unit test.
+//!   [`unwired_keys::UnwiredKeys`] stands in for it in a unit test.
 //! - [`key_table::KeyTable`]: the words of the image's `input_keys_info` that an implementation of `KeyEvents` over the image reads.
 //! - [`shortcuts::Shortcuts`]: the owner of the service, one instance in the file's cell, over a `KeyEvents`. It holds the three first above, takes the key events (`on_key`: [`shortcuts::Verdict`]),
 //!   and implements `Provider` (lifecycle) and `Ticker` (the UI pass).
@@ -21,10 +21,10 @@
 extern crate std;
 pub mod bindings;
 pub mod builder;
-pub mod fake_keys;
 pub mod key_events;
 pub mod key_table;
 pub mod keys;
 pub mod records;
 pub mod rule;
 pub mod shortcuts;
+pub mod unwired_keys;

@@ -1,17 +1,18 @@
-//! `FakeKeys`: the subscription of a unit test. It subscribes nothing and counts the calls, so a test sees that the service subscribed when it started and unsubscribed when it stopped,
-//! and gives the refusal of a full or missing table as a type: `FakeKeys<REFUSAL>` answers `REFUSAL` (a non-zero status) to every subscribe, so the owner started over it refuses to start.
+//! `UnwiredKeys`: a subscription that reaches no platform: the owner's `KeyEvents` in a unit test and in a host build of the service file (no image, no `core/input`). It subscribes
+//! nothing and counts the calls, so a test sees that the service subscribed when it started and unsubscribed when it stopped, and gives the refusal of a full or missing table as a
+//! type: `UnwiredKeys<REFUSAL>` answers `REFUSAL` (a non-zero status) to every subscribe, so the owner started over it refuses to start.
 use crate::key_events::KeyEvents;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::Status;
 
 /// Counts subscribes and unsubscribes; all-zero bytes are the unsubscribed state. `REFUSAL` is the status every subscribe answers; 0 (the default) accepts.
-pub struct FakeKeys<const REFUSAL: Status = 0> {
+pub struct UnwiredKeys<const REFUSAL: Status = 0> {
     subscribed: bool,
     subscribes: u32,
     unsubscribes: u32,
 }
 
-impl<const REFUSAL: Status> FakeKeys<REFUSAL> {
+impl<const REFUSAL: Status> UnwiredKeys<REFUSAL> {
     /// The routine is subscribed now.
     pub fn subscribed(&self) -> bool {
         self.subscribed
@@ -29,8 +30,8 @@ impl<const REFUSAL: Status> FakeKeys<REFUSAL> {
 }
 
 // SAFETY: a bool and counters: all-zero bytes are the idle state.
-unsafe impl<const REFUSAL: Status> KeyEvents for FakeKeys<REFUSAL> {
-    const IDLE: FakeKeys<REFUSAL> = FakeKeys {
+unsafe impl<const REFUSAL: Status> KeyEvents for UnwiredKeys<REFUSAL> {
+    const IDLE: UnwiredKeys<REFUSAL> = UnwiredKeys {
         subscribed: false,
         subscribes: 0,
         unsubscribes: 0,

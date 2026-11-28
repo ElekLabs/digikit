@@ -6,13 +6,13 @@ use dkrt_abi::profiles::ALL;
 use dkrt_abi::provider::{ConsumerId, Provider, Ticker};
 use dkrt_abi::service::tick_phase;
 use dkrt_svc_shortcuts::bindings::{Added, Binding, BindingTable, MAX_BINDINGS};
-use dkrt_svc_shortcuts::fake_keys::FakeKeys;
 use dkrt_svc_shortcuts::keys::KeyState;
 use dkrt_svc_shortcuts::shortcuts::{self, key_flags, Verdict};
+use dkrt_svc_shortcuts::unwired_keys::UnwiredKeys;
 use dkrt_test_support::FakeCore;
 
 /// The owner over the fake subscription: nothing here reaches a platform.
-type Shortcuts = shortcuts::Shortcuts<FakeKeys>;
+type Shortcuts = shortcuts::Shortcuts<UnwiredKeys>;
 
 // logical key numbers of these tests, and the panel codes they have on the test device
 const TRK: u8 = 1;

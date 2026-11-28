@@ -11,13 +11,9 @@ mod gen_exports;
 #[cfg(target_arch = "m68k")]
 mod image_keys;
 pub mod key_routine;
+mod owner;
 
-/// The owner object of the service file: the service over the image's table of key subscribers.
-#[cfg(target_arch = "m68k")]
-pub use image_keys::Owner;
-/// A host build (the tests of the file, the assembly test of the runtime) has no image: the owner subscribes to a `FakeKeys`.
-#[cfg(not(target_arch = "m68k"))]
-pub type Owner = dkrt_svc_shortcuts::shortcuts::Shortcuts<dkrt_svc_shortcuts::fake_keys::FakeKeys>;
+pub use owner::Owner;
 
 dkrt_svc_rt::service!(
     Owner,

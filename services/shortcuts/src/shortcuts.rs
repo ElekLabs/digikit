@@ -93,12 +93,12 @@ impl<K: KeyEvents> Shortcuts<K> {
         }
     }
 
-    /// The key subscription (for a test of the fake).
+    /// The key subscription (for a test of `UnwiredKeys`).
     pub fn keys(&self) -> &K {
         &self.keys
     }
 
-    /// The key subscription, to set what a fake answers.
+    /// The key subscription, for a test.
     pub fn keys_mut(&mut self) -> &mut K {
         &mut self.keys
     }

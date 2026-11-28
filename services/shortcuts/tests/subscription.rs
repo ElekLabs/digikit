@@ -1,17 +1,17 @@
-//! The service's subscription to the platform's key walk (`KeyEvents`) over `FakeKeys`: it subscribes when it starts and unsubscribes when it stops, a refusal fails the start, and the words of
+//! The service's subscription to the platform's key walk (`KeyEvents`) over `UnwiredKeys`: it subscribes when it starts and unsubscribes when it stops, a refusal fails the start, and the words of
 //! the image's `input_keys_info` are read as `KeyTable` says.
 use core::mem::MaybeUninit;
 use dkrt_abi::provider::Provider;
 use dkrt_sdk::{E_EXISTS, E_NO_REGISTRY, E_TABLE_FULL};
-use dkrt_svc_shortcuts::fake_keys::FakeKeys;
 use dkrt_svc_shortcuts::key_table::{KeyTable, WORDS};
 use dkrt_svc_shortcuts::shortcuts::Shortcuts;
+use dkrt_svc_shortcuts::unwired_keys::UnwiredKeys;
 use dkrt_test_support::FakeCore;
 
 /// A started owner over the fake, in its slot, or the refusal of the start.
 fn start<const REFUSAL: i32>(
-    slot: &mut MaybeUninit<Shortcuts<FakeKeys<REFUSAL>>>,
-) -> Result<&mut Shortcuts<FakeKeys<REFUSAL>>, i32> {
+    slot: &mut MaybeUninit<Shortcuts<UnwiredKeys<REFUSAL>>>,
+) -> Result<&mut Shortcuts<UnwiredKeys<REFUSAL>>, i32> {
     Provider::start_in(&FakeCore::new(), slot)?;
     // SAFETY: `start_in` made the instance
     Ok(unsafe { slot.assume_init_mut() })
