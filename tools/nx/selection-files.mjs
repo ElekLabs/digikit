@@ -17,8 +17,13 @@ export const SELECTION_DIRS = ['tools/nx/tests/'];
 export const isSelectionFile = (file) =>
   SELECTION_FILES.includes(file) || SELECTION_DIRS.some((dir) => file.startsWith(dir));
 
-/** Whether a non-empty change touches nothing but selection files. */
-export const confinedToSelection = (changed) => changed.length > 0 && changed.every(isSelectionFile);
+// Documentation: no device runs it, and no device or conformance test has it in its Nx inputs, so it selects no test and no smoke.
+// `AGENTS.md` is the root instruction file, documentation by the same rule; READMEs and skills keep the ordinary rule.
+export const isDocumentationFile = (file) => file.startsWith('docs/') || file === 'AGENTS.md';
+
+/** Whether a non-empty change touches nothing but selection files and documentation. */
+export const confinedToSelection = (changed) =>
+  changed.length > 0 && changed.every((f) => isSelectionFile(f) || isDocumentationFile(f));
 
 /**
  * The selection after the confinement rule: a diff confined to selection files drops the tests the areas and ownership chose and the

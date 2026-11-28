@@ -17,7 +17,7 @@ import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 import { gateContext } from './gate-context.mjs';
 import { areaSelection, portAreaSelection } from './runtime-areas.mjs';
-import { applyConfinement, confinedToSelection } from './selection-files.mjs';
+import { applyConfinement, confinedToSelection, isDocumentationFile } from './selection-files.mjs';
 import { DEVICES, leavesOf, ownedConformance, ownershipSelection } from './device-owners.mjs';
 
 export { DEVICES };
@@ -321,6 +321,9 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   if (mapped.length > 20) console.log(`  owner: ${mapped.length - 20} more changed files`);
   for (const { file, why } of (selection.unowned ?? []).slice(0, 20))
     console.log(`  unowned ${file} (${why}): selects no test`);
+  const docs = (selection.changed ?? []).filter(isDocumentationFile);
+  if (docs.length)
+    console.log(`  ${docs[0]}${docs.length > 1 ? ` and ${docs.length - 1} more` : ''}: documentation selects none`);
   for (const { file, project } of (selection.metadataOnly ?? []).slice(0, 20))
     console.log(`  metadata only ${project}: ${file} selects none (tags, subjects or reasons changed)`);
   for (const { file, project } of (selection.quiet ?? []).slice(0, 20))
@@ -341,7 +344,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     console.log(
       smoke.length
         ? `  ${DEVICE_SMOKE.project}: ${DEVICE_SMOKE.target} (${smokeHalves(projects).length} halves)`
-        : `  ${DEVICE_SMOKE.project}: not selected (${confinedToSelection(selection.changed) ? 'only gate selection files changed' : 'no device input changed'})`,
+        : `  ${DEVICE_SMOKE.project}: not selected (${confinedToSelection(selection.changed) ? 'only gate selection files and documentation changed' : 'no device input changed'})`,
     );
   if (base) {
     const skipped = skippedHalves(affected, pairs, smokeHalves(projects));

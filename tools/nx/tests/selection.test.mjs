@@ -6,7 +6,7 @@ import { ownershipSelection } from '../device-owners.mjs';
 import { gateContext } from '../gate-context.mjs';
 import { declaredUsers, portEntryUsers } from '../port-entries.mjs';
 import { areaSelection, checkComplete, classify, loadAreas, portAreaSelection } from '../runtime-areas.mjs';
-import { applyConfinement, confinedToSelection } from '../selection-files.mjs';
+import { applyConfinement, confinedToSelection, isDocumentationFile } from '../selection-files.mjs';
 import { changedFiles, smokeSelected } from '../test-subset.mjs';
 
 const areas = loadAreas();
@@ -214,6 +214,22 @@ describe('gate selection files', () => {
     expect(sel.tests).toEqual([]);
     expect(sel.deviceFiles).toEqual([]);
     expect(smokeSelected(changed, new Set(halves))).toBe(false);
+  });
+
+  it('plans no test and no smoke for a documentation-only diff', () => {
+    const changed = ['docs/TESTING.md', 'docs/findings/1-x.md'];
+    expect(changed.every(isDocumentationFile)).toBe(true);
+    const sel = applyConfinement(auto, [], changed);
+    expect(sel.tests).toEqual([]);
+    expect(sel.deviceFiles).toEqual([]);
+    expect(smokeSelected(changed, new Set(halves))).toBe(false);
+  });
+
+  it('selects normally when documentation changes with a platform file', () => {
+    const changed = ['docs/TESTING.md', 'runtime/platform/lfo/src/cf/lfo.c'];
+    expect(confinedToSelection(changed)).toBe(false);
+    expect(tests(applyConfinement(auto, [], changed))).toEqual(['core/ui']);
+    expect(smokeSelected(changed, new Set(halves))).toBe(true);
   });
 
   it('keeps the tests the user named when the diff is confined', () => {
