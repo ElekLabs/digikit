@@ -77,7 +77,6 @@ A hook declared `context = "interrupt"` (`CTX_IRQ`, flag bits 1..2 = 3) is insta
 
 | service | hooks | context | enters the owner |
 | --- | --- | --- | --- |
-| shortcuts | `cf.input.hook.key_event` | UI task | yes: refused and counted inside a part call (`a_key_that_arrives_inside_a_call_of_the_service_is_refused_and_counted`) |
 | lfo | `wave_name`, `wave_name3`, `graph_vec` | UI task (MOD page) | no (`an_lfo_page_hook_fired_inside_a_part_call_never_enters_the_owner`) |
 | machines | `source_key`, `source_turn` | UI task [O] | yes |
 | machines | `frametype` and `type_reader` (DN2) | frame builder, may be an interrupt [O] | no: static table |

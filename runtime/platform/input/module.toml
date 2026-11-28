@@ -54,3 +54,40 @@ path = "build/device-st.dko.json"
 sources = ["src/cf/st/device.s"]
 place = "cf.expansion"
 devices = ["st"]
+
+# The key subscribers (docs/findings/ key event path): every key event of the panel passes the firmware's key walker once, in the UI task, before any view. This module takes the entry of the
+# walker (`cf.input.hook.key_event`, ports/fw/input.toml, DT2 1.17 and DN2 1.12) to `input_key_walk_hook` (src/cf/key-walk.s), which offers the event to the subscribers of `key_subscribers.c` in slot
+# order: the first that returns nonzero consumes it, else the stock walker runs. A service file subscribes its routine through `input_keys_info` (below) instead of taking the site.
+[[object]]
+path = "build/key-subscribers-dt2.dko.json"
+sources = ["src/cf/key_subscribers.c", "src/cf/key-walk.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[object.externs]
+input_key_tail = "hook.cf.input.site.key_event_walk.tail"
+
+[[object]]
+path = "build/key-subscribers-dn2.dko.json"
+sources = ["src/cf/key_subscribers.c", "src/cf/key-walk.s"]
+place = "cf.expansion"
+devices = ["dn2"]
+
+[object.externs]
+input_key_tail = "hook.cf.input.site.key_event_walk.tail"
+
+[[op]]
+op = "hook"
+hook = "cf.input.hook.key_event"
+to = "input_key_walk_hook"
+devices = ["dt2", "dn2"]
+
+[[claim]]
+resource = "cf.input.site.key_event_walk"
+devices = ["dt2", "dn2"]
+
+# The calls and the size of the table, for the services that subscribe (CoreApi::info "input_keys_info"; key_subscribers.h: 'KEYS', version 1, slots, subscribe, unsubscribe).
+[[info]]
+name = "input_keys_info"
+symbol = "input_keys_info"
+devices = ["dt2", "dn2"]
