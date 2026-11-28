@@ -5,7 +5,9 @@ import { deviceShorts } from '../device-files.mjs';
 import { ownershipSelection } from '../device-owners.mjs';
 import { gateContext } from '../gate-context.mjs';
 import { declaredUsers, portEntryUsers } from '../port-entries.mjs';
-import { checkComplete, classify, loadAreas, portAreaSelection } from '../runtime-areas.mjs';
+import { areaSelection, checkComplete, classify, loadAreas, portAreaSelection } from '../runtime-areas.mjs';
+import { confinedToSelection } from '../selection-files.mjs';
+import { smokeSelected } from '../test-subset.mjs';
 
 const areas = loadAreas();
 const [DEV] = deviceShorts();
@@ -188,5 +190,35 @@ describe('gate context against the base', () => {
 
   it('leaves a file that is no generated port file alone', () => {
     expect(ctx({}).portEntries('ports/fw/input.toml')).toBeUndefined();
+  });
+});
+
+describe('gate selection files', () => {
+  const lfoArea = {
+    scope: ['runtime/platform/**'],
+    areas: { 'platform-lfo': { globs: ['runtime/platform/lfo/**'], tests: ['core/ui:ui.device.test.ts'] } },
+  };
+  const halves = ['core/ui:test-device--ui--dt2', 'core/ui:test-device--ui--dn2'];
+
+  it('plans no device test and no smoke for a diff confined to the selection files', () => {
+    const changed = ['tools/nx/runtime-areas.json', 'tools/nx/test-subset.mjs', 'tools/nx/tests/selection.test.mjs'];
+    expect(confinedToSelection(changed)).toBe(true);
+    expect(areaSelection(projects, changed, lfoArea).tests).toEqual([]);
+    expect(smokeSelected(changed, new Set(halves))).toBe(false);
+  });
+
+  it('does not select the tests an area entry newly names', () => {
+    expect(areaSelection(projects, ['tools/nx/runtime-areas.json'], lfoArea).tests).toEqual([]);
+  });
+
+  it('still selects the area and the smoke set when a platform file changes with a selection file', () => {
+    const changed = ['tools/nx/device-owners.mjs', 'runtime/platform/lfo/src/cf/lfo.c'];
+    expect(confinedToSelection(changed)).toBe(false);
+    expect(areaSelection(projects, changed, lfoArea).tests.map((t) => t.project)).toEqual(['core/ui']);
+    expect(smokeSelected(changed, new Set(halves))).toBe(true);
+  });
+
+  it('keeps the smoke set off when no device half is affected', () => {
+    expect(smokeSelected(['runtime/platform/lfo/src/cf/lfo.c'], new Set())).toBe(false);
   });
 });
