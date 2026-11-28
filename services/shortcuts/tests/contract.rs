@@ -6,7 +6,7 @@ use dkrt_abi::profiles::ALL;
 use dkrt_sdk::records::KINDS_SHORTCUTS;
 use dkrt_svc_shortcuts::bindings::Callback;
 use dkrt_svc_shortcuts::builder::ShortcutDef;
-use dkrt_svc_shortcuts::shortcuts::Shortcuts;
+
 use dkrt_test_support::contract::{Dsp, Fixture, Init, Module, Rows};
 use dkrt_test_support::{provider_contract, subject, FakeCore, Recipe, RowBuilder};
 
@@ -19,6 +19,9 @@ mod stubs;
 #[path = "../dks/src/lib.rs"]
 pub mod file;
 pub use file::{builder, DK_SVC_OWNER};
+
+/// The owner of the file: the service over the fake subscription of a host build.
+type Shortcuts = file::Owner;
 
 /// The parts the file adopts, read from the row its `service!` call declares.
 struct ShortcutsRecipe;

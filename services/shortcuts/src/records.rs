@@ -2,6 +2,7 @@
 //! builder call's side (`builder::Builder`), `check` the validation over the block the services wrote, `apply` one record of a consumer that came up. The free [`validate`] is the
 //! rule for the records without a core; `patchkit records --check` calls it too. A consumer that goes down is `Provider::detach` (`shortcuts.rs`).
 use crate::bindings::{Added, Binding, Callback, ID_BYTES, LABEL_BYTES, MAX_BINDINGS};
+use crate::key_events::KeyEvents;
 use crate::rule::{at, BODY_LEN, MAX_PER_MODULE};
 use crate::shortcuts::Shortcuts;
 use core::ffi::c_void;
@@ -49,7 +50,7 @@ fn callback(base: u32, offset: u32) -> Option<Callback> {
     }
 }
 
-impl<C: CoreApi> Records<C> for Shortcuts {
+impl<C: CoreApi, K: KeyEvents> Records<C> for Shortcuts<K> {
     fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
         validate(kind, bodies, report)
     }
