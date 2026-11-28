@@ -141,7 +141,7 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
       be32(1),
       be32(1),
       be32(runtime),
-      be32(withDebug ? (1 << CAP.LOG) | (1 << CAP.PEEK) | (1 << CAP.LOGCFG) : 0),
+      be32((1 << CAP.SETTINGS) | (withDebug ? (1 << CAP.LOG) | (1 << CAP.PEEK) | (1 << CAP.LOGCFG) : 0)),
       id,
     );
     push(to, concat([0xf0, 0x7d, 0x64, 0x6b, 1, CMD.INFO | 0x40, seq], encode8in7(body), [0xf7]));
