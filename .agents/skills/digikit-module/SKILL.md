@@ -21,6 +21,8 @@ The packer infers the kind from what the module declares: `[[machine]]` makes a 
 
 The `core/*` modules are patched into the image. Changes to `core/*` are firmware work and need Em.
 
+A module that needs a resource or API no loaded service provides (a shared table, a firmware hook, a record kind with its own rule) needs a new or changed service: use the `digikit-service` skill. Check `sdk/sdk.toml` (`provided = true`) and `services/*` first.
+
 ## Workflow
 
 1. Create: `mise run module:new -- KIND AUTHOR/NAME [--dir DIR] [--title T] [--short S] [--no-build]` (guide 3). `KIND` is `machine`, `fx`, `tool` or `lfo-shape`.
