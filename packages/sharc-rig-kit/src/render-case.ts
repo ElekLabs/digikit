@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { FS } from './analysis.ts';
 import { fxCases, machineCases } from './cases.ts';
 import { fxDescription, machineBudget, runFxCase, runMachineCase } from './conform.ts';
-import { buildFx, buildMachine, type FxBuilt, type MachineBuilt } from './place.ts';
+import { buildFx, buildMachine, linkedSha256, type FxBuilt, type MachineBuilt } from './place.ts';
 import { rigBinary } from './rig.ts';
 import { checkMachineGallery, fxBudget, fxSpec, fxWord, machineSpec, type Device } from './spec.ts';
 import { LISTENING_SCENES, type ListeningScene } from './listening-stems.ts';
@@ -38,14 +38,8 @@ function selectCase<T extends { group: string; name: string }>(cases: readonly T
 }
 
 function buildIdentity(built: FxBuilt | MachineBuilt): RenderedCase['build'] {
-  const hash = createHash('sha256');
-  for (const code of built.linked) hash.update(`code:${code.baseSw}:${code.codeBoot}\n`);
-  for (const init of built.inits) {
-    hash.update(`data:${init.address}:${init.bytes.length}:${init.bss}\n`);
-    hash.update(init.bytes);
-  }
   return {
-    linkedSha256: hash.digest('hex'),
+    linkedSha256: linkedSha256(built),
     rigSha256: createHash('sha256').update(readFileSync(rigBinary())).digest('hex'),
   };
 }

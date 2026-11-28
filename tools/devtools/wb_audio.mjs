@@ -1,4 +1,4 @@
-// Offline render and compare actions for the Workbench CLI.
+// Offline rig evidence, render and compare actions for the Workbench CLI.
 import path from 'node:path';
 import { DEVICES } from '../../packages/sharc-rig-kit/src/spec.ts';
 import { renderCase } from '../../packages/sharc-rig-kit/src/render-case.ts';
@@ -7,6 +7,7 @@ import { writeAudioComparison, writeAudioRender } from '../../packages/sharc-rig
 export const audioUsage = [
   'wb module render MODULE --device ID --case GROUP/NAME [--emit wav,json] --out DIR',
   'Listening scenes: --case send/percussion|send/texture --send-amount N [--params-f32 V,...] [--profile-block N] [--repeat N]',
+  'wb module quality MODULE --out DIR [--comparison FILE ...] [--emit json,markdown,html]',
   'wb audio compare BASELINE.wav|render.json CANDIDATE.wav|render.json --out DIR',
   'Use --format json for a structured answer on stdout.',
 ].join('\n');
@@ -17,6 +18,20 @@ export async function audioCommand({ cmd, sub, rest, opts, fail }) {
   if (!opts.out) fail(audioUsage);
   const dir = path.resolve(opts.out);
   try {
+    if (cmd === 'module' && sub === 'quality') {
+      if (rest.length !== 1) fail(audioUsage);
+      const { qualityFormats, writeQualityReport } = await import('../../packages/sharc-rig-kit/src/quality-report.ts');
+      const emit = new Set((opts.emit ?? 'json,markdown').split(',').map((name) => name.trim()));
+      if ([...emit].some((name) => !qualityFormats.includes(name)))
+        fail('--emit requires a comma-separated list of json, markdown or html');
+      const { files, report } = await writeQualityReport(rest[0], dir, opts.comparison, emit);
+      if (format === 'json') console.log(JSON.stringify({ files, module: report.module, outcome: report.outcome }));
+      else {
+        console.log(`${report.module} · declarative rig checks · ${report.outcome.toUpperCase()}`);
+        for (const file of Object.values(files)) console.log(file);
+      }
+      return report.outcome === 'pass' ? 0 : 1;
+    }
     if (cmd === 'module' && sub === 'render') {
       const want = opts.case ?? [];
       if (rest.length !== 1 || want.length !== 1 || !DEVICES.includes(opts.device))

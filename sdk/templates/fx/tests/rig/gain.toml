@@ -1,0 +1,16 @@
+# Replace this case with checks for the audible behavior of your own processing.
+[[case]]
+name = "GAIN at 50% halves both wet channels"
+observe = "scratch"
+
+[case.input]
+kind = "sin-index"
+
+[[case.step]]
+params_f32 = [0.5]
+blocks = 8
+
+[[case.check]]
+kind = "scales-input"
+channel = "both"
+gain = 0.5

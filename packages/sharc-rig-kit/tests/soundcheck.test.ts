@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { FS, wordsHash } from '../src/analysis.ts';
-import { evaluate, loadRigFile, type Check, type Trace } from '../src/soundcheck.ts';
+import { fingerprintFile } from '../src/fingerprint.ts';
+import { measure, writePin } from '../src/pcmpin.ts';
+import { evaluate, loadRigFile, type Check, type CheckMeasurements, type Trace } from '../src/soundcheck.ts';
 
 const dirs: string[] = [];
 afterAll(() => {
@@ -77,6 +79,41 @@ describe('level checks', () => {
         { kind: 'finite' },
       ),
     ).toContain('not finite');
+  });
+
+  it('retains measurements on both sides of a check verdict', () => {
+    const output = trace(5, () => 0.5);
+    for (const max of [0.6, 0.4]) {
+      const evidence = { observed: {}, expected: { max } };
+      const why = evaluate(output, { kind: 'rms', max }, '.', undefined, evidence);
+      expect(why).toBe(max > 0.5 ? null : 'RMS 0.5 is above 0.4');
+      expect(evidence).toEqual({ observed: { rms: 0.5 }, expected: { max } });
+    }
+    const evidence = { observed: {}, expected: {} };
+    const corrupt = trace(1, (n) => (n === 5 ? NaN : 0));
+    expect(evaluate(corrupt, { kind: 'finite' }, '.', undefined, evidence)).toBe('a sample is not finite');
+    expect(evidence.observed).toEqual({ finite: false, firstNonFinite: 5, value: NaN });
+    expect(evidence.expected).toEqual({ finite: true });
+  });
+
+  it('reports the tolerant pin level comparison separately from the declared hash', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'rig-measurement-'));
+    dirs.push(dir);
+    const reference = trace(32, () => 0.25).out.flat();
+    const sha256 = wordsHash(reference);
+    writePin(fingerprintFile(dir, 'tolerant'), measure(reference, { blockRms: true }).fp, {
+      tolerance: { level_db: 10, band_db: 10 },
+    });
+    const evidence: CheckMeasurements = { observed: {}, expected: { sha256 } };
+    const observed = trace(32, () => 0.5);
+    expect(evaluate(observed, { kind: 'same-as', sha256 }, dir, 'tolerant', evidence)).toBeNull();
+    expect(evidence.reference).toEqual({ declaredSha256: sha256 });
+    expect(evidence.expected).not.toHaveProperty('sha256');
+    expect(evidence.expected).toMatchObject({ mode: 'fingerprint', tolerance: { level_db: 10 } });
+    expect(evidence.observed).toMatchObject({
+      fingerprint: { block_rms: { count: 32, min: 0.5, max: 0.5 } },
+      rmsComparison: { rms: { maxAbsDeltaDb: expect.closeTo(6.02, 2) } },
+    });
   });
 
   it('find a signal that is silent from a block on', () => {
