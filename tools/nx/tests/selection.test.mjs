@@ -198,7 +198,7 @@ describe('gate selection files', () => {
     scope: ['runtime/platform/**'],
     areas: { 'platform-lfo': { globs: ['runtime/platform/lfo/**'], tests: ['core/ui:ui.device.test.ts'] } },
   };
-  const halves = ['core/ui:test-device--ui--dt2', 'core/ui:test-device--ui--dn2'];
+  const halves = [`core/ui:test-device--ui--${DEV}`];
 
   it('plans no device test and no smoke for a diff confined to the selection files', () => {
     const changed = ['tools/nx/runtime-areas.json', 'tools/nx/test-subset.mjs', 'tools/nx/tests/selection.test.mjs'];
