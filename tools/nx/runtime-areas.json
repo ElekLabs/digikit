@@ -341,11 +341,9 @@
         "runtime/platform/sample-pool/**"
       ],
       "tests": [
-        "core/services/samples-tests:*",
-        "digikit/shot:tests/shot-*-pool.device.test.ts",
-        "digikit/shot:tests/shot-*-link.device.test.ts",
-        "digikit/shot:tests/shot-d?2.device.test.ts"
-      ]
+        "core/services/samples-tests:*"
+      ],
+      "note": "content-module tests are not mapped here (layer rule); the mechanism is covered by the fixture tests and smoke [O: the shot link test is a dsp-link mechanism test living in a content module; move it to a fixture]"
     },
     "platform-dyndsp": {
       "globs": [
@@ -364,13 +362,10 @@
       ],
       "tests": [
         "core/runtime-fixture-tests:*",
-        "digikit/shot:tests/shot-*-link.device.test.ts",
-        "digikit/shot:tests/shot-*-pool.device.test.ts",
-        "digikit/shot:tests/shot-*-supersede.device.test.ts",
-        "digikit/debug:tests/debug-dsp-stats.device.test.ts",
         "core/fx:tests/patched-dsp-startup.device.test.ts",
         "core/runtime-tests:modules-capacity.device.test.ts"
-      ]
+      ],
+      "note": "content-module tests are not mapped here (layer rule); the mechanism is covered by the fixture tests and smoke [O: the shot link test is a dsp-link mechanism test living in a content module; move it to a fixture]"
     },
     "platform-ui": {
       "globs": [
@@ -383,9 +378,9 @@
         "sdk-settings-page-tests:*",
         "sdk-ui-views-tests:*",
         "sdk-ui-zero-tests:*",
-        "native-page-proof-tests:*",
-        "digikit/shot:*"
-      ]
+        "native-page-proof-tests:*"
+      ],
+      "note": "content-module tests are not mapped here (layer rule); the mechanism is covered by the fixture tests and smoke [O: the shot link test is a dsp-link mechanism test living in a content module; move it to a fixture]"
     },
     "platform-lfo-table": {
       "globs": [
