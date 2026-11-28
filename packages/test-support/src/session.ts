@@ -52,11 +52,11 @@ const DEFAULT_MIN_FREE_GB = 5;
 
 /** The free space a session needs: `DIGI_MIN_FREE_GB` (a non-negative number) or the default. */
 export function minFreeGb(env: string | undefined = process.env.DIGI_MIN_FREE_GB): number {
-  if (env === undefined || env === '') return DEFAULT_MIN_FREE_GB;
-  const value = Number(env);
-  if (!Number.isFinite(value) || value < 0)
-    throw new Error(`DIGI_MIN_FREE_GB must be a non-negative number, got "${env}"`);
-  return value;
+  if (env === undefined) return DEFAULT_MIN_FREE_GB;
+  const text = env.trim();
+  if (!/^\d+(\.\d+)?$/.test(text))
+    throw new Error(`DIGI_MIN_FREE_GB must be a non-negative decimal number, got "${env}"`);
+  return Number(text);
 }
 const MAX_STEP = 200_000_000;
 const FAULT_KINDS = new Set(['halt', 'fault', 'stall', 'stall.end', 'lagged']);
