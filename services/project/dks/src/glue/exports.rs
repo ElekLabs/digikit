@@ -1,7 +1,7 @@
-//! The exports of the file: `dk_project_current`, `dk_project_status`, `dk_project_list` and `dk_project_get`.
+//! The exports of the file: `dk_project_current`, `dk_project_status`, `dk_project_list`, `dk_project_get`, `dk_project_settings` and `dk_project_read`.
 use super::Owner;
 use crate::DK_SVC_OWNER;
-use dkrt_svc_project::engine::{ProjectEntry, ProjectSummary};
+use dkrt_svc_project::engine::{ProjectEntry, ProjectSetting, ProjectSummary};
 use dkrt_svc_rt::{ImportCore, Shared};
 
 /// The state bits as of the end of the last tick or scope change: a copy that the owner publishes (`publish`) and `dk_project_status` reads in a masked section. The export
@@ -87,3 +87,73 @@ pub unsafe extern "C" fn dk_project_get(slot: u32, out: *mut u8) -> i32 {
         })
         .unwrap_or(dkrt_sdk::E_NOT_FOUND)
 }
+
+/// The longest module id (`<author>/<name>`).
+const ID_MAX: u32 = 31;
+
+/// `dk_project_settings` (export of the file): the saved settings of the module `module_id` (`id_len` bytes) of project `slot` from entry `cursor` on into `out` (`dk_project_setting[max]`):
+/// their number, and in `*next` (when not null) the cursor of the following page, 0 for none. `version` is the project's write counter (`dk_project_get`): another counter
+/// answers `DK_E_CHANGED`. `DK_E_AGAIN` while the file of another slot is read, `DK_E_NOT_FOUND` (no file, no such module, no service), `DK_E_RANGE` for a null `module_id` or `out`, a
+/// `max` of 0 or an id that is empty or over 31 bytes.
+#[cfg_attr(target_arch = "m68k", no_mangle)]
+pub unsafe extern "C" fn dk_project_settings(
+    slot: u32,
+    module_id: *const u8,
+    id_len: u32,
+    version: u32,
+    cursor: u32,
+    out: *mut u8,
+    max: u32,
+    next: *mut u32,
+) -> i32 {
+    if out.is_null() || module_id.is_null() || max == 0 || id_len == 0 || id_len > ID_MAX {
+        return dkrt_sdk::E_RANGE;
+    }
+    // SAFETY: the caller's id bytes and array of `max` entries (the struct has no padding and align 2: ColdFire aligns a u16 to 2 bytes).
+    let module = core::slice::from_raw_parts(module_id, id_len as usize);
+    let entries =
+        core::slice::from_raw_parts_mut(out as *mut ProjectSetting, max.min(MAX_ENTRIES) as usize);
+    let mut after = 0u32;
+    let status = DK_SVC_OWNER
+        .with(|p| p.settings(slot, module, version, cursor, entries, &mut after))
+        .unwrap_or(dkrt_sdk::E_NOT_FOUND);
+    if !next.is_null() {
+        // the caller's word: ColdFire aligns a u32 to 2 bytes, so write it unaligned
+        next.write_unaligned(after);
+    }
+    status
+}
+
+/// The most entries of one `dk_project_settings` call.
+const MAX_ENTRIES: u32 = 16;
+
+/// `dk_project_read` (export of the file): the raw `.dkp` bytes of project `slot` from `offset` into `out` (`max` bytes at most): their number, and in `*total` (when not null) the length
+/// of the whole file image. `version` is the project's write counter (`dk_project_get`): another counter answers `DK_E_CHANGED`. `DK_E_AGAIN` while the file of another slot is read,
+/// `DK_E_NOT_FOUND` (no file, no service), `DK_E_RANGE` for a null `out` or a `max` of 0.
+#[cfg_attr(target_arch = "m68k", no_mangle)]
+pub unsafe extern "C" fn dk_project_read(
+    slot: u32,
+    version: u32,
+    offset: u32,
+    out: *mut u8,
+    max: u32,
+    total: *mut u32,
+) -> i32 {
+    if out.is_null() || max == 0 {
+        return dkrt_sdk::E_RANGE;
+    }
+    // SAFETY: the caller's buffer of `max` bytes.
+    let bytes = core::slice::from_raw_parts_mut(out, max.min(READ_MAX) as usize);
+    let mut size = 0u32;
+    let status = DK_SVC_OWNER
+        .with(|p| p.read(slot, version, offset, bytes, &mut size))
+        .unwrap_or(dkrt_sdk::E_NOT_FOUND);
+    if !total.is_null() {
+        // the caller's word: ColdFire aligns a u32 to 2 bytes, so write it unaligned
+        total.write_unaligned(size);
+    }
+    status
+}
+
+/// The most bytes of one `dk_project_read` call (what one read of another project's file keeps).
+const READ_MAX: u32 = 768;

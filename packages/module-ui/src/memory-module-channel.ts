@@ -3,6 +3,7 @@
 import type { MemoryQueryService } from './memory-query-service.ts';
 import type { QueryError, QueryResult } from './query-result.ts';
 import type { ModuleChannel, ModuleChannelEvent, RawSetting } from './module-channel.ts';
+import { checkSaveFiles, type SaveFile } from './save-files.ts';
 import { settingError, type SettingError } from './setting-error.ts';
 import { settingValueCodec } from './setting-value-codec.ts';
 import type { DescribedSchema, SettingsSchema } from './settings-schema.ts';
@@ -37,6 +38,8 @@ export interface MemoryOptions {
 export interface MemoryInspect {
   readonly store: MemorySettingsStore;
   readonly files: Map<string, Uint8Array>;
+  /** The saves the page asked for, in order, with the bytes copied. */
+  readonly saved: SaveFile[][];
   /** Makes the next query fail with `busy` or `timeout` without reaching the handler. */
   failNextQuery(kind: 'busy' | 'timeout'): void;
 }
@@ -70,6 +73,7 @@ export function createMemoryModuleChannel(
     const refused = await admit(call);
     if (refused) throw new Error(refused.message);
   }
+  const saved: SaveFile[][] = [];
   let forced: QueryError | undefined;
   const described: DescribedSchema = {
     ...structuredClone(schema),
@@ -100,6 +104,12 @@ export function createMemoryModuleChannel(
       await open({ method: 'files', id: name });
       data.delete(name);
     },
+    async saveFiles(files) {
+      if (!current()) throw new Error(gone().message);
+      checkSaveFiles(files);
+      saved.push(files.map((f) => ({ name: f.name, bytes: f.bytes.slice() })));
+      return { saved: files.length, cancelled: false, where: 'memory' };
+    },
     async callQuery(method, request): Promise<QueryResult> {
       if (!current()) return { ok: false, error: { kind: 'unavailable' } };
       if (forced) {
@@ -123,6 +133,7 @@ export function createMemoryModuleChannel(
     inspect: {
       store,
       files: data,
+      saved,
       failNextQuery(kind) {
         forced = { kind };
       },

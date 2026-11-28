@@ -125,6 +125,41 @@ static void query_get_outcome(void)
     assert(loading == 0 && found == 0);
 }
 
+static void query_settings_outcome(void)
+{
+    uint8_t loading = 9, changed = 9, found = 9;
+    assert(project_query_settings_outcome(3, &loading, &changed, &found) == 0);
+    assert(loading == 0 && changed == 0 && found == 1);
+    assert(project_query_settings_outcome(0, &loading, &changed, &found) ==
+           0); /* an empty page is found */
+    assert(loading == 0 && changed == 0 && found == 1);
+    assert(project_query_settings_outcome(DK_E_AGAIN, &loading, &changed, &found) == 0);
+    assert(loading == 1 && changed == 0 && found == 0);
+    assert(project_query_settings_outcome(DK_E_CHANGED, &loading, &changed, &found) == 0);
+    assert(loading == 0 && changed == 1 && found == 0);
+    assert(project_query_settings_outcome(DK_E_NOT_FOUND, &loading, &changed, &found) == 0);
+    assert(loading == 0 && changed == 0 && found == 0);
+    assert(project_query_settings_outcome(DK_E_RANGE, &loading, &changed, &found) == DK_E_RANGE);
+    assert(loading == 0 && changed == 0 && found == 0);
+}
+
+static void query_value(void)
+{
+    uint8_t head[PROJECT_QUERY_VALUE_MAX];
+    uint8_t out[PROJECT_QUERY_VALUE_MAX];
+    for (unsigned i = 0; i < sizeof head; i++)
+        head[i] = (uint8_t)(i + 1);
+    memset(out, 0xee, sizeof out);
+    assert(project_query_value(out, sizeof out, head, 3) ==
+           3); /* bytes as they are, zero included */
+    assert(out[0] == 1 && out[2] == 3 && out[3] == 0xee);
+    head[1] = 0;
+    assert(project_query_value(out, sizeof out, head, 3) == 3 && out[1] == 0);
+    assert(project_query_value(out, sizeof out, head, sizeof head) == sizeof head);
+    assert(project_query_value(out, 4, head, sizeof head) == 4); /* never past the capacity */
+    assert(project_query_value(out, sizeof out, head, 0) == 0);
+}
+
 int main(void)
 {
     title_numbers();
@@ -135,5 +170,7 @@ int main(void)
     query_flags();
     query_next();
     query_get_outcome();
+    query_settings_outcome();
+    query_value();
     return 0;
 }

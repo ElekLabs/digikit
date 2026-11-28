@@ -2,6 +2,8 @@
 // small arguments in headers, as the Rust commands take them (`tauri::ipc::Request`); the names and arguments follow the Rust signatures.
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import type { SaveResult } from '@digi/module-ui';
+import { createSaveFiles } from './save-files';
 import { createFirmwareSymbols } from '../firmware-symbols';
 import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
 import type { EmuRpc, Host, SymbolImageMap, SymbolRelease } from '@digi/workbench-core/host/host.ts';
@@ -79,6 +81,9 @@ export function createTauriHost(): Host {
       read: (root, rel, head) => invoke('local_read', { root, rel, head }),
       saveLog: (bytes, name, kind = 'log') =>
         invoke('log_save', bytes, { headers: { 'x-name': encodeURIComponent(name), 'x-kind': kind } }),
+      saveFiles: createSaveFiles({
+        saveWithDialog: (packed) => invoke<SaveResult>('files_save_with_dialog', packed),
+      }),
     },
     library: {
       build: (device) => invoke('lib_build', { device }),

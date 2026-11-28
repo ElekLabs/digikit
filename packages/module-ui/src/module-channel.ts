@@ -1,5 +1,6 @@
 import type { SettingError } from './setting-error.ts';
 import type { QueryResult } from './query-result.ts';
+import type { SaveFile, SaveResult } from './save-files.ts';
 import type { DescribedSchema } from './settings-schema.ts';
 
 /** A stored setting as the device holds it: raw bytes (absent while unset) and the revision, or the reason the request failed. */
@@ -31,6 +32,8 @@ export interface ModuleChannel {
   /** Sends one file. Progress arrives as `file-progress` events carrying `job`. */
   sendFile(job: number, name: string, bytes: Uint8Array): Promise<void>;
   removeFile(name: string): Promise<void>;
+  /** Saves the files into a folder the user picks (a dialog on the app side). The names are plain file names; the app refuses any other. */
+  saveFiles(files: SaveFile[]): Promise<SaveResult>;
   /** Calls the module's query `method` (1-based position in its service) with an encoded request; the result is reply bytes or the reason there are none. */
   callQuery(method: number, request: Uint8Array): Promise<QueryResult>;
   /** Delivers every event until the returned function is called. */

@@ -13,3 +13,4 @@ export * from './module-page.ts';
 export * from './query-result.ts';
 export * from './query-service-client.ts';
 export * from './memory-query-service.ts';
+export * from './save-files.ts';

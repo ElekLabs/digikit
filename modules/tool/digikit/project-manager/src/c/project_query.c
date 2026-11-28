@@ -48,3 +48,35 @@ int32_t project_query_get_outcome(int32_t result, uint8_t *loading, uint8_t *fou
         return 0;
     return result;
 }
+
+int32_t project_query_settings_outcome(int32_t result, uint8_t *loading, uint8_t *changed,
+                                       uint8_t *found)
+{
+    *loading = 0;
+    *changed = 0;
+    *found = 0;
+    if (result >= 0) {
+        *found = 1;
+        return 0;
+    }
+    if (result == DK_E_AGAIN) {
+        *loading = 1;
+        return 0;
+    }
+    if (result == DK_E_CHANGED) {
+        *changed = 1;
+        return 0;
+    }
+    if (result == DK_E_NOT_FOUND)
+        return 0;
+    return result;
+}
+
+uint32_t project_query_value(uint8_t *out, uint32_t capacity, const uint8_t *head,
+                             uint32_t head_len)
+{
+    uint32_t n = head_len < capacity ? head_len : capacity;
+    for (uint32_t i = 0; i < n; i++)
+        out[i] = head[i];
+    return n;
+}

@@ -202,11 +202,11 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
     let made: DkSession | undefined;
     // The session reports each request's outcome; only the selected target's reports reach the indicator.
     let noting = false;
-    const onLink = (ok: boolean, reason?: string, silentInfo?: boolean): void => {
+    const onLink = (ok: boolean, reason?: string, silentInfo?: boolean, optional?: boolean): void => {
       if (!sameTarget(t, target())) return;
       if (!ok) {
         if (silentInfo && connection.connection().state === 'noruntime') return;
-        noteConnection({ type: 'lost', reason: reason ?? 'No reply from the device.' });
+        noteConnection({ type: 'lost', reason: reason ?? 'No reply from the device.', ...(optional ? { optional } : {}) });
         return;
       }
       const state = connection.connection().state;

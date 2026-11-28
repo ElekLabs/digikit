@@ -273,14 +273,14 @@ unsafe fn assert_discoverable(dev: Dev, leaf: &str, descriptor: &[u8], queries: 
 }
 
 #[test]
-fn the_packed_project_user_registers_a_descriptor_without_settings_and_two_queries() {
+fn the_packed_project_user_registers_a_descriptor_without_settings_and_four_queries() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
         let file = packed(*dev, PROJECT_USER.leaf, "dkm", PROJECT_USER.nx);
         let offset = descriptor_offset(&file, USER_DESCRIPTOR);
         let Builder::Queries { count, methods } = packed_queries(*dev, &file, PROJECT_USER.leaf) else { unreachable!() };
-        assert_eq!((count, methods[0], methods[1]), (2, 1, 2), "{}: List and Get", dev.name);
+        assert_eq!((count, methods[0], methods[1], methods[2], methods[3]), (4, 1, 2, 3, 4), "{}: List, Get, GetSettings and ReadFile", dev.name);
         unsafe {
             let (mut l, plan) = planned(*dev, &image, &[], &[&PROJECT_USER], &SERVICES);
             // init's own calls are the ones listed here: the host runs no module code. The load fails when the runtime refuses either registration.
@@ -288,7 +288,7 @@ fn the_packed_project_user_registers_a_descriptor_without_settings_and_two_queri
             let run = boot_run(&mut l, &plan, &[&PROJECT_USER], false);
             // `verdict` reads Accepted for a load that failed in `init`: the refusal is the check
             assert!(run.refusal(0).is_none(), "{}: {:?}", dev.name, run.refusal(0));
-            assert_discoverable(*dev, PROJECT_USER.leaf, USER_DESCRIPTOR, 2);
+            assert_discoverable(*dev, PROJECT_USER.leaf, USER_DESCRIPTOR, 4);
             // the boot run has no unload: give the registry back so the next device registers again
             crate::package::module_ui::withdraw(0);
         }

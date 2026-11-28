@@ -10,6 +10,14 @@ export default function ProjectList(props: {
   client: ModuleClient;
   selected: number | undefined;
   onSelect: (slot: number) => void;
+  /** The slots ticked for saving. */
+  checked: ReadonlySet<number>;
+  onCheck: (slot: number, on: boolean) => void;
+  /** Called with the listed projects (slot and name) when "Save selected" is pressed. */
+  onSave: (items: Items) => void;
+  saving: boolean;
+  /** The outcome of the last save, in words; empty before the first. */
+  message: string;
 }) {
   // oxlint-disable-next-line solid/reactivity -- the client belongs to the page and does not change while it is open
   const service = props.client.service(ProjectManager);
@@ -39,12 +47,35 @@ export default function ProjectList(props: {
 
   return (
     <section class="pm-list" aria-label="Projects">
-      <h3>Projects</h3>
+      <div class="pm-list-head">
+        <h3>Projects</h3>
+        <button
+          type="button"
+          class="act small"
+          disabled={props.checked.size === 0 || props.saving}
+          onClick={() => props.onSave(items().filter((item) => props.checked.has(item.slot)))}
+        >
+          Save selected
+        </button>
+      </div>
+      <Show when={props.message}>
+        <p class="pm-save-message" role="status">
+          {props.message}
+        </p>
+      </Show>
       <Show when={items().length}>
         <ul class="rows">
           <For each={items()}>
             {(item) => (
               <li classList={{ sel: props.selected === item.slot }} onClick={() => props.onSelect(item.slot)}>
+                <input
+                  type="checkbox"
+                  class="pm-check"
+                  aria-label={`Select ${projectTitle(item.slot, item.name)}`}
+                  checked={props.checked.has(item.slot)}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => props.onCheck(item.slot, event.currentTarget.checked)}
+                />
                 <span class="name">
                   <button type="button" class="nm pm-project" aria-pressed={props.selected === item.slot}>
                     {projectTitle(item.slot, item.name)}

@@ -223,7 +223,7 @@
 #define DKRT_E_TABLE_FULL (-14)          /* no free module record */
 #define DKRT_E_LOST (-15)                /* the sample backing was lost and the reload failed */
 #define DKRT_E_POOL (-16)                /* the sample pool is full */
-#define DKRT_E_CHANGED (-17)             /* the sample file differs from the selection snapshot */
+#define DKRT_E_CHANGED (-17)             /* the data changed since it was read */
 #define DKRT_E_EXISTS (-18)              /* the file exists already (dk_files_create does not overwrite) */
 #define DKRT_E_CONTEXT (-19)             /* the call is not allowed in this context (dk_files_* writes run in an I/O step) */
 #define DKRT_E_NO_REGISTRY (-20)         /* register records, but the image has no registry */

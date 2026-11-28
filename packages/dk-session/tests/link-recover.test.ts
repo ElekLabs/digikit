@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkSession, encode8in7 } from '../src/index.ts';
+import { SERVICE_CMD } from '../src/gen_proto.ts';
 
 const CMD_LIST = 0x02;
 const E_FULL = -2;
@@ -100,4 +101,18 @@ test('a transport that throws is recovered and its error is rethrown after the l
   await assert.rejects(s.request(CMD_LIST, listBody), /MIDI port is closed/);
   assert.equal(link.recovers, 2);
   assert.deepEqual(outcomes, [[false, 'The MIDI port is closed']]);
+});
+
+test('onLink marks a lost service command (LOGCFG) optional and a core command (LIST) not', async () => {
+  const optional: (boolean | undefined)[] = [];
+  const s = new DkSession(new StaleLink(false, false), {
+    timeoutMs: 20,
+    retries: 0,
+    onLink: (ok, _why, _silent, opt) => {
+      if (!ok) optional.push(opt);
+    },
+  });
+  await assert.rejects(s.request(SERVICE_CMD.LOGCFG, Uint8Array.of(0)), { kind: 'timeout' });
+  await assert.rejects(s.request(CMD_LIST, listBody), { kind: 'timeout' });
+  assert.deepEqual(optional, [true, false]);
 });

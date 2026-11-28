@@ -14,6 +14,7 @@ mod analyzer;
 mod bulk_port;
 mod desktop_runtime;
 mod dsp_quality;
+mod files_save;
 mod firmware;
 mod library;
 mod local;
@@ -754,6 +755,7 @@ fn main() {
             symbols::catalog::symbols_open_review,
             symbols::catalog::symbols_catalog_frame,
             log_save::log_save,
+            files_save::files_save_with_dialog,
             library::lib_scan,
             library::lib_build,
             library::lib_read,

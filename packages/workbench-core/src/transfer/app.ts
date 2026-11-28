@@ -44,10 +44,32 @@ export function createTransferApp(
   const inventory = createModuleInventory();
   const jobs = createJobs();
   const state = createTransferState({ env, storage, jobs });
-  const connection = createConnection(env, () => {
-    inventory.clear();
-    state.forgetDevice();
-  });
+  let rereading = false;
+  const connection = createConnection(
+    env,
+    () => {
+      inventory.clear();
+      state.forgetDevice();
+    },
+    {
+      // A lost request keeps the list and re-reads it: a failed read (the device is gone) empties it, a good one confirms it.
+      // The re-read asks through the session, and its own failure is a lost request again: one re-read at a time, or it would repeat without end.
+      lost: () => {
+        if (rereading) return;
+        rereading = true;
+        const binding = target.bindSession();
+        void inventory
+          .refresh(async () => {
+            const session = await binding.session();
+            const info = await session.info(true);
+            binding.check();
+            return { session, info };
+          })
+          .finally(() => (rereading = false));
+      },
+      expired: () => inventory.empty(),
+    },
+  );
   const target = createTarget({ env, storage, sessions, connection });
   const { transferBackend, loadLibrary, installDeps } = createTransferBackend({
     env,

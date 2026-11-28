@@ -196,7 +196,7 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     -14: ("E_TABLE_FULL", "no free module record"),
     -15: ("E_LOST", "the sample backing was lost and the reload failed"),
     -16: ("E_POOL", "the sample pool is full"),
-    -17: ("E_CHANGED", "the sample file differs from the selection snapshot"),
+    -17: ("E_CHANGED", "the data changed since it was read"),
     -18: ("E_EXISTS", "the file exists already (dk_files_create does not overwrite)"),
     -19: (
         "E_CONTEXT",

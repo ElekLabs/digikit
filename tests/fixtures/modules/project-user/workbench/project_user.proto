@@ -4,12 +4,17 @@ package project_user;
 
 import "dk/options.proto";
 
-// What the project service's exports return (dk_project_list, dk_project_get), as a module sees them. The device holds at most 128 projects (slots 0 to 127).
+// What the project service's exports return (dk_project_list, dk_project_get, dk_project_settings, dk_project_read), as a module sees them. The device holds at most 128 projects (slots 0 to 127).
 service ProjectUser {
   // The projects from first_slot upward, 16 at most; next is the slot to ask for the next page, 0 when there are no more.
   rpc List(ListRequest) returns (ListReply);
   // The summary of one project. loading is true while the device reads the project's file: ask again.
   rpc Get(GetRequest) returns (GetReply);
+  // The settings a project saved for one module, 4 at most. version is the counter of Get's reply: changed is true when the project has changed since. loading is true while
+  // the device reads the project's file: ask again. next is the cursor for the next page, 0 for none.
+  rpc GetSettings(GetSettingsRequest) returns (GetSettingsReply);
+  // The raw bytes of the project's .dkp file from offset, 768 at most; total is the length of the whole file. version, loading and changed are as in GetSettings.
+  rpc ReadFile(ReadFileRequest) returns (ReadFileReply);
 }
 
 message ListRequest {
@@ -50,4 +55,40 @@ message GetReply {
   uint32 stamp = 5;
   uint32 counter = 6;
   repeated Module modules = 7 [(dk.max_count) = 8];
+}
+
+message GetSettingsRequest {
+  uint32 slot = 1;
+  string module = 2 [(dk.max_len) = 31];
+  uint32 version = 3;
+  uint32 cursor = 4;
+}
+
+message Setting {
+  string key = 1 [(dk.max_len) = 47];
+  // The first 64 bytes of the value; value_length is its full length.
+  bytes value = 2 [(dk.max_len) = 64];
+  uint32 value_length = 3;
+}
+
+message GetSettingsReply {
+  bool loading = 1;
+  bool changed = 2;
+  bool found = 3;
+  repeated Setting entries = 4 [(dk.max_count) = 4];
+  uint32 next = 5;
+}
+
+message ReadFileRequest {
+  uint32 slot = 1;
+  uint32 version = 2;
+  uint32 offset = 3;
+}
+
+message ReadFileReply {
+  bool loading = 1;
+  bool changed = 2;
+  bool found = 3;
+  bytes data = 4 [(dk.max_len) = 768];
+  uint32 total = 5;
 }

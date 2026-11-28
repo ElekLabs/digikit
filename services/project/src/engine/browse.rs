@@ -3,18 +3,24 @@
 //! - [`ProjectEntry`] (`entry.rs`): one row of the list: slot, name, and the flags current, has data, data not known yet.
 //! - [`DataIndex`] (`data_index.rs`): the slots that have a `.dkp`, from one listing of `projects/` after the start and from the work that changes files.
 //! - [`ProjectSummary`] (`summary.rs`): the header and module list of one project, with the number of settings each module has.
-//! - [`PeekCache`] (`peek.rs`): the summary of the slot asked for last. The current project is answered from its live image; another slot is read by a scan in the queue (`Work::Peek`)
+//! - [`PeekCache`] (`peek.rs`): the summary of the slot asked for last. `get` and `settings` answer for the current project from its live image; `read` and the other slots are read by a scan in the queue (`Work::Peek`)
 //!   when the stage is idle.
 //!
-//! The calls are `list` and `get` of [`ProjectService`](super::ProjectService) (`list.rs`, `get.rs`).
+//! - [`ProjectSetting`] (`setting.rs`): one saved setting of a module and the page reader over an image. The read of another project's file keeps one page of it (`peek.rs`).
+//!
+//! The calls are `list`, `get`, `settings` and `read` (the raw file bytes) of [`ProjectService`](super::ProjectService) (`list.rs`, `get.rs`, `settings.rs`, `read.rs`).
 mod data_index;
 mod entry;
 mod get;
 mod list;
 mod peek;
+mod read;
+mod setting;
+mod settings;
 mod summary;
 
 pub use data_index::DataIndex;
 pub use entry::{ProjectEntry, ENTRY_CURRENT, ENTRY_DATA, ENTRY_UNKNOWN};
-pub use peek::{PeekAnswer, PeekCache, PEEK_RETRY_MS};
+pub use peek::{PeekAnswer, PeekCache, PAGE_MAX, PEEK_RETRY_MS, RAW_MAX};
+pub use setting::{ProjectSetting, VALUE_HEAD};
 pub use summary::{ProjectModule, ProjectSummary, MODULE_LOADED, MODULE_UNKNOWN};

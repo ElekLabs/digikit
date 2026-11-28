@@ -1,3 +1,5 @@
+import { targetKey } from '@digi/workbench-core/transfer/session-core.ts';
+import { watchOpenModule } from './shell/open-module';
 import {
   For,
   Match,
@@ -104,6 +106,7 @@ export default function WorkbenchShell(
   },
 ) {
   const app = useTransferApp();
+  onCleanup(app.connection.dispose);
   const fw = useFirmwareApp();
   const { drawer, log, logWriter, emulatorActions } = untrack(() => props.tools);
   const { logEvent, logInput } = logWriter;
@@ -136,7 +139,7 @@ export default function WorkbenchShell(
   const filePages = moduleFilePages(app);
   const runtimePage = runtimeModulePages(
     app,
-    props.moduleChannels ?? createDeviceChannelFactory(app),
+    props.moduleChannels ?? createDeviceChannelFactory(app, (files) => props.host.fs.saveFiles(files)),
     createModulePageRegistry(props.modulePageLoaders ?? modulePageLoaders),
     (id, schema, definition, channel) => moduleFilePage(app, id, { schema, channel, definition }),
   );
@@ -153,9 +156,16 @@ export default function WorkbenchShell(
     setPage('module');
   }
   const modulePage = () => modulePages().find((item) => item.id === moduleId())?.view;
-  createEffect(() => {
-    if (page() === 'module' && !app.target.switching() && !modulePage()) setPage('transfer');
-  });
+  watchOpenModule(
+    {
+      target: () => targetKey(app.target.target()),
+      switching: app.target.switching,
+      inventory: app.inventory,
+      hasPage: (module) => module.uiInstance !== undefined || filePages.get(module.name) !== undefined,
+    },
+    () => (page() === 'module' ? { id: moduleId() } : undefined),
+    () => setPage('transfer'),
+  );
   const [card, setCard] = createSignal<CardStatus>();
   let live: LivePanelApi | undefined;
   let folderInput: HTMLInputElement | undefined;
@@ -255,15 +265,12 @@ export default function WorkbenchShell(
     )
       return;
     const binding = app.target.bindSession();
-    const read = app.inventory.reader();
-    void binding
-      .session()
-      .then(async (s) => {
-        const info = await s.info(true);
-        binding.check();
-        await read(s, info);
-      })
-      .catch(() => {});
+    void app.inventory.refresh(async () => {
+      const session = await binding.session();
+      const info = await session.info(true);
+      binding.check();
+      return { session, info };
+    });
   });
   const pollAudio = async () => {
     try {
@@ -702,8 +709,18 @@ export default function WorkbenchShell(
               </Show>
             </div>
           </div>
-          <Show when={page() === 'module' && modulePage()} keyed>
-            {(view) => <ModulePageView page={view} current={() => modulePage() === view} />}
+          <Show when={page() === 'module'}>
+            <Show
+              when={modulePage()}
+              keyed
+              fallback={
+                <p class="note" role="status">
+                  This module is not loaded on {targetLabel(target())}.
+                </p>
+              }
+            >
+              {(view) => <ModulePageView page={view} current={() => modulePage() === view} />}
+            </Show>
           </Show>
           <DspPage
             active={page() === 'dsp'}

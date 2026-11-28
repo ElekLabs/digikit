@@ -182,4 +182,24 @@ describe('createDeviceModuleChannel', () => {
     expect(await channel.getSetting('gain')).toMatchObject({ ok: false, error: { code: 'unavailable' } });
     expect(await channel.describeSettings()).toEqual({ name: 'Typed', version: 1, settings: [] });
   });
+
+  it('passes saves to the host function after checking the names, and refuses without one', async () => {
+    const got: string[][] = [];
+    const parts = { settings: deviceSettingsChannel('Typed'), queries: deviceQueryChannel(), files };
+    const channel = createDeviceModuleChannel({
+      ...parts,
+      saveFiles: async (list) => {
+        got.push(list.map((f) => f.name));
+        return { saved: list.length, cancelled: false, where: '/out' };
+      },
+    });
+    expect(await channel.saveFiles([{ name: 'a.wav', bytes: Uint8Array.of(1) }])).toEqual({
+      saved: 1,
+      cancelled: false,
+      where: '/out',
+    });
+    await expect(channel.saveFiles([{ name: '../a', bytes: Uint8Array.of(1) }])).rejects.toThrow(/plain file name/);
+    expect(got).toEqual([['a.wav']]);
+    await expect(createDeviceModuleChannel(parts).saveFiles([])).rejects.toThrow(/cannot save/);
+  });
 });

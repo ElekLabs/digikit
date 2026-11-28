@@ -4,8 +4,8 @@
 //!
 //! The crate stays neutral: the SDK calls are behind [`Host`], which the file implements (`dks/src/glue/host.rs`) and a host test implements over fakes.
 use crate::engine::{
-    Env, HookRecord, ProjectEntry, ProjectService, ProjectSummary, StoreJob, CARRY_MAX,
-    CARRY_VERSION,
+    Env, HookRecord, ProjectEntry, ProjectService, ProjectSetting, ProjectSummary, StoreJob,
+    CARRY_MAX, CARRY_VERSION,
 };
 use core::mem::MaybeUninit;
 use dkrt_abi::core_api::CoreApi;
@@ -94,6 +94,36 @@ impl<H: Host> Project<H> {
     /// `dk_project_get`: `OK`, `E_AGAIN` while the read runs, `E_NOT_FOUND`.
     pub fn summary(&mut self, slot: u32, out: &mut ProjectSummary) -> i32 {
         self.engine.get(&self.host, slot, out)
+    }
+
+    /// `dk_project_settings`: the entries written to `out` (their number), `E_AGAIN` while the read runs, `E_NOT_FOUND`, `E_CHANGED` for another write counter.
+    #[allow(clippy::too_many_arguments)]
+    pub fn settings(
+        &mut self,
+        slot: u32,
+        module: &[u8],
+        version: u32,
+        cursor: u32,
+        out: &mut [ProjectSetting],
+        next: &mut u32,
+    ) -> i32 {
+        self.engine
+            .settings(&self.host, slot, module, version, cursor, out, next)
+    }
+}
+
+impl<H: Host> Project<H> {
+    /// `dk_project_read`: the raw file bytes written to `out` (their number), `E_AGAIN` while the read runs, `E_NOT_FOUND`, `E_CHANGED` for another write counter.
+    pub fn read(
+        &mut self,
+        slot: u32,
+        version: u32,
+        offset: u32,
+        out: &mut [u8],
+        total: &mut u32,
+    ) -> i32 {
+        self.engine
+            .read(&self.host, slot, version, offset, out, total)
     }
 }
 

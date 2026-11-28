@@ -10,7 +10,7 @@ service_registration = "0.12.1" # minimum runtime for callback ordering and serv
 resident_query = "0.12.2" # minimum runtime for the optional resident query facet
 workbench_typed = "0.13.4" # minimum runtime for a version 2 Workbench settings descriptor (integer, boolean and choice settings)
 workbench_queries = "0.13.5" # minimum runtime for a module that declares Workbench queries (dk_workbench_register_queries and the MODULE_UI call verb)
-version = "0.13.5"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.13.6"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -758,6 +758,26 @@ since = "0.13.5"
 context = "ui"
 sig = "i32 (u32 slot, void *out)"
 doc = "The summary of project `slot` into `out`, a `dk_project_summary` (name, save stamp, write counter, the module list with each module's id, store hash, number of settings entries and state; <dk/platform/project.h>). The current project is answered at once (0). For another slot the first call queues a read of its `.dkp` and returns DK_E_AGAIN, as does every call until the read ended; then 0, or DK_E_NOT_FOUND when the slot has no usable file or the firmware lists none. The service keeps one summary: a call for another slot replaces it, and a change of the slot's file drops it. A module's state is DK_PROJECT_MODULE_LOADED or DK_PROJECT_MODULE_UNKNOWN (the card is not looked at). DK_E_RANGE for a null `out`."
+
+[[import]]
+name = "dk_project_settings"
+service = "project"
+provided = true
+wrapper = "glue"
+since = "0.13.6"
+context = "ui"
+sig = "i32 (u32 slot, const u8 *module_id, u32 id_len, u32 version, u32 cursor, void *out, u32 max, u32 *next)"
+doc = "The saved settings of module `module_id` (`id_len` bytes, `<author>/<name>`, 1 to 31) in project `slot`, from entry `cursor` (0 for the first) into `out`, an array of `max` `dk_project_setting` (116 bytes: key without the module's prefix, full value length, the first 64 value bytes; <dk/platform/project.h>): the number written. `*next` (may be NULL) is the cursor of the next page, 0 when the module has no more entries. `version` is the write counter of the project (`dk_project_get`): a project that changed since answers DK_E_CHANGED and writes nothing (read the summary again). The current project answers at once from its live image. For another slot the first call queues a read of its `.dkp` and returns DK_E_AGAIN, as does every call until it ended; one read keeps at most 4 entries, so a page of another project can be shorter than `max` (continue with `*next`), and a call for another module or cursor reads the file again. DK_E_NOT_FOUND when the slot has no usable file, the firmware lists none or the project's module list does not hold the module. DK_E_RANGE for a null `module_id` or `out`, a `max` of 0 or an id of 0 or over 31 bytes."
+
+[[import]]
+name = "dk_project_read"
+service = "project"
+provided = true
+wrapper = "glue"
+since = "0.13.6"
+context = "ui"
+sig = "i32 (u32 slot, u32 version, u32 offset, u8 *out, u32 max, u32 *total)"
+doc = "The raw `.dkp` bytes of project `slot` from byte `offset` into `out` (`max` bytes at most): the number written, 0 at or past the end. `*total` (may be NULL) is the length of the whole file image. `version` is the write counter of the project (`dk_project_get`): a project that changed since answers DK_E_CHANGED and writes nothing (read the summary again). Every project, the open one too, is read from its `.dkp` on the card: the first call queues the read and returns DK_E_AGAIN, as does every call until it ended (the file of the open project holds its last save, not unsaved changes). One read keeps a window of at most 4096 bytes of the file, so a call can write less than `max` (continue at `offset` plus the number written); a call inside the window reads nothing again, a call for an offset outside it reads the file again. The settings and summary of the same slot share the read. DK_E_NOT_FOUND when the slot has no usable file or the firmware lists none. DK_E_RANGE for a null `out` or a `max` of 0."
 
 [[import]]
 name = "dk_param_get"
@@ -2338,7 +2358,7 @@ E_TOO_BIG = { code = -13, text = "larger than the staging buffer" }
 E_TABLE_FULL = { code = -14, text = "no free module record" }
 E_LOST = { code = -15, text = "the sample backing was lost and the reload failed" }
 E_POOL = { code = -16, text = "the sample pool is full" }
-E_CHANGED = { code = -17, text = "the sample file differs from the selection snapshot" }
+E_CHANGED = { code = -17, text = "the data changed since it was read" }
 E_EXISTS = { code = -18, text = "the file exists already (dk_files_create does not overwrite)" }
 E_CONTEXT = { code = -19, text = "the call is not allowed in this context (dk_files_* writes run in an I/O step)" }
 E_NO_REGISTRY = { code = -20, text = "register records, but the image has no registry" }

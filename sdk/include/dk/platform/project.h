@@ -1,11 +1,17 @@
-/* <dk/platform/project.h>: the project list and the project summary of the `project` service (dk_project_list and dk_project_get, <dk/gen/imports.h>), for a module that
- * browses the firmware's projects, such as the Project Manager. Both are read-only and run in the UI task; a module that calls them needs the `project` service.
+/* <dk/platform/project.h>: the project list, the project summary and the saved settings of a module in a project, of the `project` service (dk_project_list, dk_project_get and
+ * dk_project_settings, <dk/gen/imports.h>), for a module that browses the firmware's projects, such as the Project Manager. All are read-only and run in the UI task; a module that calls them needs the `project` service.
  *
  *   dk_project_entry e[16];
  *   int32_t n = dk_project_list(0, e, 16);              // the first page; the next one starts at e[n - 1].slot + 1
  *
  *   dk_project_summary s;
  *   int32_t r = dk_project_get(slot, &s);               // 0, DK_E_AGAIN (asked: call again in a later pass) or DK_E_NOT_FOUND
+ *
+ *   dk_project_setting v[4];
+ *   uint32_t next;
+ *   int32_t n = dk_project_settings(slot, id, id_len, s.counter, 0, v, 4, &next);
+ *                                                       // the count; DK_E_AGAIN, DK_E_NOT_FOUND, or DK_E_CHANGED (the project's write counter is not `s.counter`
+ *                                                       // any more: read the summary again); `next` is the cursor of the next page, 0 for none
  *
  * The layouts are explicit: the padding is a field, and the service checks the same sizes. */
 #ifndef DK_PLATFORM_PROJECT_H
@@ -70,5 +76,22 @@ _Static_assert(sizeof(dk_project_summary) == 32 + 40 * DK_PROJECT_MODULES_MAX,
 _Static_assert(offsetof(dk_project_summary, stamp) == 20, "dk_project_summary.stamp");
 _Static_assert(offsetof(dk_project_summary, module_count) == 28, "dk_project_summary.module_count");
 _Static_assert(offsetof(dk_project_summary, modules) == 32, "dk_project_summary.modules");
+
+/* The longest value bytes a dk_project_setting carries. */
+#define DK_PROJECT_VALUE_HEAD 64
+
+/* One saved setting of a module in a project (dk_project_settings). */
+typedef struct dk_project_setting {
+    uint8_t key_len;
+    uint8_t head_len;   /* the value bytes in `head`: the value's length, at most 64 */
+    uint16_t value_len; /* the full length of the value */
+    uint8_t key[47];    /* the key as the module wrote it, without its `<author>/<name>/` prefix */
+    uint8_t head[DK_PROJECT_VALUE_HEAD];
+    uint8_t pad;
+} dk_project_setting;
+_Static_assert(sizeof(dk_project_setting) == 116, "dk_project_setting layout");
+_Static_assert(offsetof(dk_project_setting, value_len) == 2, "dk_project_setting.value_len");
+_Static_assert(offsetof(dk_project_setting, key) == 4, "dk_project_setting.key");
+_Static_assert(offsetof(dk_project_setting, head) == 51, "dk_project_setting.head");
 
 #endif

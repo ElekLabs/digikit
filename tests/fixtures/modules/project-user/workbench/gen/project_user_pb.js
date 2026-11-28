@@ -9,7 +9,7 @@ import { file_dk_options } from "@digi/wire/dk/options_pb.js";
  * Describes the file project_user.proto.
  */
 export const file_project_user = /*@__PURE__*/
-  fileDesc("ChJwcm9qZWN0X3VzZXIucHJvdG8SDHByb2plY3RfdXNlciIhCgtMaXN0UmVxdWVzdBISCgpmaXJzdF9zbG90GAEgASgNImQKB1Byb2plY3QSDAoEc2xvdBgBIAEoDRISCgRuYW1lGAIgASgJQgTI8xgQEg8KB2N1cnJlbnQYAyABKAgSEAoIaGFzX2RhdGEYBCABKAgSFAoMZGF0YV91bmtub3duGAUgASgIIkUKCUxpc3RSZXBseRIqCgVpdGVtcxgBIAMoCzIVLnByb2plY3RfdXNlci5Qcm9qZWN0QgTQ8xgQEgwKBG5leHQYAiABKA0iGgoKR2V0UmVxdWVzdBIMCgRzbG90GAEgASgNIkoKBk1vZHVsZRIQCgJpZBgBIAEoCUIEyPMYHxIMCgRoYXNoGAIgASgNEhAKCHNldHRpbmdzGAMgASgNEg4KBmxvYWRlZBgEIAEoCCKZAQoIR2V0UmVwbHkSDwoHbG9hZGluZxgBIAEoCBINCgVmb3VuZBgCIAEoCBIMCgRzbG90GAMgASgNEhIKBG5hbWUYBCABKAlCBMjzGBASDQoFc3RhbXAYBSABKA0SDwoHY291bnRlchgGIAEoDRIrCgdtb2R1bGVzGAcgAygLMhQucHJvamVjdF91c2VyLk1vZHVsZUIE0PMYCDKCAQoLUHJvamVjdFVzZXISOgoETGlzdBIZLnByb2plY3RfdXNlci5MaXN0UmVxdWVzdBoXLnByb2plY3RfdXNlci5MaXN0UmVwbHkSNwoDR2V0EhgucHJvamVjdF91c2VyLkdldFJlcXVlc3QaFi5wcm9qZWN0X3VzZXIuR2V0UmVwbHliBnByb3RvMw", [file_dk_options]);
+  fileDesc("ChJwcm9qZWN0X3VzZXIucHJvdG8SDHByb2plY3RfdXNlciIhCgtMaXN0UmVxdWVzdBISCgpmaXJzdF9zbG90GAEgASgNImQKB1Byb2plY3QSDAoEc2xvdBgBIAEoDRISCgRuYW1lGAIgASgJQgTI8xgQEg8KB2N1cnJlbnQYAyABKAgSEAoIaGFzX2RhdGEYBCABKAgSFAoMZGF0YV91bmtub3duGAUgASgIIkUKCUxpc3RSZXBseRIqCgVpdGVtcxgBIAMoCzIVLnByb2plY3RfdXNlci5Qcm9qZWN0QgTQ8xgQEgwKBG5leHQYAiABKA0iGgoKR2V0UmVxdWVzdBIMCgRzbG90GAEgASgNIkoKBk1vZHVsZRIQCgJpZBgBIAEoCUIEyPMYHxIMCgRoYXNoGAIgASgNEhAKCHNldHRpbmdzGAMgASgNEg4KBmxvYWRlZBgEIAEoCCKZAQoIR2V0UmVwbHkSDwoHbG9hZGluZxgBIAEoCBINCgVmb3VuZBgCIAEoCBIMCgRzbG90GAMgASgNEhIKBG5hbWUYBCABKAlCBMjzGBASDQoFc3RhbXAYBSABKA0SDwoHY291bnRlchgGIAEoDRIrCgdtb2R1bGVzGAcgAygLMhQucHJvamVjdF91c2VyLk1vZHVsZUIE0PMYCCJZChJHZXRTZXR0aW5nc1JlcXVlc3QSDAoEc2xvdBgBIAEoDRIUCgZtb2R1bGUYAiABKAlCBMjzGB8SDwoHdmVyc2lvbhgDIAEoDRIOCgZjdXJzb3IYBCABKA0iRwoHU2V0dGluZxIRCgNrZXkYASABKAlCBMjzGC8SEwoFdmFsdWUYAiABKAxCBMjzGEASFAoMdmFsdWVfbGVuZ3RoGAMgASgNIn8KEEdldFNldHRpbmdzUmVwbHkSDwoHbG9hZGluZxgBIAEoCBIPCgdjaGFuZ2VkGAIgASgIEg0KBWZvdW5kGAMgASgIEiwKB2VudHJpZXMYBCADKAsyFS5wcm9qZWN0X3VzZXIuU2V0dGluZ0IE0PMYBBIMCgRuZXh0GAUgASgNIkAKD1JlYWRGaWxlUmVxdWVzdBIMCgRzbG90GAEgASgNEg8KB3ZlcnNpb24YAiABKA0SDgoGb2Zmc2V0GAMgASgNImQKDVJlYWRGaWxlUmVwbHkSDwoHbG9hZGluZxgBIAEoCBIPCgdjaGFuZ2VkGAIgASgIEg0KBWZvdW5kGAMgASgIEhMKBGRhdGEYBCABKAxCBcjzGIAGEg0KBXRvdGFsGAUgASgNMpsCCgtQcm9qZWN0VXNlchI6CgRMaXN0EhkucHJvamVjdF91c2VyLkxpc3RSZXF1ZXN0GhcucHJvamVjdF91c2VyLkxpc3RSZXBseRI3CgNHZXQSGC5wcm9qZWN0X3VzZXIuR2V0UmVxdWVzdBoWLnByb2plY3RfdXNlci5HZXRSZXBseRJPCgtHZXRTZXR0aW5ncxIgLnByb2plY3RfdXNlci5HZXRTZXR0aW5nc1JlcXVlc3QaHi5wcm9qZWN0X3VzZXIuR2V0U2V0dGluZ3NSZXBseRJGCghSZWFkRmlsZRIdLnByb2plY3RfdXNlci5SZWFkRmlsZVJlcXVlc3QaGy5wcm9qZWN0X3VzZXIuUmVhZEZpbGVSZXBseWIGcHJvdG8z", [file_dk_options]);
 
 /**
  * Describes the message project_user.ListRequest.
@@ -54,7 +54,42 @@ export const GetReplySchema = /*@__PURE__*/
   messageDesc(file_project_user, 5);
 
 /**
- * What the project service's exports return (dk_project_list, dk_project_get), as a module sees them. The device holds at most 128 projects (slots 0 to 127).
+ * Describes the message project_user.GetSettingsRequest.
+ * Use `create(GetSettingsRequestSchema)` to create a new message.
+ */
+export const GetSettingsRequestSchema = /*@__PURE__*/
+  messageDesc(file_project_user, 6);
+
+/**
+ * Describes the message project_user.Setting.
+ * Use `create(SettingSchema)` to create a new message.
+ */
+export const SettingSchema = /*@__PURE__*/
+  messageDesc(file_project_user, 7);
+
+/**
+ * Describes the message project_user.GetSettingsReply.
+ * Use `create(GetSettingsReplySchema)` to create a new message.
+ */
+export const GetSettingsReplySchema = /*@__PURE__*/
+  messageDesc(file_project_user, 8);
+
+/**
+ * Describes the message project_user.ReadFileRequest.
+ * Use `create(ReadFileRequestSchema)` to create a new message.
+ */
+export const ReadFileRequestSchema = /*@__PURE__*/
+  messageDesc(file_project_user, 9);
+
+/**
+ * Describes the message project_user.ReadFileReply.
+ * Use `create(ReadFileReplySchema)` to create a new message.
+ */
+export const ReadFileReplySchema = /*@__PURE__*/
+  messageDesc(file_project_user, 10);
+
+/**
+ * What the project service's exports return (dk_project_list, dk_project_get, dk_project_settings, dk_project_read), as a module sees them. The device holds at most 128 projects (slots 0 to 127).
  *
  * @generated from service project_user.ProjectUser
  */

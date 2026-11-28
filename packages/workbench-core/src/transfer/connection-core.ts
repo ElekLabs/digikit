@@ -27,7 +27,7 @@ export type ConnectionEvent =
   | { type: 'asking' }
   | { type: 'answered'; device: DeviceFacts }
   | { type: 'noruntime'; reason: string; os?: string }
-  | { type: 'lost'; reason: string }
+  | { type: 'lost'; reason: string; optional?: boolean }
   | { type: 'cancelled' }
   | { type: 'closed'; reason?: string };
 

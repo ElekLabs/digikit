@@ -181,6 +181,163 @@ export declare type GetReply = Message<"project_manager.GetReply"> & {
 export declare const GetReplySchema: GenMessage<GetReply>;
 
 /**
+ * @generated from message project_manager.GetSettingsRequest
+ */
+export declare type GetSettingsRequest = Message<"project_manager.GetSettingsRequest"> & {
+  /**
+   * @generated from field: uint32 slot = 1;
+   */
+  slot: number;
+
+  /**
+   * @generated from field: string module = 2;
+   */
+  module: string;
+
+  /**
+   * @generated from field: uint32 version = 3;
+   */
+  version: number;
+
+  /**
+   * @generated from field: uint32 cursor = 4;
+   */
+  cursor: number;
+};
+
+/**
+ * Describes the message project_manager.GetSettingsRequest.
+ * Use `create(GetSettingsRequestSchema)` to create a new message.
+ */
+export declare const GetSettingsRequestSchema: GenMessage<GetSettingsRequest>;
+
+/**
+ * @generated from message project_manager.Setting
+ */
+export declare type Setting = Message<"project_manager.Setting"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * The first 64 bytes of the value; value_length is its full length.
+   *
+   * @generated from field: bytes value = 2;
+   */
+  value: Uint8Array;
+
+  /**
+   * @generated from field: uint32 value_length = 3;
+   */
+  valueLength: number;
+};
+
+/**
+ * Describes the message project_manager.Setting.
+ * Use `create(SettingSchema)` to create a new message.
+ */
+export declare const SettingSchema: GenMessage<Setting>;
+
+/**
+ * @generated from message project_manager.GetSettingsReply
+ */
+export declare type GetSettingsReply = Message<"project_manager.GetSettingsReply"> & {
+  /**
+   * @generated from field: bool loading = 1;
+   */
+  loading: boolean;
+
+  /**
+   * @generated from field: bool changed = 2;
+   */
+  changed: boolean;
+
+  /**
+   * @generated from field: bool found = 3;
+   */
+  found: boolean;
+
+  /**
+   * @generated from field: repeated project_manager.Setting entries = 4;
+   */
+  entries: Setting[];
+
+  /**
+   * @generated from field: uint32 next = 5;
+   */
+  next: number;
+};
+
+/**
+ * Describes the message project_manager.GetSettingsReply.
+ * Use `create(GetSettingsReplySchema)` to create a new message.
+ */
+export declare const GetSettingsReplySchema: GenMessage<GetSettingsReply>;
+
+/**
+ * @generated from message project_manager.ReadFileRequest
+ */
+export declare type ReadFileRequest = Message<"project_manager.ReadFileRequest"> & {
+  /**
+   * @generated from field: uint32 slot = 1;
+   */
+  slot: number;
+
+  /**
+   * @generated from field: uint32 version = 2;
+   */
+  version: number;
+
+  /**
+   * @generated from field: uint32 offset = 3;
+   */
+  offset: number;
+};
+
+/**
+ * Describes the message project_manager.ReadFileRequest.
+ * Use `create(ReadFileRequestSchema)` to create a new message.
+ */
+export declare const ReadFileRequestSchema: GenMessage<ReadFileRequest>;
+
+/**
+ * @generated from message project_manager.ReadFileReply
+ */
+export declare type ReadFileReply = Message<"project_manager.ReadFileReply"> & {
+  /**
+   * @generated from field: bool loading = 1;
+   */
+  loading: boolean;
+
+  /**
+   * @generated from field: bool changed = 2;
+   */
+  changed: boolean;
+
+  /**
+   * @generated from field: bool found = 3;
+   */
+  found: boolean;
+
+  /**
+   * @generated from field: bytes data = 4;
+   */
+  data: Uint8Array;
+
+  /**
+   * @generated from field: uint32 total = 5;
+   */
+  total: number;
+};
+
+/**
+ * Describes the message project_manager.ReadFileReply.
+ * Use `create(ReadFileReplySchema)` to create a new message.
+ */
+export declare const ReadFileReplySchema: GenMessage<ReadFileReply>;
+
+/**
  * Read-only views of the firmware's projects. The device holds at most 128 projects (slots 0 to 127).
  *
  * @generated from service project_manager.ProjectManager
@@ -205,6 +362,29 @@ export declare const ProjectManager: GenService<{
     methodKind: "unary";
     input: typeof GetRequestSchema;
     output: typeof GetReplySchema;
+  },
+  /**
+   * The settings a project saved for one module, 4 at most per reply. version is the counter of the project's Get reply: changed is true when the project has changed since
+   * (ask Get again). loading is true while the device reads the project's file: ask again. found is false when the project or the module is not there. next is the cursor for
+   * the next page, 0 when there are no more.
+   *
+   * @generated from rpc project_manager.ProjectManager.GetSettings
+   */
+  getSettings: {
+    methodKind: "unary";
+    input: typeof GetSettingsRequestSchema;
+    output: typeof GetSettingsReplySchema;
+  },
+  /**
+   * The raw bytes of the project's .dkp file from offset, 768 at most per reply; total is the length of the whole file. version, loading and changed are as in GetSettings;
+   * found is false when the project has no file. The open project answers from the image the device holds, not from the file.
+   *
+   * @generated from rpc project_manager.ProjectManager.ReadFile
+   */
+  readFile: {
+    methodKind: "unary";
+    input: typeof ReadFileRequestSchema;
+    output: typeof ReadFileReplySchema;
   },
 }>;
 

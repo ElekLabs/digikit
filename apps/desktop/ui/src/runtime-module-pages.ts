@@ -13,6 +13,15 @@ export interface ModulePagesHost {
   inventory: { modules(): DkModule[] };
 }
 
+/** The page of a module whose page could not be built: its name and the reason, never a silent return to another page. */
+export function failedPage(name: string, error: unknown): ModulePage {
+  const message = `The page of ${name} could not be built: ${error instanceof Error ? error.message : String(error)}`;
+  return {
+    descriptor: { id: name, name, schema: { version: 1, settings: [] }, hasPage: true, hasFiles: false },
+    open: () => ({ error: message }),
+  };
+}
+
 // Keep a resolved page for each loaded instance on this selection. A new
 // inventory read alone does not remount open controls or discard edits.
 export function runtimeModulePages(
@@ -62,9 +71,11 @@ export function runtimeModulePages(
         if (!current()) return;
         entry.page = pageFor(name, schema, definition, channelFor);
         publish();
-      })().catch(() => {
-        // A future inventory refresh can retry; existing file controls stay available.
-        if (current()) entries.delete(name);
+      })().catch((error: unknown) => {
+        // The module keeps its entry and shows why its page could not be built; a new instance retries.
+        if (!current()) return;
+        entry.page = failedPage(name, error);
+        publish();
       });
     }
     publish();

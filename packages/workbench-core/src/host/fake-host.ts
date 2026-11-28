@@ -71,6 +71,7 @@ export function createFakeHost(replies: Record<string, Reply> = {}): FakeHost {
       list: leaf('fs.list'),
       read: leaf('fs.read'),
       saveLog: leaf('fs.saveLog'),
+      saveFiles: leaf('fs.saveFiles'),
     },
     library: {
       build: leaf('library.build'),

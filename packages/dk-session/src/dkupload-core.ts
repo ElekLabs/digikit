@@ -843,9 +843,16 @@ export interface DkSessionOptions {
   emulatedProbe?: EmulatedProbe;
   /** Time source of `waitForBoot` and `waitForRestart` (default `wallClock`). A harness and `wb --emu` give `emulatedClock(status)`; a paused daemon gives a stepping clock. */
   clock?: Clock;
-  /** Called once per request: true after the matching reply, false after the last failed try (not for a cancelled request), with the reason. */
-  onLink?: (ok: boolean, reason?: string, silentInfo?: boolean) => void;
+  /**
+   * Called once per request: true after the matching reply, false after the last failed try (not for a cancelled request), with the reason.
+   * `optional`: the command belongs to a module the target may not have loaded (LOG, PEEK, LOGCFG and the other service commands): its loss says
+   * nothing about the connection.
+   */
+  onLink?: (ok: boolean, reason?: string, silentInfo?: boolean, optional?: boolean) => void;
 }
+
+/** The commands of service modules: a target answers them only while its module is loaded (CAP_LOG, CAP_PEEK, CAP_LOGCFG, ...). */
+const OPTIONAL_COMMANDS: ReadonlySet<number> = new Set(Object.values(SERVICE_CMD));
 
 /** Options of `waitForBoot` and `waitForRestart`. */
 export interface BootWaitOptions {
@@ -1215,6 +1222,7 @@ export class DkSession {
           false,
           failure instanceof Error ? failure.message : String(failure),
           cmd === GCMD.INFO && failure instanceof DkError && failure.kind === 'timeout',
+          OPTIONAL_COMMANDS.has(cmd),
         );
       throw failure;
     } finally {

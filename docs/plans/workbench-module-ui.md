@@ -145,13 +145,18 @@ Data path (built): page -> `client.service(ProjectManager)` -> `workbench/projec
 
 A module with a page and no settings registers a zero-settings descriptor, its Workbench registration; Project Manager does, and the `test/project-user` fixture covers that contract.
 
-Next (agreed, follow-up PR): saved settings per module. Click a module row to expand its saved settings.
-- Path: page -> `getSettings({ slot, module, version, cursor })` -> Project Manager handler (maps structs to protobuf only) -> new project service export `dk_project_settings(slot, module_id, version, cursor, out, max)`, which owns the `.dkp` reading and paging. Runtime and transport unchanged.
-- The request names the module by id and the project's write counter (`version`); a mismatch answers "project changed" and the page reloads the project.
-- Each entry: key, full value length, the first 64 bytes of the value; a few entries per reply and a cursor.
-- The open project answers from memory; another project re-reads its `.dkp` per page (`DK_E_AGAIN` until read), no extra RAM.
-- The page shows a value as text when printable, else hex, with its size. Typed values need each module's schema and are later.
-- Tests: service units (paging, version mismatch, truncation, open vs other project), handler mapping units, page units (expand, paging, loading, text/hex); `test/project-user` gets the same query and its device case checks one saved setting.
+Saved settings per module (built): click a module row on the details pane to expand its saved settings under it.
+- Path: page -> `getSettings({ slot, module, version, cursor })` -> Project Manager handler (maps structs to protobuf only, `project_query.c`) -> project service export `dk_project_settings(slot, module_id, id_len, version, cursor, out, max, next)`, which owns the `.dkp` reading and paging. Runtime and transport unchanged. The export is `since` 0.13.5 like `dk_project_get`.
+- The request names the module by id and the project's write counter (`version`, the `counter` of `Get`). A different counter answers `DK_E_CHANGED`; the reply has `changed` and the page reads the project again. `DK_E_AGAIN` is `loading`, `DK_E_NOT_FOUND` is `found = false` (no file, or the module is not in the project's module list).
+- Each entry (`dk_project_setting`, 116 bytes): the key without the module's prefix, the full value length, the first 64 value bytes; 4 entries per reply and a cursor (the entry index; `next` is 0 after the last entry).
+- The open project answers from its live image. Another project keeps one page of up to 4 entries next to its summary: a call reads the `.dkp` (`DK_E_AGAIN` until read), a call for another module or cursor reads it again. The page is the only extra RAM (4 x 116 bytes).
+- The page shows a value as text when every shown byte is printable ASCII, else as hex, and "N bytes" when the value is longer than shown. A module with 0 settings is not asked for. Typed values need each module's schema and are later.
+- Tests: service units (`services/project/tests/service/settings.rs`: paging, version mismatch, truncation, open vs other project, not found), handler mapping units (`tests/logic-driver.c`), page units (`tests/project-manager.page.test.ts`: expand, paging, loading, text/hex, changed, failures; `tests/project-text.test.ts`); `test/project-user` has the same `GetSettings` query and device case G checks the value it saved.
+
+Raw view and save (built; runtime 0.13.6, which also carries `dk_project_settings`):
+- `ReadFile({ slot, version, offset })` -> `dk_project_read(slot, version, offset, out, max, *total)` returns the raw `.dkp` bytes from `offset` (768 per reply) and the length of the whole file. Every project, the open one too, is read from its file on the card in the background like `Get` (`loading`, `changed` for another counter, `found = false` without a file; the open project's file holds its last save, not unsaved changes). The service keeps a 4096-byte window of the file next to the summary and the settings page, all filled by one read: paging inside the window, or asking settings and raw bytes of the same slot, reads nothing again. The extra RAM is 4096 - 768 = 3328 bytes (the window replaces the 768-byte range).
+- The page's "Raw" tab on the selected project fetches all pages and shows hex with byte offsets, coloured by section (`workbench/dkp-spans.ts`: header fields, each tag section, module ids and hashes, owners, keys and values; a file of another version or without the magic shows as plain hex). The highlighter is tested against `runtime/core/vectors/dkp-vectors.json`.
+- A checkbox per project row and "Save selected": each ticked project's file is read with `ReadFile` and all go to `client.saveFiles` as `NNN-NAME.dkp` (characters a file name cannot hold become `_`); a project that cannot be read is named and left out.
 
 - Loading and renaming come later through the same path; the service owns their consistency (slot reuse, stamps, concurrent changes).
 

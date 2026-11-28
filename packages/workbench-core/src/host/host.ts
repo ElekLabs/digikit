@@ -3,6 +3,7 @@
 // apps/desktop/src-tauri/src/main.rs (`generate_handler!`) and its command modules. The shapes here follow the Rust signatures and
 // carry no UI types, so the folder can move into a shared package (the browser app would implement the same interface).
 
+import type { SaveFile, SaveResult } from '@digi/module-ui';
 import type { SystemPackage } from '../runtime/activate-system-package';
 
 /** The emulator control RPC (`emu_call`): one protocol method of the controller (docs/CONTROL.md). */
@@ -61,6 +62,11 @@ export interface FsHost {
   read(root: string, rel: string, head: number | null): Promise<ArrayBuffer>;
   /** The system's save dialog for a log text; the path, or null when the user cancels. `kind` 'file' saves any file (no type filter), used by the Files page. */
   saveLog(bytes: Uint8Array, name: string, kind?: 'log' | 'profile' | 'file'): Promise<string | null>;
+  /**
+   * One folder dialog, then each file written into the folder (module pages: `ModuleChannel.saveFiles`). Names are plain file names (`checkSaveFiles`);
+   * a file of the same name is overwritten, with no further question after the folder is chosen. Cancelling the dialog writes nothing.
+   */
+  saveFiles(files: SaveFile[]): Promise<SaveResult>;
 }
 
 /** The address map of one built module (docs/ADDRMAP.md): the JSON text `lib_build` wrote beside its `.dkm`. */

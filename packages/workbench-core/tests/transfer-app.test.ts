@@ -191,16 +191,47 @@ test('a session reports its request outcomes: a failure marks the indicator lost
   await app.target.emulatorSession();
   links.get('midi:Port A')!.onLink!(false, 'no reply');
   assert.equal(app.connection.connection().state, 'disconnected');
+  // the lost request starts the owner's re-read of the inventory (one INFO)
+  await new Promise((r) => setTimeout(r, 0));
+  const afterLost = infos;
   // the emulator is not the target: its reports change nothing
   links.get('emulator')!.onLink!(true);
-  assert.equal(infos, 0);
+  assert.equal(infos, afterLost);
   links.get('midi:Port A')!.onLink!(true);
   await new Promise((r) => setTimeout(r, 0));
-  assert.equal(infos, 1);
+  assert.equal(infos, afterLost + 1);
   assert.equal(app.connection.connection().state, 'connected');
   // connected: a later answer asks nothing
   links.get('midi:Port A')!.onLink!(true);
-  assert.equal(infos, 1);
+  assert.equal(infos, afterLost + 1);
+});
+
+test('a lost optional request (LOG, PEEK, LOGCFG) never drops the connection or starts a re-read; a lost core request does', async () => {
+  const links = new Map<string, SessionHubOptions>();
+  let infos = 0;
+  const sessions = createFakeSessions((key, _transport, opts) => {
+    links.set(key, opts);
+    return {
+      info: async () => {
+        infos++;
+        return { port: 'dt2', runtime: 0 };
+      },
+    };
+  });
+  const app = createFakeTransferApp({ env: { targets: targets() }, sessions });
+  await app.target.selectTarget({ kind: 'midi', port: 'Port A' });
+  await app.target.session();
+  const link = links.get('midi:Port A')!;
+  link.onLink!(true);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(app.connection.connection().state, 'connected');
+  const before = infos;
+  link.onLink!(false, 'no reply from the device', false, true);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(app.connection.connection().state, 'connected');
+  assert.equal(infos, before);
+  link.onLink!(false, 'no reply from the device', false, false);
+  assert.equal(app.connection.connection().state, 'disconnected');
 });
 
 test('the none target fails with the environment text, and a runtime check stops a request on an emulator without one', async () => {

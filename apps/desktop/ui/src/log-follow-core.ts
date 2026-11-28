@@ -127,6 +127,8 @@ export class LogFollower {
   private configDue = false;
   private modulesDue = false;
   /** The debug module has no card log (or no LOGCFG): not asked again until the next start. */
+  /** The INFO of this start has CAP_LOGCFG: only then is LOGCFG sent (every op: levels, card log). */
+  private advertisesLogcfg = false;
   private noCardLog = false;
   private lastConfig = '';
   private lastFault: Fault | null = null;
@@ -179,6 +181,7 @@ export class LogFollower {
   /** INFO decides whether there is a runtime log to follow: it has the LOG capability while the debug module is loaded. */
   private async start(s: FollowSession): Promise<boolean> {
     const info = await s.info(true);
+    this.advertisesLogcfg = false;
     if (!hasLog(info.caps)) {
       this.noDebug = hasRuntime(info.caps);
       this.o.out.status(this.noDebug ? 'no-debug' : 'no-runtime');
@@ -199,7 +202,8 @@ export class LogFollower {
     }
     this.configDue = true;
     this.modulesDue = true;
-    this.noCardLog = !hasLogcfg(info.caps);
+    this.advertisesLogcfg = hasLogcfg(info.caps);
+    this.noCardLog = !this.advertisesLogcfg;
     if (this.noCardLog) this.o.out.cardlog?.(null);
     return true;
   }
@@ -253,7 +257,7 @@ export class LogFollower {
     if (this.modulesDue) await this.readModules(s);
     if (this.configDue) await this.readConfig(s);
     if (this.faultDue) await this.readFault(s);
-    if (!this.noCardLog) await this.readCardLog(s);
+    if (this.advertisesLogcfg && !this.noCardLog) await this.readCardLog(s);
   }
 
   /** With every round: the write count and the age of the last write change while the log runs. */
@@ -333,6 +337,7 @@ export class LogFollower {
 
   private async readConfig(s: FollowSession): Promise<void> {
     this.configDue = false;
+    if (!this.advertisesLogcfg) return; // LOGCFG is sent only to a target that advertises it
     const cfg = await this.aux(() => s.logConfig(true));
     if (!cfg) return;
     this.o.out.config?.(cfg);

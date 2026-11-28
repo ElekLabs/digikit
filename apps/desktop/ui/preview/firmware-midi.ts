@@ -1,6 +1,6 @@
 // The preview's named MIDI ports. DkSession probes these devices and the firmware sender uses the same wire.
 import { decode8in7, encode8in7, RPC_PING, RPC_SOFTWARE_VERSION } from '@digi/dk-session';
-import { CMD, PROTO_VERSION } from '@digi/dk-session/gen_proto';
+import { CAP, CMD, PROTO_VERSION, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { deviceProfiles, runtimeDeviceIds, type DeviceProfile } from '@digi/workbench-core/data/device-profiles.ts';
 import type { PreparedFlash } from '@digi/workbench-core/patch/patchkit-core.ts';
 import { FakeUpgrade } from '@digi/workbench-core/testing/fakeflash.ts';
@@ -31,6 +31,7 @@ type Device = {
   offlineUntil: number;
   upgrade: FakeUpgrade;
 };
+type CardModules = (key: string, profile: DeviceProfile) => Promise<readonly string[]>;
 type Link = { name: string; queue: Uint8Array[]; wake?: () => void };
 
 export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixture) {
@@ -71,6 +72,8 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
   );
   const images = new Map<string, Image>();
   let link: Link | undefined;
+  // The emulator target's USB MIDI: the same responder, on a link of its own (`midi.usb.in` sends, `midi.usb.out` drains the replies).
+  const emulatorLink: Link = { name: '', queue: [] };
 
   const online = (device: Device) => device.state !== 'none' && Date.now() >= device.offlineUntil;
   const ports = () => [
@@ -79,7 +82,7 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
   ];
 
   function push(to: Link, message: Uint8Array) {
-    if (link !== to) return;
+    if (link !== to && emulatorLink !== to) return;
     to.queue.push(message);
     to.wake?.();
   }
@@ -123,8 +126,9 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     }, answer.delayMs);
   }
 
-  function info(to: Link, device: Device, seq: number) {
+  async function info(to: Link, device: Device, seq: number) {
     if (!device.runtime) return;
+    const withDebug = await debugLoaded(to, device);
     const { version, imageId } = device.runtime;
     const runtime = packedVersion(version);
     const id = (imageId?.match(/../g) ?? []).map((byte) => parseInt(byte, 16));
@@ -137,10 +141,70 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
       be32(1),
       be32(1),
       be32(runtime),
-      be32(0),
+      be32(withDebug ? (1 << CAP.LOG) | (1 << CAP.PEEK) | (1 << CAP.LOGCFG) : 0),
       id,
     );
     push(to, concat([0xf0, 0x7d, 0x64, 0x6b, 1, CMD.INFO | 0x40, seq], encode8in7(body), [0xf7]));
+  }
+
+  /** One reply of the runtime: status byte, then the body. */
+  function reply(to: Link, cmd: number, seq: number, status: number, body: ArrayLike<number> = []) {
+    push(to, concat([0xf0, 0x7d, 0x64, 0x6b, 1, cmd | 0x40, seq], encode8in7(concat([status], body)), [0xf7]));
+  }
+
+  // The settings record of a runtime that has stored nothing: the `DKST` header (version 1, seq 0, used 18, crc 0), no entries.
+  const settingsRecord = concat(new TextEncoder().encode('DKST'), [0, 1], be32(0), be32(18), be32(0));
+
+  /** SETTINGS (a read in pieces: offset u32, length u16; the reply is flags, copy, seq, the record length and the piece) and FAULT (no fault held). */
+  function settings(to: Link, device: Device, msg: Uint8Array) {
+    if (!device.runtime) return;
+    const seq = msg[6]!;
+    if (msg[5] === CMD.FAULT) return reply(to, CMD.FAULT, seq, 0);
+    const request = decode8in7(msg.subarray(7, msg.length - 1));
+    const offset = (request[0]! << 24) | (request[1]! << 16) | (request[2]! << 8) | request[3]!;
+    const length = (request[4]! << 8) | request[5]!;
+    const piece = settingsRecord.subarray(offset, offset + length);
+    // the runtime's body: u8 flags, u8 active copy, u32 seq, u32 record length, then the bytes
+    reply(to, CMD.SETTINGS, seq, 0, concat([0, 0], be32(0), be32(settingsRecord.length), piece));
+  }
+
+  // The runtime registers LOG, PEEK and LOGCFG (and advertises them in INFO) only while digikit/debug is loaded: the fake asks the simulated card.
+  let cardModules: CardModules = async () => [];
+  const debugLoaded = async (to: Link, device: Device) =>
+    (await cardModules(to === emulatorLink ? 'emulator' : `midi:${to.name}`, device.profile)).includes('digikit/debug');
+  const DEBUG_COMMANDS = new Set<number>([SERVICE_CMD.LOG, SERVICE_CMD.PEEK, SERVICE_CMD.LOGCFG]);
+  const logConfig = { level: 2, modules: Array<number>(8).fill(0xff), cardOn: 0 };
+
+  /** LOG (an empty ring), PEEK (zeros) and LOGCFG ops 0 to 3 in the format of sdk.toml; other ops are an unknown option (E_PROTO). */
+  function debug(to: Link, msg: Uint8Array) {
+    const cmd = msg[5]!;
+    const seq = msg[6]!;
+    const body = decode8in7(msg.subarray(7, msg.length - 1));
+    if (cmd === SERVICE_CMD.LOG) return reply(to, cmd, seq, 0, concat(be32(0), be32(0), [0]));
+    if (cmd === SERVICE_CMD.PEEK) {
+      const len = (body[4]! << 8) | body[5]!;
+      return reply(to, cmd, seq, 0, concat(body.subarray(0, 4), [len >> 8, len & 255], new Uint8Array(len)));
+    }
+    const op = body[0];
+    if (op === 1) {
+      logConfig.level = body[1]!;
+      logConfig.modules = Array.from(body.subarray(2, 10));
+    }
+    if (op === 0 || op === 1) return reply(to, cmd, seq, 0, concat([logConfig.level], logConfig.modules, [1]));
+    if (op === 3) logConfig.cardOn = body[1] ? 1 : 0;
+    if (op === 2 || op === 3)
+      // u8 on, u8 file, u8 state, u8 0, u32 writes, i32 last_status, u32 ms_since_write
+      return reply(to, cmd, seq, 0, concat([logConfig.cardOn, 0, logConfig.cardOn], [0], be32(0), be32(0), be32(0xffffffff)));
+    reply(to, cmd, seq, 0xc4);
+  }
+
+  async function answer(to: Link, msg: Uint8Array) {
+    const device = devices.get(to.name);
+    if (!device || !online(device) || device.state === 'noreply' || sim.dev === 'noreply') return;
+    if (msg[1] === 0x00 && msg[2] === 0x20) stock(to, device, msg);
+    else if (msg[1] === 0x7d && msg[5] === CMD.INFO) await info(to, device, msg[6]!);
+    else if (msg[1] === 0x7d && (msg[5] === CMD.SETTINGS || msg[5] === CMD.FAULT)) settings(to, device, msg);
+    else if (msg[1] === 0x7d && DEBUG_COMMANDS.has(msg[5]!) && (await debugLoaded(to, device))) debug(to, msg);
   }
 
   function close() {
@@ -151,6 +215,10 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
 
   return {
     ports,
+    /** Where the fake reads the modules loaded on a target's simulated card. */
+    readCard(read: CardModules) {
+      cardModules = read;
+    },
     prepare({ device, os, restore, runtime, imageId }: Image & { device: string }) {
       images.set(device, { os, restore, runtime, imageId });
     },
@@ -161,10 +229,19 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     },
     send(msg: Uint8Array) {
       if (!link) throw new Error('The MIDI port is closed.');
-      const device = devices.get(link.name);
-      if (!device || !online(device) || device.state === 'noreply' || sim.dev === 'noreply') return;
-      if (msg[1] === 0x00 && msg[2] === 0x20) stock(link, device, msg);
-      else if (msg[1] === 0x7d && msg[5] === CMD.INFO) info(link, device, msg[6]!);
+      void answer(link, msg);
+    },
+    /** The emulator target's `midi.usb.in`: one message to the runtime of `device`. */
+    usbIn(device: string, bytes: Uint8Array) {
+      emulatorLink.name = portOf(deviceProfiles[device]!);
+      void answer(emulatorLink, bytes);
+    },
+    /** The emulator target's `midi.usb.out`: the replies so far, as hex. */
+    usbOut(): string {
+      return emulatorLink.queue
+        .splice(0)
+        .map((m) => Array.from(m, (b) => b.toString(16).padStart(2, '0')).join(''))
+        .join('');
     },
     async recv(timeoutMs: number): Promise<ArrayBuffer> {
       const from = link;

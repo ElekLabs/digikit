@@ -37,8 +37,9 @@ pub use bound::{
     Applied, BoundProject, BoundView, Effect, Slot, SourceFile, LIVE_MIRROR, LOAD_RETRY_MS,
 };
 pub use browse::{
-    DataIndex, PeekAnswer, PeekCache, ProjectEntry, ProjectModule, ProjectSummary, ENTRY_CURRENT,
-    ENTRY_DATA, ENTRY_UNKNOWN, MODULE_LOADED, MODULE_UNKNOWN, PEEK_RETRY_MS,
+    DataIndex, PeekAnswer, PeekCache, ProjectEntry, ProjectModule, ProjectSetting, ProjectSummary,
+    ENTRY_CURRENT, ENTRY_DATA, ENTRY_UNKNOWN, MODULE_LOADED, MODULE_UNKNOWN, PAGE_MAX,
+    PEEK_RETRY_MS, RAW_MAX, VALUE_HEAD,
 };
 pub use buffer::FileBuffer;
 pub use carry::{EXPORT_MAX as CARRY_MAX, VERSION as CARRY_VERSION};
