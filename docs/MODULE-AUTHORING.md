@@ -37,9 +37,12 @@ mise run module:check -- digikit/freqshift
 ```
 
 The first runs the shared DSP contract checks, including bounded output and
-cost. The second runs the effect's own named sound cases. To add yours, put
-deterministic cases in `tests/rig/*.toml` and register them with
-`rigSuite(import.meta.dirname)` in a `tests/*.rig.test.ts` file.
+cost. The second runs the module's own named sound cases. `module:new`
+gives machines and effects a `tests/rig.rig.test.ts` entry and a starter
+case in `tests/rig/` for the template's sine voice or gain effect. Before
+accepting the results, replace the starter expectations with deterministic
+cases and tolerances for what your DSP is designed to do. Use the generated
+`rigSuite(import.meta.dirname)` entry to run the cases in that folder.
 Use the [sound-check guide](TESTING.md#sound-checks-testsrigtoml) and the
 [FREQ SHIFT cases](../modules/fx/digikit/freqshift/tests/rig/freqshift.toml)
 as starting points.
@@ -82,6 +85,86 @@ mise run wb:cli -- --format json profile report "$run/wet/$profile_file"
   functions and loops. The [worked SDK example](../sdk/dsp/README.md#worked-example-pluck)
   shows how to profile the same blocks of two builds without changing the module.
 
+### DSP quality and listening checks
+
+For every new machine or effect, run the module's `test-dsp` behavior checks
+and the shared `test-dsp-conformance` target. Also listen to a repeatable A/B
+in a techno-style mix and with a second musical source that exposes the
+module's role. Use a held stab for motion or pitch, sparse hits for tails, or
+a sustained bass or lead phrase for a pitched machine. Choose material that
+makes the expected effect easy to hear. [ITU-R BS.1116](https://www.itu.int/rec/R-REC-BS.1116/en)
+
+- **Send FX.** Use the `send/percussion` example above with amount `0` for A
+  and a representative active amount for B. Keep the device, source and DSP
+  settings fixed. The 132 BPM scene sends syncopated hats over a dry kick
+  and bass. `send/texture` is a repeatable second source with a held stab.
+  [Send render controls](INSTRUMENTATION.md#listen-to-a-send-return)
+- **Master insert FX.** Use the same stereo mix for both passes. Compare MIX
+  at zero with the intended MIX on the actual master insert route. Feed the
+  original generated dry mix to `FxRig.block` with fresh state for each pass,
+  or replay a fixed project in the emulator and capture its master WAV.
+  The CLI's `send/*` scenes exercise the send hook. Its other FX renders
+  use named conformance cases on the master insert.
+  [Stereo rig inputs and MIX](TESTING.md#sound-checks-testsrigtoml)
+- **Machine.** Compare the backing alone with the same backing plus the new
+  part. Keep a solo render and fix note timing, pitches, velocities and
+  parameters across repeated comparisons. Mix a solo rig render over the
+  generated kick and bass manually at a fixed gain and onset, or capture the
+  same saved emulator project with the new track muted and active.
+  [Generated backing](../packages/sharc-rig-kit/src/listening-stems.ts) · [Saved sessions](WORKBENCH-SESSIONS.md)
+
+On a running emulator with DSP audio, start a take with
+`mise run emu:ctl -- call pcm.tap action=capture path=ABSOLUTE_WAV_PATH`.
+Replay the same bars from the same starting state for A and B, then finish
+each take with `mise run emu:ctl -- call pcm.tap action=capture_stop`.
+Select the session socket explicitly when more than one emulator is running.
+[Control socket commands](CONTROL.md#command-line)
+
+Keep the raw WAVs with their render manifests or a capture manifest you write.
+Record the build, device, route, source or project, seed when applicable,
+settings, playback window and duration. For manual mixes record the stem
+gains and offsets. Compare raw peak and RMS, clipping, relevant onset or tail
+timing, and mean and worst DSP block cost when available. Note which changes
+in gain, harmonics, motion or stereo image were intentional. For timbre,
+match perceived levels on separate listening copies and log the gain applied.
+Use programme loudness and true peak where useful, with tolerances set for
+the module and its intended use. [AES17](https://aes.org/publications/standards-store/?id=21) · [ITU-R BS.1770](https://www.itu.int/rec/R-REC-BS.1770/en)
+
+Check each declared FX route at its neutral level and a representative active
+setting. If you cannot play the WAVs, mark human listening review pending in
+the manifest.
+
+Pick a few probes from the relevant rows. Cover a typical setting and the
+limits or transitions most likely to cause trouble. Use the rig's named sound
+checks where they fit and inspect waveforms or spectra for the remaining probes.
+
+| DSP family | Test signal and checks |
+| --- | --- |
+| All | Start in silence, run an active passage with a live in-range control change, then return to silence. Include quiet and hot inputs where applicable. Check for clicks, finite output, DC, peak, clipping and instruction cost. |
+| Oscillator, FM or sampler | Low, middle and high notes, a retrigger or release, and a known sample for a sampler. Check pitch, onset, decay, loop seams and high-note aliasing. |
+| Filter | An impulse or swept sine at fixed settings. Check cutoff, resonance and gain. An exponential sweep can separate distortion for weakly nonlinear, approximately time-invariant settings. [Farina's swept-sine method](https://angelofarina.it/Public/Papers/134-AES00.PDF) |
+| Shifter, modulation or spatial | A tone for shift and image rejection, a broadband noise spectrogram for moving notches, and stereo input for channel behavior and mono compatibility. Inspect several cycles for steps and clicks. [Barberpole phaser measurements](https://www.ntnu.edu/documents/1001201110/1266017954/DAFx-15_submission_67.pdf) |
+| Nonlinear | Low and high level tones, a two-tone input or a high-frequency sweep. Check gain, harmonic and intermodulation products, and aliasing from hard edges. [Clipping and aliasing examples](https://research.spa.aalto.fi/publications/papers/dafx16-blamp/) |
+| Delay, reverb or dynamics | An isolated hit and silence for delay timing, feedback and decay. Use a level step or repeated hits for attack, release and pumping. |
+
+Run the quality report after defining the module's expectations. For the
+comparison above, add its saved comparison file to the report.
+
+```sh
+mise run wb:cli -- module quality digikit/freqshift --out "$run/quality" \
+  --comparison "$run/compare/comparison.json" --emit json,markdown,html
+```
+
+Review `quality.md` and keep it with `quality.json`. The report records
+the declarative checks' observed values, expected tolerances and results.
+Repeat `--comparison FILE` to link the second source or additional route
+comparisons. Keep `quality.html` and `quality-media/` beside the report when
+moving it. In Workbench, go to **DSP**, choose **Open report folder** and
+select the output folder. With a saved session open and the report's module
+selected, choose **Save to session** to keep the report with that session.
+Keep the shared conformance result and listening notes with the report.
+[Report a module's declarative DSP checks](INSTRUMENTATION.md#report-a-modules-declarative-dsp-checks)
+
 ### Instrument and check in Workbench
 
 Use ordinary function labels and no extra instrumentation for hotspot or
@@ -108,7 +191,7 @@ The [SDK tracing guide](../sdk/README.md#tracing) shows where to read the
 log and fault steps. Marks compile out without `--trace`. Use normal packs
 for both sides of a cost comparison, and do not ship the traced pack.
 
-For the musical check, boot a [saved emulator session](WORKBENCH-SESSIONS.md),
+When profiling a musical check, boot a [saved emulator session](WORKBENCH-SESSIONS.md),
 load the same project and pattern, and run the same playback window for A and
 B. Record in Performance and save the `*.capture.json`. Open it offline
 in Profile or run `mise run wb:cli -- --format json profile report FILE`.

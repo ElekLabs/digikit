@@ -12,10 +12,11 @@ GAIN knob. Replace the loop in `src/dsp/__NAME__.s` with your own processing.
 (a commented example is in `src/module.c`).
 
 The effect needs `fx.dks` on the card: the loader finds it through the NEED of the builder imports `init` calls, and Transfer installs it. `requires = []` is right: it names
-patched-in core modules only. `module:check` writes the `[uses.*]` lines, `record_bytes` included.
+patched-in core modules only. `module:check` writes the `[uses.*]` lines, `record_bytes` included, and the gallery data the sound check needs.
 
 ```sh
 mise run module:check -- __ID__    # build and conformance check on both devices
+pnpm nx:pilot run __ID__:test-dsp  # check the wet gain in tests/rig/gain.toml
 mise run module:pack -- __ID__ --device dt2     # make the .dkm (or --device dn2)
 mise run dk:run -- __ID__ --emu --seconds 10    # run in the running emulator (mise run workbench)
 ```

@@ -51,6 +51,7 @@ export function createTauriHost(): Host {
       mount: (root, firmware) => invoke('session_mount', { root, firmware }),
       release: (card) => invoke('session_release', { card }),
       save: (root, card, name) => invoke('session_save', { root, card, name }),
+      saveDsp: (root, module, source) => invoke('session_save_dsp', { root, module, source }),
       preserve: (card) => invoke('session_preserve', { card }),
       attach: (root, source) => invoke('session_attach', { root, source }),
       readCapture: (root, path) => invoke('session_read_capture', { root, path }),
@@ -67,6 +68,10 @@ export function createTauriHost(): Host {
       open: (source) => analyzerCall('analyzer_open', { source }),
       read: (id) => analyzerCall('analyzer_read', { id }),
       close: (id) => analyzerCall('analyzer_close', { id }),
+    },
+    dspQuality: {
+      listModules: () => invoke('dsp_quality_modules'),
+      run: (module) => invoke('dsp_quality_run', { module }),
     },
     fs: {
       pickFolder: ({ start, title }) => invoke('local_pick_folder', { start, title }),

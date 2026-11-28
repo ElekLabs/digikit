@@ -1,6 +1,6 @@
 import { For, Show, createSignal, untrack } from 'solid-js';
 import type { KeyValue } from '@digi/workbench-core/storage.ts';
-import { FIRMWARE, FOLDER, Icon, MODULES, PLAY, REMOTE, SETTINGS } from '../icons';
+import { CHART, FIRMWARE, FOLDER, Icon, MODULES, PLAY, REMOTE, SETTINGS } from '../icons';
 import type { Page } from '../page-core';
 import { createPrefs } from '../prefs';
 
@@ -44,6 +44,17 @@ export default function Navigation(props: {
       >
         <Icon d={props.isEmulator ? PLAY : REMOTE} />
         <span>{props.isEmulator ? 'Emulator' : 'Remote'}</span>
+      </button>
+      <button
+        type="button"
+        class="side"
+        classList={{ on: props.page === 'dsp' }}
+        aria-current={props.page === 'dsp' ? 'page' : undefined}
+        title="Review saved DSP quality reports"
+        onClick={() => props.onNavigate('dsp')}
+      >
+        <Icon d={CHART} />
+        <span>DSP</span>
       </button>
       <span class="side-group">Device</span>
       <button

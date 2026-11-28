@@ -1,17 +1,19 @@
 import { createEffect, on, onCleanup, onMount } from 'solid-js';
 import { Application, Graphics } from 'pixi.js';
 import 'pixi.js/unsafe-eval';
-import { SPECTRUM_FLOOR, type AnalyzerFrame } from './frame';
+import { SPECTRUM_FLOOR, type AnalyzerFrame, type EnvelopeFrame } from './frame';
 
 export type AnalyzerMode = 'Scope' | 'Spectrum';
 
-export default function AnalyzerPlot(props: {
-  frame: AnalyzerFrame | null;
-  mode: AnalyzerMode;
+type PlotProps = {
   cursor: number | null;
-  showHold: boolean;
   unavailable: (message: string) => void;
-}) {
+} & (
+  | { mode: AnalyzerMode; frame: AnalyzerFrame | null; showHold: boolean }
+  | { mode: 'Envelope'; frame: EnvelopeFrame; showHold?: never }
+);
+
+export default function AnalyzerPlot(props: PlotProps) {
   let surface!: HTMLDivElement;
   let paint: (() => void) | undefined;
   let disposed = false;
@@ -50,7 +52,6 @@ export default function AnalyzerPlot(props: {
     function draw() {
       const { left, right, grid } = palette;
       const { width, height } = app.screen;
-      const frame = props.frame;
       const scope = props.mode === 'Scope';
       graphic.clear();
       for (let column = 1; column < 8; column++) {
@@ -68,28 +69,42 @@ export default function AnalyzerPlot(props: {
           .lineTo(width, height / 2)
           .stroke({ color: grid, width: 1, alpha: 0.4 });
 
-      function trace(samples: Float32Array, color: string, alpha: number) {
+      function trace(samples: Float32Array, color: string, alpha: number, windowFraction?: number) {
         const points = Math.min(1024, samples.length);
-        if (points < 2) return;
+        if (points < (windowFraction === undefined ? 2 : 1)) return;
+        let y = 0;
         for (let point = 0; point < points; point++) {
-          const fraction = point / (points - 1);
-          const sample = samples[Math.round(fraction * (samples.length - 1))];
+          const fraction = points === 1 ? 0 : point / (points - 1);
+          const index = Math.round(fraction * (samples.length - 1));
+          const sample = samples[index];
           const normalized = scope ? (sample + 1) / 2 : 1 - sample / SPECTRUM_FLOOR;
-          const y = 1 + (1 - Math.max(0, Math.min(1, normalized))) * (height - 2);
+          const x = (windowFraction === undefined ? fraction : index * windowFraction) * width;
+          y = 1 + (1 - Math.max(0, Math.min(1, normalized))) * (height - 2);
           if (point === 0) graphic.moveTo(0, y);
-          else graphic.lineTo(fraction * width, y);
+          else graphic.lineTo(x, y);
         }
+        if (windowFraction !== undefined) graphic.lineTo(samples.length * windowFraction * width, y);
         graphic.stroke({ color, width: 1.25, alpha });
       }
 
-      if (!scope && props.showHold && frame?.heldSpectrum) {
-        trace(frame.heldSpectrum[0], left, 0.35);
-        trace(frame.heldSpectrum[1], right, 0.35);
-      }
-      const traces = scope ? frame?.scope : frame?.spectrum;
-      if (traces) {
-        trace(traces[0], left, 0.95);
-        trace(traces[1], right, 0.9);
+      if (props.mode === 'Envelope') {
+        const {
+          traces: [baseline, candidate],
+          duration,
+        } = props.frame;
+        trace(baseline.levels, left, 0.95, baseline.secondsPerWindow / duration);
+        trace(candidate.levels, right, 0.9, candidate.secondsPerWindow / duration);
+      } else {
+        const frame = props.frame;
+        if (!scope && props.showHold && frame?.heldSpectrum) {
+          trace(frame.heldSpectrum[0], left, 0.35);
+          trace(frame.heldSpectrum[1], right, 0.35);
+        }
+        const traces = scope ? frame?.scope : frame?.spectrum;
+        if (traces) {
+          trace(traces[0], left, 0.95);
+          trace(traces[1], right, 0.9);
+        }
       }
       if (props.cursor !== null) {
         const x = props.cursor * width;

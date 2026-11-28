@@ -27,13 +27,23 @@ import {
 } from './analysis.ts';
 import { signalBlock } from './checks.ts';
 import { classify, fingerprintFile, readRef, rigKey, writeRef, cacheDir } from './fingerprint.ts';
-import { asV1, compare, measure, readPin, writePin } from './pcmpin.ts';
+import {
+  asV1,
+  compare,
+  DEFAULT_TOLERANCE,
+  measure,
+  readPin,
+  writePin,
+  type CompareMeasurements,
+  type FingerprintV2,
+} from './pcmpin.ts';
 import { plotPng, writePng, writeWav } from './plot.ts';
 import { REC, RECORDS, f2w, nw } from './context.ts';
 import { PLANE_L, PLANE_R, TOKEN, publish, writePlanes } from './samplepool.ts';
 import { FX_STATE_GUARD_WORDS, MIX, P0, FxRig } from './fx.ts';
 import { MachineRig } from './machine.ts';
 import type { RigOpener } from './ops.ts';
+import { linkedSha256 } from './place.ts';
 import { PyRandom } from './prng.ts';
 import { DEVICES, fxSpec, machineSpec, type Device } from './spec.ts';
 
@@ -109,6 +119,7 @@ export interface Trace {
   active: number[];
   /** the first break of an implicit rule, or null */
   failure: string | null;
+  linkedSha256?: string;
   /** per block, which step it belongs to */
   stepOf: number[];
   /** a machine's odd voice (DT2, `right = true`): the right channel, 32 samples a block */
@@ -150,7 +161,11 @@ function slice(blocks: readonly number[][], range?: [number, number]): number[] 
 
 export interface RunOptions {
   open?: RigOpener;
+  onCase?: (evidence: RigCaseEvidence) => void;
 }
+
+const FX_INPUT: Toml = { kind: 'silence' };
+const FX_SEED = 0xd1617;
 
 const words = (params: Record<string, number>): [string, number][] => Object.entries(params);
 
@@ -184,6 +199,7 @@ async function runMachine(
     stepOf: [],
   };
   try {
+    if (o.onCase) trace.linkedSha256 = linkedSha256(rig.built);
     const steps: Step[] = c.step ?? [{}];
     const poolAt = (target: string, off: number): number => {
       const entry = c.pool?.[0];
@@ -292,7 +308,7 @@ async function runFx(module: string, c: RigCase, dir: string, o: RunOptions): Pr
   const spec = fxSpec(module);
   if (!spec) throw new Error(`${module} is no effect`);
   const steps: Step[] = c.step ?? [{}];
-  const input = (c.input ?? { kind: 'silence' }) as Toml;
+  const input = c.input ?? FX_INPUT;
   const table = input.kind === 'table' ? readF32(readFileSync(path.join(dir, String(input.file)))) : undefined;
   const mix = typeof c.mix === 'number' ? c.mix : 0x3f800000;
   const first = (steps[0]!.params_f32 as number[] | undefined) ?? [];
@@ -325,9 +341,10 @@ async function runFx(module: string, c: RigCase, dir: string, o: RunOptions): Pr
   // `state_fill`: every word of the declared state starts with this value instead of the rig's poison
   if (typeof c.state_fill === 'number') rig.fillState(0, c.state_fill, Math.floor(desc[3]! / 4));
   const total = steps.reduce((n, st) => n + (st.blocks ?? 1), 0);
-  const rng = new PyRandom(Number(c.seed ?? 0xd1617));
+  const rng = new PyRandom(Number(c.seed ?? FX_SEED));
   let faults = 0;
   try {
+    if (o.onCase) trace.linkedSha256 = linkedSha256(rig.built);
     let k = 0;
     for (const [si, step] of steps.entries()) {
       ((step.params_f32 as number[] | undefined) ?? []).forEach((v, j) => rig.setRowWord(0, P0 + j, f2w(v)));
@@ -393,36 +410,99 @@ function rigArtifacts(key: string, x: readonly number[], pinBands: readonly numb
   return `plot and WAV: ${out}/plot.png, out.wav`;
 }
 
-/** The first message of a check that fails, or null. */
-export function evaluate(t: Trace, c: Check, dir: string, key?: string): string | null {
+export interface CheckMeasurements {
+  observed: Toml;
+  expected: Toml;
+  reference?: Toml;
+}
+
+function seriesRange(values: readonly number[]) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of values) {
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+  return { count: values.length, min: values.length ? min : null, max: values.length ? max : null };
+}
+
+function fingerprintSummary(fp: FingerprintV2) {
+  const { rate, channels, frames, onset, peak_db, stereo, periodic, bandDb } = fp;
+  return {
+    rate,
+    channels,
+    frames,
+    onset,
+    peak_db,
+    stereo,
+    periodic,
+    bandDb,
+    rms_db: { window: fp.rms_window, ...seriesRange(fp.rms_db) },
+    ...(fp.block_rms ? { block_rms: { window: fp.block, ...seriesRange(fp.block_rms) } } : {}),
+  };
+}
+
+/** The first message of a check that fails, or null. Optionally retain the values used by that check. */
+export function evaluate(t: Trace, c: Check, dir: string, key?: string, evidence?: CheckMeasurements): string | null {
   const x = (): number[] => signal(t, c);
+  const observed = (values: Toml): void => {
+    if (evidence) Object.assign(evidence.observed, values);
+  };
+  const expected = (values: Toml): void => {
+    if (evidence) Object.assign(evidence.expected, values);
+  };
   switch (c.kind) {
-    case 'rms':
-      return inRange('RMS', rms(x()), c);
-    case 'peak':
-      return inRange('peak', peak(x()), c);
-    case 'dc':
-      return Math.abs(mean(x())) > num(c, 'max') ? `DC offset ${mean(x())} is beyond ${num(c, 'max')}` : null;
-    case 'no-clip':
-      return peak(x()) > num(c, 'limit', 1) ? `peak ${peak(x())} clips at ${num(c, 'limit', 1)}` : null;
-    case 'finite':
-      return x().every(Number.isFinite) ? null : 'a sample is not finite';
+    case 'rms': {
+      const value = rms(x());
+      observed({ rms: value });
+      return inRange('RMS', value, c);
+    }
+    case 'peak': {
+      const value = peak(x());
+      observed({ peak: value });
+      return inRange('peak', value, c);
+    }
+    case 'dc': {
+      const dc = mean(x());
+      observed({ dc });
+      return Math.abs(dc) > num(c, 'max') ? `DC offset ${dc} is beyond ${num(c, 'max')}` : null;
+    }
+    case 'no-clip': {
+      const value = peak(x());
+      const limit = num(c, 'limit', 1);
+      observed({ peak: value });
+      expected({ limit });
+      return value > limit ? `peak ${value} clips at ${limit}` : null;
+    }
+    case 'finite': {
+      const samples = x();
+      const firstNonFinite = samples.findIndex((v) => !Number.isFinite(v));
+      const finite = firstNonFinite < 0;
+      observed({ finite, ...(finite ? {} : { firstNonFinite, value: samples[firstNonFinite] }) });
+      expected({ finite: true });
+      return finite ? null : 'a sample is not finite';
+    }
     case 'silent-after': {
       const after = slice(t.out, [num(c, 'block'), t.out.length]);
       const top = peak(after);
+      observed({ peak: top });
+      expected({ max: num(c, 'max', 0) });
       return top > num(c, 'max', 0) ? `the signal is not silent after block ${num(c, 'block')}: peak ${top}` : null;
     }
     case 'decay-time': {
       const s = decayTime(x(), num(c, 'db'));
+      observed({ seconds: s });
       if (s === null) return `the level never falls below ${num(c, 'db')} dB of its peak`;
       return inRange(`decay to ${num(c, 'db')} dB takes (s)`, s, c);
     }
     case 'pitch-hz': {
       const want = hasNum(c, 'expect') ? num(c, 'expect') : 440 * 2 ** ((num(c, 'note') - 69) / 12);
       const skip = hasNum(c, 'skip_periods') ? Math.floor((num(c, 'skip_periods') * FS) / want) : 0;
+      expected({ hz: want, cents: num(c, 'cents', 1), method: c.method ?? 'crossings' });
       const y = x().slice(skip);
       const got = c.method === 'bandpass' ? pitchByBandpass(y, want) : pitchByCrossings(y);
       const cents = 1200 * Math.log2(got / want);
+      observed({ hz: got, cents, skippedSamples: skip });
       return Math.abs(cents) < num(c, 'cents', 1)
         ? null
         : `pitch ${got} Hz is ${cents.toFixed(3)} cents from ${want} Hz (limit ${num(c, 'cents', 1)})`;
@@ -430,8 +510,11 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
     case 'matches-table': {
       const want = readF32(readFileSync(path.join(dir, String(c.file))));
       const got = signal(t, c);
+      observed({ samples: got.length });
+      expected({ samples: want.length });
       if (got.length !== want.length) return `the table has ${want.length} samples, the run ${got.length}`;
       const d = maxAbsDiff(got, want);
+      observed({ maxAbsDiff: d });
       return d <= num(c, 'atol')
         ? null
         : `the largest difference to ${String(c.file)} is ${d} (limit ${num(c, 'atol')})`;
@@ -440,31 +523,51 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
       // an effect's output is its input times `gain`: the largest error is within `rel_peak` (default 2**-20, the bound of tools/patchkit/hook_ab.py) of the peak of the reference
       const ref = signal({ ...t, out: t.input }, c).map((v) => v * num(c, 'gain'));
       const err = maxAbsDiff(x(), ref);
-      const bound = num(c, 'rel_peak', 2 ** -20) * peak(ref);
+      const referencePeak = peak(ref);
+      const relPeak = num(c, 'rel_peak', 2 ** -20);
+      const bound = relPeak * referencePeak;
+      observed({ maxAbsDiff: err, referencePeak });
+      expected({ rel_peak: relPeak, maxAbsDiff: bound });
       return err <= bound
         ? null
-        : `the output is not the input times ${num(c, 'gain')}: error ${err} is above ${bound} (${num(c, 'rel_peak', 2 ** -20)} of the reference peak ${peak(ref)})`;
+        : `the output is not the input times ${num(c, 'gain')}: error ${err} is above ${bound} (${relPeak} of the reference peak ${referencePeak})`;
     }
     case 'same-as': {
       // Tolerant pin (fingerprint v2, `exact` not set): the fingerprint with its tolerances decides. Exact pin, a v1 fingerprint or none: the hash decides.
-      const h = wordsHash(x());
+      const samples = x();
+      const h = wordsHash(samples);
       const pin = key ? readPin(fingerprintFile(dir, key)) : null;
       const exact = c.exact === true || (pin?.version === 2 && pin.exact !== undefined);
+      observed({ sha256: h });
       if (pin?.version === 2 && !exact) {
-        const diffs = compare(pin, measure(x(), { blockRms: true }).fp);
+        const got = measure(samples, { blockRms: true }).fp;
+        const measurements: CompareMeasurements | undefined = evidence ? {} : undefined;
+        const diffs = compare(pin, got, { measurements });
+        if (evidence) {
+          evidence.reference = { declaredSha256: c.sha256 };
+          delete evidence.expected.sha256;
+          delete evidence.expected.exact;
+          observed({ fingerprint: fingerprintSummary(got), rmsComparison: measurements, differences: diffs });
+          expected({
+            mode: 'fingerprint',
+            fingerprint: fingerprintSummary(pin),
+            tolerance: { ...DEFAULT_TOLERANCE, ...pin.tolerance },
+          });
+        }
         if (diffs.length === 0) return null;
-        return `${diffs.join('; ')}\n  ${rigArtifacts(key!, x(), pin.bandDb, diffs[0]!)}`;
+        return `${diffs.join('; ')}\n  ${rigArtifacts(key!, samples, pin.bandDb, diffs[0]!)}`;
       }
+      expected({ mode: 'sha256' });
       if (h === String(c.sha256)) return null;
       const mismatch = `the words hash is ${h}, the pin is ${String(c.sha256)}`;
       if (!key) return mismatch;
-      const diffs = pin?.version === 2 ? compare(pin, measure(x(), { blockRms: true }).fp) : [];
+      const diffs = pin?.version === 2 ? compare(pin, measure(samples, { blockRms: true }).fp) : [];
       const more = diffs.length
         ? `\n  fingerprint: ${diffs.join('; ')}`
         : pin?.version === 2
           ? '\n  fingerprint: equal within tolerance (only bits differ)'
           : '';
-      return `${mismatch}${more}\n  ${classify(x(), readRef(key), asV1(pin)).line}`;
+      return `${mismatch}${more}\n  ${classify(samples, readRef(key), asV1(pin)).line}`;
     }
     case 'instructions': {
       const b =
@@ -474,6 +577,8 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
             ? t.instructions.slice(-1)
             : t.instructions.slice(1);
       const worst = Math.max(...b);
+      observed({ worstBlock: worst, blocks: b.length });
+      expected({ of: c.of ?? 'steady' });
       return worst <= num(c, 'max')
         ? null
         : `${worst} instructions in a block (${String(c.of ?? 'steady')}), limit ${num(c, 'max')}`;
@@ -482,11 +587,13 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
       const y = x();
       const skip = num(c, 'skip_blocks', 0) * 32;
       const wanted = amplitudeAt(y, num(c, 'freq'), skip);
+      observed({ amplitude: wanted });
       if (Math.abs(wanted - num(c, 'amp')) > num(c, 'tol'))
         return `the tone at ${num(c, 'freq')} Hz has amplitude ${wanted}, wanted ${num(c, 'amp')} (tolerance ${num(c, 'tol')})`;
       if (hasNum(c, 'image_freq')) {
         const image = amplitudeAt(y, num(c, 'image_freq'), skip);
         const db = 20 * Math.log10(wanted / image);
+        observed({ imageAmplitude: image, imageDbDown: db });
         if (db < num(c, 'image_db_min'))
           return `the image at ${num(c, 'image_freq')} Hz is only ${db.toFixed(1)} dB down (wanted ${num(c, 'image_db_min')})`;
       }
@@ -507,11 +614,14 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
         phases.push(p.phase);
       }
       const spread = Math.max(...amps) - Math.min(...amps);
+      observed({ amplitude: amps[0], amplitudeSpread: spread });
+      expected({ windows: n, window_blocks: len });
       if (spread >= num(c, 'amp_spread'))
         return `the amplitude moves by ${spread} over the run (limit ${num(c, 'amp_spread')})`;
       if (Math.abs(amps[0]! - num(c, 'amp')) >= num(c, 'tol'))
         return `the tone has amplitude ${amps[0]}, wanted ${num(c, 'amp')}`;
       const drift = phaseDrift(phases);
+      observed({ phaseDriftRadians: drift });
       return drift < num(c, 'phase_drift')
         ? null
         : `the phase drifts by ${drift} rad over the run (limit ${num(c, 'phase_drift')})`;
@@ -519,15 +629,21 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
     case 'cursor': {
       // a word of the voice's state block after `block`: `equals`, within `tol` (the word read as signed with `signed`)
       let v = t.cursor?.[num(c, 'block')]?.[num(c, 'index')];
+      observed({ word: v ?? null });
       if (v === undefined || v === null) return `no cursor word ${num(c, 'index')} after block ${num(c, 'block')}`;
       if (c.signed === true && v >= 2 ** 31) v -= 2 ** 32;
+      observed({ word: v });
+      expected({ tol: num(c, 'tol', 0) });
       return Math.abs(v - num(c, 'equals')) <= num(c, 'tol', 0)
         ? null
         : `cursor word ${num(c, 'index')} is ${v}, wanted ${num(c, 'equals')} (tolerance ${num(c, 'tol', 0)})`;
     }
     case 'voice-active': {
       const a = t.active[num(c, 'block')];
-      return a !== undefined && (a & 0xff) !== 0 ? null : `the voice is not active after block ${num(c, 'block')}`;
+      const active = a !== undefined && (a & 0xff) !== 0;
+      observed({ active, word: a ?? null });
+      expected({ active: true });
+      return active ? null : `the voice is not active after block ${num(c, 'block')}`;
     }
     case 'tone-fit': {
       // the amplitude of a sine of `freq` fitted by least squares (sine and cosine, no window) to the blocks of the range
@@ -546,12 +662,15 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
       });
       const det = ss * cc - sc * sc;
       const amp = Math.hypot((sy * cc - cy * sc) / det, (cy * ss - sy * sc) / det);
+      observed({ amplitude: amp });
       return Math.abs(amp - num(c, 'amp')) <= num(c, 'tol')
         ? null
         : `the fitted amplitude at ${num(c, 'freq')} Hz is ${amp}, wanted ${num(c, 'amp')} (tolerance ${num(c, 'tol')})`;
     }
     case 'sample-at': {
       const v = t.out[num(c, 'block')]?.[num(c, 'index', 0)];
+      observed({ sample: v ?? null });
+      expected({ index: num(c, 'index', 0) });
       if (v === undefined) return `block ${num(c, 'block')} has no sample ${num(c, 'index', 0)}`;
       return Math.abs(v) <= num(c, 'max')
         ? null
@@ -560,41 +679,54 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
     case 'description': {
       const want = c.words as number[];
       const got = (t.desc ?? []).slice(0, want.length);
+      observed({ words: got });
       return JSON.stringify(got) === JSON.stringify(want)
         ? null
         : `the description words are ${JSON.stringify(got)}, wanted ${JSON.stringify(want)}`;
     }
     case 'state-word': {
       const v = t.state?.[num(c, 'index')];
+      observed({ word: v ?? null });
       return v === num(c, 'equals') ? null : `state word ${num(c, 'index')} is ${v}, wanted ${num(c, 'equals')}`;
     }
     case 'state-untouched-beyond': {
       // every state word from the declared size on still holds the poison the rig put there: the effect wrote only its declared state
       const from = Math.floor((t.desc?.[3] ?? 0) / 4);
       const bad = (t.state ?? []).findIndex((w, i) => i >= from && w !== num(c, 'poison', 0x7fc00001) >>> 0);
+      observed({ declaredWords: from, firstChangedWord: bad < 0 ? null : bad, value: t.state?.[bad] ?? null });
+      expected({ poison: num(c, 'poison', 0x7fc00001) >>> 0 });
       return bad < 0 ? null : `state word ${bad} (declared size ${from} words) was written`;
     }
     case 'differs': {
       const a = slice(t.out, c.blocks);
       const other = slice(t.out, c.other as [number, number]);
-      return maxAbsDiff(a, other) > 0 ? null : 'the two block ranges are equal';
+      const diff = maxAbsDiff(a, other);
+      observed({ maxAbsDiff: diff });
+      expected({ equal: false });
+      return diff > 0 ? null : 'the two block ranges are equal';
     }
-    case 'master-equals-input': {
-      const from = num(c, 'from_block', 0);
-      for (let k = from; k < t.master.length; k++)
-        if (t.master[k]!.some((v, i) => v !== t.input[k]![i])) return `the master differs from the input in block ${k}`;
-      return null;
-    }
+    case 'master-equals-input':
     case 'master-equals-scratch': {
+      const input = c.kind === 'master-equals-input';
+      const reference = input ? t.input : t.out;
       const from = num(c, 'from_block', 0);
-      for (let k = from; k < t.master.length; k++)
-        if (t.master[k]!.some((v, i) => v !== t.out[k]![i]))
-          return `the master differs from the effect output in block ${k} (observe = "scratch")`;
+      expected({ from_block: from, equal: true });
+      for (let k = from; k < t.master.length; k++) {
+        const i = t.master[k]!.findIndex((v, i) => v !== reference[k]![i]);
+        if (i < 0) continue;
+        observed({ equal: false, block: k, sample: i, master: t.master[k]![i], reference: reference[k]![i] });
+        return input
+          ? `the master differs from the input in block ${k}`
+          : `the master differs from the effect output in block ${k} (observe = "scratch")`;
+      }
+      observed({ equal: true });
       return null;
     }
     case 'voice-ends': {
       // the voice record's ACTIVE byte goes to 0 within `within` blocks, not before block `after`, and the mark is cleared with it
       const at = t.active.findIndex((a) => (a & 0xff) === 0);
+      observed({ endedAtBlock: at < 0 ? null : at, word: t.active[at] ?? null });
+      expected({ after: num(c, 'after', 0), noteOnMark: 0 });
       if (at < 0) return 'the voice never ended';
       if (at <= num(c, 'after', 0)) return `the voice ended already in block ${at}`;
       if (at > num(c, 'within')) return `the voice ended only in block ${at} (limit ${num(c, 'within')})`;
@@ -609,16 +741,57 @@ export function evaluate(t: Trace, c: Check, dir: string, key?: string): string 
 export const FILL_SEED = 0x5eed1234;
 
 /** The first difference between the runs of two fills, or null: the output does not depend on the initial state. */
-export function stateDependence(a: Trace, b: Trace): string | null {
+export function stateDependence(a: Trace, b: Trace, observed?: Toml): string | null {
   for (const key of ['out', 'right'] as const) {
     const x = a[key] ?? [];
     const y = b[key] ?? [];
     for (let k = 0; k < Math.max(x.length, y.length); k++)
       for (let i = 0; i < Math.max(x[k]?.length ?? 0, y[k]?.length ?? 0); i++)
-        if (!Object.is(x[k]?.[i], y[k]?.[i]))
+        if (!Object.is(x[k]?.[i], y[k]?.[i])) {
+          if (observed)
+            Object.assign(observed, {
+              outputEqual: false,
+              channel: key,
+              block: k,
+              sample: i,
+              nanFill: x[k]?.[i] ?? null,
+              seededFill: y[k]?.[i] ?? null,
+            });
           return `the output depends on the initial state: ${key} block ${k} sample ${i} is ${x[k]?.[i]} with NaN words and ${y[k]?.[i]} with a seeded integer fill`;
+        }
   }
+  if (observed) observed.outputEqual = true;
   return null;
+}
+
+type DetailedCheck = CheckResult & CheckMeasurements;
+
+export interface RigCaseEvidence {
+  case: string;
+  device: string | null;
+  tap: 'voice' | 'voice-stereo' | 'fx-master' | 'fx-scratch';
+  status: 'pass' | 'fail' | 'skip' | 'error';
+  message?: string;
+  settings: Omit<RigCase, 'name' | 'check'>;
+  linkedSha256?: string;
+  counts?: ReturnType<typeof counts>;
+  seededFillCounts?: ReturnType<typeof counts>;
+  checks: DetailedCheck[];
+}
+
+function counts(t: Trace) {
+  const { instructions } = t;
+  return {
+    blocks: t.out.length,
+    instructionUnit: 'rig-instruction' as const,
+    instructionScope: t.kind === 'fx' ? 'FX adapter call' : t.right?.length ? 'primary voice only' : 'voice call',
+    totalInstructions: instructions.reduce((total, next) => total + next, 0),
+    firstBlockInstructions: instructions[0] ?? null,
+    worstBlockInstructions: instructions.reduce<number | null>(
+      (worst, next) => (worst === null ? next : Math.max(worst, next)),
+      null,
+    ),
+  };
 }
 
 /** Run every case of a file for the devices it names (both when it names none) and check it. */
@@ -627,25 +800,78 @@ export async function runRigFile(module: string, file: string, o: RunOptions = {
   const results: CheckResult[] = [];
   const isFx = fxSpec(module) !== null && !DEVICES.some((d) => machineSpec(module, d));
   for (const c of loadRigFile(file).case) {
-    const devices = (c.device ?? [...DEVICES]).filter((d): d is Device => (DEVICES as readonly string[]).includes(d));
+    const { name, check: checks, ...declared } = c;
+    const tap = isFx ? (c.observe === 'master' ? 'fx-master' : 'fx-scratch') : c.right ? 'voice-stereo' : 'voice';
+    const settings = {
+      ...declared,
+      step: c.step ?? [{}],
+      ...(isFx ? { input: c.input ?? FX_INPUT, seed: Number(c.seed ?? FX_SEED) } : {}),
+    };
+    const requested = c.device ?? [...DEVICES];
+    const devices = requested.filter((d): d is Device => (DEVICES as readonly string[]).includes(d));
+    if (o.onCase && !isFx) {
+      for (const device of requested.filter((d) => !(DEVICES as readonly string[]).includes(d)))
+        o.onCase({ case: name, device, tap, settings, status: 'skip', message: 'Unsupported rig device.', checks: [] });
+      if (requested.length === 0)
+        o.onCase({
+          case: name,
+          device: null,
+          tap,
+          settings,
+          status: 'skip',
+          message: 'No device selected.',
+          checks: [],
+        });
+    }
     for (const device of isFx ? ['fx' as const] : devices) {
-      const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, device as Device, c, dir, o);
-      const at = { case: c.name, device };
-      results.push({ ...at, kind: 'implicit rules', ok: t.failure === null, message: t.failure ?? '' });
-      if (!isFx && c.poison !== false) {
-        const other = await runMachine(module, device as Device, c, dir, o, FILL_SEED);
-        const why = stateDependence(t, other);
-        results.push({ ...at, kind: 'initial state', ok: why === null, message: why ?? '' });
-      }
-      for (const check of c.check ?? []) {
-        let message: string | null;
-        try {
-          message = evaluate(t, check, dir, rigKey(module, String(device), c.name));
-        } catch (e) {
-          message = (e as Error).message;
+      const at = { case: name, device };
+      const detail: RigCaseEvidence = { ...at, tap, settings, status: 'pass', checks: [] };
+      const add = (kind: string, failure: string | null, evidence?: CheckMeasurements) => {
+        const result = { ...at, kind, ok: failure === null, message: failure ?? '' };
+        results.push(result);
+        if (o.onCase && evidence) detail.checks.push({ ...result, ...evidence });
+      };
+      try {
+        const t = isFx ? await runFx(module, c, dir, o) : await runMachine(module, device as Device, c, dir, o);
+        if (o.onCase) {
+          detail.counts = counts(t);
+          detail.linkedSha256 = t.linkedSha256;
         }
-        results.push({ ...at, kind: check.kind, ok: message === null, message: message ?? '' });
+        add('implicit rules', t.failure, {
+          observed: { passed: t.failure === null },
+          expected: { passed: true },
+        });
+        if (!isFx && c.poison !== false) {
+          const other = await runMachine(module, device as Device, c, dir, o, FILL_SEED);
+          const observed: Toml = {};
+          if (o.onCase) detail.seededFillCounts = counts(other);
+          add('initial state', stateDependence(t, other, o.onCase ? observed : undefined), {
+            observed,
+            expected: { outputEqual: true, seed: FILL_SEED },
+          });
+        }
+        for (const check of checks ?? []) {
+          const evidence = o.onCase ? { observed: {}, expected: { ...check } } : undefined;
+          if (evidence) delete (evidence.expected as Toml).kind;
+          let failure: string | null;
+          try {
+            failure = evaluate(t, check, dir, rigKey(module, device, name), evidence);
+          } catch (error) {
+            failure = error instanceof Error ? error.message : String(error);
+          }
+          add(check.kind, failure, evidence);
+        }
+        if (detail.checks.some((check) => !check.ok)) detail.status = 'fail';
+        if (t.out.length === 0) {
+          if (detail.status === 'pass') detail.status = 'skip';
+          detail.message = 'The rig returned no blocks.';
+        }
+      } catch (error) {
+        if (!o.onCase) throw error;
+        detail.status = 'error';
+        detail.message = error instanceof Error ? error.message : String(error);
       }
+      o.onCase?.(detail);
     }
   }
   return results;

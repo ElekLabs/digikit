@@ -13,11 +13,17 @@ export interface SessionDocument {
   };
   checkpoint: string | null;
   attachments: { name: string; kind: 'capture' | 'audio' | 'comparison'; path: string }[];
+  dsp?: { module: string; reportFolder?: string };
 }
 
 export interface SavedSession {
   root: string;
   document: SessionDocument;
+}
+
+export interface DspReportSource {
+  folder: string;
+  sha256: string;
 }
 
 export interface CreateSession {
@@ -40,6 +46,7 @@ export interface SessionHost {
   mount(root: string, firmware?: string): Promise<[session: SavedSession, card: string]>;
   release(card: string): Promise<void>;
   save(root: string, card: string | undefined, name: string): Promise<SavedSession>;
+  saveDsp(root: string, module: string, source?: DspReportSource): Promise<SavedSession>;
   preserve(card: string): Promise<void>;
   attach(root: string, source: string): Promise<SavedSession>;
   readCapture(root: string, path: string): Promise<string>;

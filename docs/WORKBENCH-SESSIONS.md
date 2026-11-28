@@ -44,11 +44,31 @@ also want the guest writes that might sit beside that image.
   Session cards do not export or mirror into the normal +Drive folder.
 - **Save As…** creates a new session with an independent card base and
   checkpoint. If already working on a session card, later saves go to the
-  copy. Older captures and WAVs stay with the original session.
+  copy. The DSP module selection comes along. Older captures, WAVs and
+  saved DSP reports stay with the original session.
 
 The File menu provides New, Open, Save and Save As shortcuts while the
 Emulator pane is active. Workbench keeps the session itself in its folder,
 not in app preferences.
+
+## Save a DSP quality report
+
+1. Open a session in the Emulator pane, then go to **DSP**.
+2. Choose a module such as **Pluck** (`digikit/pluck`). You can save the selection now,
+   choose **Run rig report**, or open an existing folder containing
+   `quality.json` using **Open report folder**.
+3. Choose **Save to session**. If the open report matches the selected
+   module, Workbench copies its original `quality.json` and referenced
+   portable listening files into the session's `dsp/` folder. A report for
+   another module stays open for inspection while only the new selection is
+   saved.
+
+Reopening or switching sessions restores the selected module and its saved
+report without running the checks again. To carry listening media from a CLI
+run, export with `mise run wb:cli -- module quality AUTHOR/NAME --emit json,html --out FOLDER`.
+A report with links to media outside its folder can still show its checks.
+Workbench displays unavailable media beside the comparison. Saving DSP
+updates the session document independently of the card checkpoint.
 
 ## Captures and the CLI
 
