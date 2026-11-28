@@ -1,6 +1,7 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from 'solid-js';
 import type { ModuleClient } from '@digi/module-ui';
 import { ProjectManager, type GetReply } from './gen/project_manager_pb.js';
+import ProjectRaw from './ProjectRaw';
 import ProjectSettings from './ProjectSettings';
 import { hex32, queryErrorText, slotNumber } from './project-text';
 
@@ -18,6 +19,8 @@ export default function ProjectDetails(props: { client: ModuleClient; slot: numb
   // the module whose saved settings are open, and how many times the project was read again because it changed
   const [open, setOpen] = createSignal<string>();
   const [reads, setReads] = createSignal(0);
+  // which view of the project is shown
+  const [tab, setTab] = createSignal<'details' | 'raw'>('details');
 
   createEffect(
     on(
@@ -99,6 +102,18 @@ export default function ProjectDetails(props: { client: ModuleClient; slot: numb
                 <dt>Save stamp</dt>
                 <dd>{hex32(reply().stamp)}</dd>
               </dl>
+              <div class="pm-tabs" role="tablist">
+                <button type="button" role="tab" class="mini" aria-selected={tab() === 'details'} onClick={() => setTab('details')}>
+                  Details
+                </button>
+                <button type="button" role="tab" class="mini" aria-selected={tab() === 'raw'} onClick={() => setTab('raw')}>
+                  Raw
+                </button>
+              </div>
+              <Show when={tab() === 'raw'}>
+                <ProjectRaw client={props.client} slot={reply().slot} />
+              </Show>
+              <Show when={tab() === 'details'}>
               <h4>Modules</h4>
               <Show when={reply().modules.length} fallback={<p class="empty">No modules.</p>}>
                 <ul class="rows">
@@ -143,6 +158,7 @@ export default function ProjectDetails(props: { client: ModuleClient; slot: numb
                     )}
                   </For>
                 </ul>
+              </Show>
               </Show>
             </>
           )}

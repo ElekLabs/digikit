@@ -59,6 +59,30 @@ const projects: FakeProject[] = [
   { slot: 9, name: 'NEW', hasData: false, dataUnknown: true },
 ];
 
+const RAW_PAGE = 768;
+
+const be = (value: number, bytes: number) => Array.from({ length: bytes }, (_, i) => (value >>> (8 * (bytes - 1 - i))) & 0xff);
+
+/** A project file as the device would hold it (docs/design/digikit-project.md section 4): header, the module list and each module's saved settings. The crc is not computed (the preview colours bytes, it does not check them). */
+function dkpOf(p: FakeProject): Uint8Array {
+  const modules = (p.modules ?? []).flatMap((m) => [m.id.length, ...text(m.id), ...be(m.hash, 4)]);
+  const body: number[] = modules.length ? [1, ...be(modules.length, 2), ...modules] : [];
+  for (const [id, entries] of Object.entries(p.saved ?? {})) {
+    const section = [id.length, ...text(id), ...entries.flatMap((e) => {
+      const key = text(`${id}/${e.key}`);
+      return [key.length, ...key, ...be(e.value.length, 2), ...e.value];
+    })];
+    body.push(2, ...be(section.length, 2), ...section);
+  }
+  const name = text(p.name).slice(0, 16);
+  const head = [
+    ...text('DKPJ'), ...be(1, 2), ...be(0x1234, 2), p.slot, name.length,
+    ...name, ...Array.from({ length: 16 - name.length }, () => 0),
+    ...be(p.stamp ?? 0, 4), ...be(p.counter ?? 0, 4), ...be(42 + body.length, 4), ...be(0, 4),
+  ];
+  return Uint8Array.from([...head, ...body]);
+}
+
 export default function previewQueries(): MemoryQueryService {
   // Like the device, another project than the current one is read from the card first: INTRO answers `loading` twice before its data.
   const waiting = new Map<number, number>([[0, 2]]);
@@ -95,6 +119,21 @@ export default function previewQueries(): MemoryQueryService {
         counter: project.counter ?? 0,
         modules: (project.modules ?? []).map((m) => ({ ...m, settings: project.saved?.[m.id]?.length ?? 0 })),
       };
+    },
+    readFile: ({ slot, version, offset }) => {
+      const project = projects.find((p) => p.slot === slot);
+      if (!project || !project.hasData) return { found: false };
+      if (slot !== CURRENT) {
+        const request = `raw/${slot}/${offset}`;
+        if (!settingsWaiting.has(request)) {
+          settingsWaiting.add(request);
+          return { loading: true };
+        }
+        settingsWaiting.delete(request);
+      }
+      if ((project.counter ?? 0) !== version) return { changed: true };
+      const file = dkpOf(project);
+      return { found: true, data: file.slice(offset, offset + RAW_PAGE), total: file.length };
     },
     getSettings: ({ slot, module, version, cursor }) => {
       const project = projects.find((p) => p.slot === slot);

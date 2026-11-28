@@ -126,3 +126,70 @@
 .pm-value.hex {
   color: var(--ink-3);
 }
+.pm-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.pm-tabs [aria-selected='true'] {
+  background: var(--panel-2);
+  color: var(--ink-1, inherit);
+}
+.pm-hex {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  user-select: text;
+}
+.pm-hex-line {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+.pm-hex-offset {
+  color: var(--ink-3);
+  margin-right: 6px;
+}
+.pm-byte.pm-magic,
+.pm-byte.pm-version {
+  color: var(--action);
+}
+.pm-byte.pm-device,
+.pm-byte.pm-slot,
+.pm-byte.pm-name,
+.pm-byte.pm-stamp {
+  color: var(--status-ok, var(--action));
+}
+.pm-byte.pm-counter,
+.pm-byte.pm-used,
+.pm-byte.pm-crc {
+  color: var(--status-err, var(--action));
+}
+.pm-byte.pm-section,
+.pm-byte.pm-unknown {
+  color: var(--ink-3);
+}
+.pm-byte.pm-module-id,
+.pm-byte.pm-owner {
+  color: var(--action);
+}
+.pm-byte.pm-module-hash,
+.pm-byte.pm-key {
+  color: var(--status-ok, var(--action));
+}
+.pm-byte.pm-value {
+  color: inherit;
+}
+.pm-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pm-check {
+  flex: none;
+  margin: 0 8px 0 0;
+}
+.pm-save-message { margin: 6px 0 10px; color: var(--ink-3); }

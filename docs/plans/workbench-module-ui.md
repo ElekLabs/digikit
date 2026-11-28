@@ -153,6 +153,11 @@ Saved settings per module (built): click a module row on the details pane to exp
 - The page shows a value as text when every shown byte is printable ASCII, else as hex, and "N bytes" when the value is longer than shown. A module with 0 settings is not asked for. Typed values need each module's schema and are later.
 - Tests: service units (`services/project/tests/service/settings.rs`: paging, version mismatch, truncation, open vs other project, not found), handler mapping units (`tests/logic-driver.c`), page units (`tests/project-manager.page.test.ts`: expand, paging, loading, text/hex, changed, failures; `tests/project-text.test.ts`); `test/project-user` has the same `GetSettings` query and device case G checks the value it saved.
 
+Raw view and save (built; runtime 0.13.6, which also carries `dk_project_settings`):
+- `ReadFile({ slot, version, offset })` -> `dk_project_read(slot, version, offset, out, max, *total)` returns the raw `.dkp` bytes from `offset` (768 per reply) and the length of the whole file. The open project answers from the live image the service holds (its header counter and CRC are those of the last write, so unsaved changes show a CRC that does not match); another slot is read in the background like `Get` (`loading`, `changed` for another counter, `found = false` without a file).
+- The page's "Raw" tab on the selected project fetches all pages and shows hex with byte offsets, coloured by section (`workbench/dkp-spans.ts`: header fields, each tag section, module ids and hashes, owners, keys and values; a file of another version or without the magic shows as plain hex). The highlighter is tested against `runtime/core/vectors/dkp-vectors.json`.
+- A checkbox per project row and "Save selected": each ticked project's file is read with `ReadFile` and all go to `client.saveFiles` as `NNN-NAME.dkp` (characters a file name cannot hold become `_`); a project that cannot be read is named and left out.
+
 - Loading and renaming come later through the same path; the service owns their consistency (slot reuse, stamps, concurrent changes).
 
 ## Queries (phase 2)

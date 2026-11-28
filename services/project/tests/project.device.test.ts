@@ -323,6 +323,19 @@ cardRigs(
         expect(seen, `G: the fixture's saved "seen" is listed (keys ${saved!.entries.map((e) => e.key).join()})`).toBeDefined();
         expect([...seen!.value], 'G: its value is the one saved in case A').toEqual([...word32(VALUE_A)]);
         expect(seen!.valueLength, 'G: its full length').toBe(4);
+        // the raw file of slot 1: a .dkp that starts with its magic, and as long as the total the first page names
+        const raw = await pollUntil(
+          rt.clock,
+          async () => {
+            const r = await ask((q) => q.readFile({ slot: SLOT_FIRST, version: got!.counter, offset: 0 }));
+            return r.ok ? r.value : null;
+          },
+          (v) => v !== null && !v.loading,
+          { withinMs: WITHIN_MS, message: 'G: the file of slot 1 is read' },
+        );
+        expect(raw!.found, 'G: slot 1 has a file').toBe(true);
+        expect(new TextDecoder().decode(raw!.data.slice(0, 4)), 'G: the file starts with its magic').toBe('DKPJ');
+        expect(raw!.data.length, 'G: the first page holds the file up to one page').toBe(Math.min(raw!.total, 768));
 
         await rt.session.expectNoFault('the project service flows');
       },
