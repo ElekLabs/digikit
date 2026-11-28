@@ -98,17 +98,18 @@ test('A/B uses the same playback time and releases both players on disposal', ()
 });
 
 test('the picker refreshes on opening, shows catalog failures, and runs the selected module', async () => {
+  const module = { id: 'acme/short-delay', name: 'Short Delay' };
   const [active, setActive] = createSignal(false);
   const listModules = vi.fn<() => Promise<{ id: string; name: string }[]>>();
   const run = vi.fn().mockResolvedValue({ folder: '/generated' });
   const fs = {
     pickFolder: vi.fn(),
-    read: vi.fn().mockResolvedValue(encoded({ ...quality('digikit/ascend'), comparisons: [] })),
+    read: vi.fn().mockResolvedValue(encoded({ ...quality(module.id), comparisons: [] })),
   };
   const root = document.createElement('div');
   document.body.append(root);
   listModules.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('Checkout missing'));
-  listModules.mockResolvedValueOnce([{ id: 'digikit/ascend', name: 'Ascend' }]);
+  listModules.mockResolvedValueOnce([module]);
   const dispose = render(
     () => <DspPage active={active()} fs={fs} rig={{ listModules, run }} openTransfer={() => {}} />,
     root,
@@ -122,13 +123,13 @@ test('the picker refreshes on opening, shows catalog failures, and runs the sele
   setActive(true);
   await vi.waitFor(() => expect(root.querySelector('[role="alert"]')?.textContent).toContain('Checkout missing'));
   button(root, 'Refresh modules').click();
-  await vi.waitFor(() => expect(root.textContent).toContain('Ascend (digikit/ascend)'));
+  await vi.waitFor(() => expect(root.textContent).toContain(`${module.name} (${module.id})`));
   const select = root.querySelector('select')!;
-  select.value = 'digikit/ascend';
+  select.value = module.id;
   select.dispatchEvent(new Event('change', { bubbles: true }));
   button(root, 'Run rig report').click();
-  await vi.waitFor(() => expect(root.querySelector('h3')?.textContent).toBe('digikit/ascend'));
-  expect(run).toHaveBeenCalledWith('digikit/ascend');
+  await vi.waitFor(() => expect(root.querySelector('h3')?.textContent).toBe(module.id));
+  expect(run).toHaveBeenCalledWith(module.id);
   dispose();
   root.remove();
 });

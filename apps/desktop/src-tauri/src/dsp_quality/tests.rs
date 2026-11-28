@@ -43,14 +43,14 @@ fn catalog_finds_named_rig_modules_without_building_their_objects() {
 
 #[test]
 fn module_id_is_two_safe_components() {
-    assert!(valid_module_id("digikit/usb-fast"));
-    assert!(valid_module_id("digikit/lfo_shapes_1"));
+    assert!(valid_module_id("acme/short-delay"));
+    assert!(valid_module_id("acme/lfo_shapes_1"));
     for id in [
-        "ascend",
-        "/ascend",
-        "digikit/",
+        "effect",
+        "/effect",
+        "acme/",
         "a/b/c",
-        "../ascend",
+        "../effect",
         "a/..",
         "--out/a",
         "a/b c",
@@ -92,14 +92,15 @@ fn report_reservation_refuses_an_output_tree_outside_the_checkout() {
 fn a_failed_outcome_is_a_report_and_a_wrong_module_is_an_error() {
     let folder = tempfile::tempdir().unwrap();
     let report = folder.path().join("quality.json");
-    assert!(check_report(folder.path(), "digikit/ascend").is_err());
+    let module = "acme/short-delay";
+    assert!(check_report(folder.path(), module).is_err());
     fs::write(&report, "{").unwrap();
-    assert!(check_report(folder.path(), "digikit/ascend").is_err());
+    assert!(check_report(folder.path(), module).is_err());
     fs::write(
         &report,
-        r#"{"schema":"dk.module-quality/1","module":"digikit/ascend","outcome":"fail"}"#,
+        format!(r#"{{"schema":"dk.module-quality/1","module":"{module}","outcome":"fail"}}"#),
     )
     .unwrap();
-    assert!(check_report(folder.path(), "digikit/ascend").is_ok());
-    assert!(check_report(folder.path(), "digikit/pluck").is_err());
+    assert!(check_report(folder.path(), module).is_ok());
+    assert!(check_report(folder.path(), "acme/long-delay").is_err());
 }

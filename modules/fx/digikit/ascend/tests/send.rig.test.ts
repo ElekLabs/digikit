@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { FxRig, P0, f2w } from '@digi/sharc-rig-kit';
+import { DEVICES, FxRig, P0, f2w } from '@digi/sharc-rig-kit';
 import { expect, test } from 'vitest';
 
 const sources = [fileURLToPath(new URL('../src/dsp/ascend.s', import.meta.url))];
@@ -7,7 +7,7 @@ const frames = 32;
 const tracks = Array.from({ length: 16 }, (_, track) => track);
 const zero = Array<number>(2 * frames).fill(0);
 
-for (const device of ['dt2', 'dn2'] as const) {
+for (const device of DEVICES) {
   test(`${device}: the notch survives a reversal on the actual send hook`, async () => {
     const rig = await FxRig.open(
       [{ pc: '_ascend_process', state: '', desc: '_ascend_desc', params: [0.25, 63, 0.5, 1].map(f2w) }],

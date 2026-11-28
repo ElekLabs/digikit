@@ -1,4 +1,4 @@
-// Private oscillator and quadrature pair adapted from digikit/freqshift.
+// Private oscillator and quadrature pair adapted from digikit's Frequency shifter effect.
 // The two fourth-order all-pass chains run in z^-2. A one-sample delay on
 // chain P gives a near-quadrature pair across the audio band. Positive phase
 // increments in P*cos + Q*sin shift frequencies up.
