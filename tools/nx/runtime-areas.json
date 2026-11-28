@@ -1,7 +1,8 @@
 {
   "_doc": "Runtime source areas of the merge gate (tools/nx/runtime-areas.mjs, docs/TESTING.md 'Runtime areas'). Every file under 'scope' (minus 'exclude') is classified here: in one or more areas (firmware-facing: their device tests run) or in 'hostProven' (host-only files: vectors, fakes, test support, docs; proven by unit and assembly tests, no device test beyond the smoke set). A file in neither fails the check (`node tools/nx/runtime-areas.mjs --check`, the runtime-areas host test and the gate): there is no full-suite fallback; the full suite runs at milestone merges. 'tests' entries are 'project:file' or 'project:*'; '@all' is every test of every other area (area 'image'). Full-tier tests (no gate leaf target) are not mapped; the full suite runs them. A file that matches several areas selects all of them (union). An area match wins over 'hostProven' (so host-only files must not match an area glob). Unit-test sources ('testSources') are host-proven before the areas are read. 'exclude' keeps owner-based selection (device test projects, build output).",
   "scope": [
-    "runtime/core/**"
+    "runtime/core/**",
+    "runtime/platform/**"
   ],
   "exclude": [
     "runtime/core/tests/**",
@@ -20,7 +21,8 @@
     "runtime/core/src/rs/src/{fake_boot_env,fake_platform,fake_storage,host_io,test_lock,gen_abi_check}.rs",
     "runtime/core/src/rs/src/fake_platform/**",
     "runtime/core/abi/src/{fw,fw_id,keys,plan,regcheck,sha256,version}.rs",
-    "runtime/core/sdk/src/{command,result_text,sel,sticky}.rs"
+    "runtime/core/sdk/src/{command,result_text,sel,sticky}.rs",
+    "runtime/platform/ui/host/**"
   ],
   "areas": {
     "live-reload": {
@@ -302,6 +304,81 @@
       "tests": [
         "core/runtime-machines-tests:*",
         "core/runtime-fixture-tests:*"
+      ]
+    },
+    "platform-expansion": {
+      "globs": [
+        "runtime/platform/expansion/**"
+      ],
+      "tests": []
+    },
+    "platform-health": {
+      "globs": [
+        "runtime/platform/health/**"
+      ],
+      "tests": []
+    },
+    "platform-card-guard": {
+      "globs": [
+        "runtime/platform/card-guard/**"
+      ],
+      "tests": [
+        "core/runtime-storage-tests:card-guard.device.test.ts",
+        "core/runtime-storage-tests:card-safety.device.test.ts"
+      ]
+    },
+    "platform-peer-image": {
+      "globs": [
+        "runtime/platform/peer-image/**"
+      ],
+      "tests": []
+    },
+    "platform-sample-pool": {
+      "globs": [
+        "runtime/platform/sample-pool/**"
+      ],
+      "tests": [
+        "core/services/samples-tests:*"
+      ]
+    },
+    "platform-dyndsp": {
+      "globs": [
+        "runtime/platform/dyndsp/**"
+      ],
+      "tests": [
+        "core/runtime-machines-tests:*",
+        "core/runtime-fixture-tests:*"
+      ]
+    },
+    "platform-dsp-link": {
+      "globs": [
+        "runtime/platform/dsp-link/**"
+      ],
+      "tests": [
+        "core/runtime-fixture-tests:module-load.device.test.ts",
+        "core/runtime-machines-tests:*"
+      ]
+    },
+    "platform-ui": {
+      "globs": [
+        "runtime/platform/ui/{build,include,src}/**",
+        "runtime/platform/ui/module.toml"
+      ],
+      "tests": [
+        "core/digikit-menu:*",
+        "core/digikit-menu-zero-tests:*",
+        "sdk-settings-page-tests:*",
+        "sdk-ui-views-tests:*",
+        "sdk-ui-zero-tests:*",
+        "native-page-proof-tests:*"
+      ]
+    },
+    "platform-lfo-table": {
+      "globs": [
+        "runtime/platform/lfo-table/**"
+      ],
+      "tests": [
+        "core/runtime-lfo-tests:*"
       ]
     },
     "image": {
