@@ -3,7 +3,7 @@
 //! - [`ProjectEntry`] (`entry.rs`): one row of the list: slot, name, and the flags current, has data, data not known yet.
 //! - [`DataIndex`] (`data_index.rs`): the slots that have a `.dkp`, from one listing of `projects/` after the start and from the work that changes files.
 //! - [`ProjectSummary`] (`summary.rs`): the header and module list of one project, with the number of settings each module has.
-//! - [`PeekCache`] (`peek.rs`): the summary of the slot asked for last. The current project is answered from its live image; another slot is read by a scan in the queue (`Work::Peek`)
+//! - [`PeekCache`] (`peek.rs`): the summary of the slot asked for last. `get` and `settings` answer for the current project from its live image; `read` and the other slots are read by a scan in the queue (`Work::Peek`)
 //!   when the stage is idle.
 //!
 //! - [`ProjectSetting`] (`setting.rs`): one saved setting of a module and the page reader over an image. The read of another project's file keeps one page of it (`peek.rs`).

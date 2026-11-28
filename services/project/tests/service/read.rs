@@ -1,4 +1,4 @@
-//! `dk_project_read`: the raw bytes of the open project (live image) and of another project (one read of its file).
+//! `dk_project_read`: the raw bytes of a project, the open one too, from one read of its file on the card.
 use crate::browse::{file_full, rig_with_files};
 use crate::*;
 use dkrt_sdk::proto::E_AGAIN;
@@ -13,12 +13,12 @@ fn read(r: &mut Rig, slot: u32, version: u32, offset: u32, max: usize) -> (i32, 
     (status, total, out)
 }
 
-/// Slots 7 (open, counter 3) and 20 (counter 4) hold the same module and 1.6 kB of values, so a file is longer than one kept range.
-fn rig_with_raw() -> (Rig, Vec<u8>, Vec<u8>) {
+/// Slots 7 (open, counter 3) and 20 (counter 4) hold the same module and `n` values of 200 bytes: 8 make a file that one kept window holds whole, 25 one that is longer.
+fn rig_with(n: usize) -> (Rig, Vec<u8>, Vec<u8>) {
     let modules: &[(&[u8], u32)] = &[(b"a/x", 1)];
-    let values: Vec<Vec<u8>> = (0..8u8).map(|i| vec![i; 200]).collect();
-    let keys: Vec<Vec<u8>> = (0..8u8).map(|i| vec![b'k', b'0' + i]).collect();
-    let data: Vec<(&[u8], &[u8], &[u8])> = (0..8)
+    let values: Vec<Vec<u8>> = (0..n).map(|i| vec![i as u8; 200]).collect();
+    let keys: Vec<Vec<u8>> = (0..n).map(|i| format!("k{i:02}").into_bytes()).collect();
+    let data: Vec<(&[u8], &[u8], &[u8])> = (0..n)
         .map(|i| (&b"a/x"[..], keys[i].as_slice(), values[i].as_slice()))
         .collect();
     let open = file_full(7, b"SONG", 0x77, 3, modules, &data);
@@ -31,12 +31,23 @@ fn rig_with_raw() -> (Rig, Vec<u8>, Vec<u8>) {
     (r, open, other)
 }
 
+fn rig_with_raw() -> (Rig, Vec<u8>, Vec<u8>) {
+    rig_with(25)
+}
+
 #[test]
-fn the_open_project_gives_its_bytes_from_any_offset_and_the_total() {
-    let (mut r, open, _) = rig_with_raw();
+fn the_open_project_is_read_from_its_file_and_pages_inside_the_window_read_nothing_again() {
+    let (mut r, open, _) = rig_with(8);
+    assert!(open.len() < RAW_MAX, "the file is held whole");
+    assert_eq!(
+        read(&mut r, 7, 3, 0, 100).0,
+        E_AGAIN,
+        "read from the card, not answered live"
+    );
+    r.settle();
+    let reads = r.f.reads;
     let (status, total, bytes) = read(&mut r, 7, 3, 0, 100);
     assert_eq!((status, total), (100, open.len() as u32));
-    assert_eq!(&bytes[..4], b"DKPJ");
     assert_eq!(bytes, open[..100]);
     let (status, _, bytes) = read(&mut r, 7, 3, 1000, 4000);
     assert_eq!(
@@ -51,12 +62,37 @@ fn the_open_project_gives_its_bytes_from_any_offset_and_the_total() {
         "at the end: nothing"
     );
     assert_eq!(read(&mut r, 7, 3, 99999, 10).0, 0);
-    assert!(!r.p.busy(&r.job), "no read was queued");
+    assert_eq!(r.f.reads, reads, "paging did not read the card again");
+    assert_eq!(r.p.slot(), 7, "reading it binds nothing");
+}
+
+#[test]
+fn the_settings_and_the_raw_bytes_of_one_project_share_a_read() {
+    let (mut r, _, other) = rig_with(8);
+    let mut page = [ProjectSetting::EMPTY; 4];
+    let mut next = 0;
+    let mut ask_settings = |r: &mut Rig| r.p.settings(&r.f, 20, b"a/x", 4, 0, &mut page, &mut next);
+    assert_eq!(ask_settings(&mut r), E_AGAIN);
+    r.settle();
+    assert_eq!(ask_settings(&mut r), 4);
+    // the first raw request reads the file once more and keeps the page too
+    assert_eq!(read(&mut r, 20, 4, 0, 10).0, E_AGAIN);
+    r.settle();
+    let reads = r.f.reads;
+    assert_eq!(read(&mut r, 20, 4, 0, 10).2, other[..10]);
+    assert_eq!(ask_settings(&mut r), 4, "the page is still held");
+    assert_eq!(read(&mut r, 20, 4, 500, 10).2, other[500..510]);
+    assert_eq!(
+        r.f.reads, reads,
+        "neither kind of request read the card again"
+    );
 }
 
 #[test]
 fn a_bad_counter_says_changed_and_an_unlisted_slot_not_found() {
     let (mut r, _, _) = rig_with_raw();
+    assert_eq!(read(&mut r, 7, 2, 0, 10).0, E_AGAIN);
+    r.settle();
     assert_eq!(read(&mut r, 7, 2, 0, 10), (E_CHANGED, 0, vec![]));
     assert_eq!(read(&mut r, 99, 3, 0, 10).0, E_NOT_FOUND);
 }
@@ -64,26 +100,28 @@ fn a_bad_counter_says_changed_and_an_unlisted_slot_not_found() {
 #[test]
 fn another_project_says_try_again_then_gives_a_range_of_its_file() {
     let (mut r, _, other) = rig_with_raw();
-    assert_eq!(read(&mut r, 20, 4, 0, 4000).0, E_AGAIN);
+    assert_eq!(read(&mut r, 20, 4, 0, 8000).0, E_AGAIN);
     assert_eq!(
-        read(&mut r, 20, 4, 0, 4000).0,
+        read(&mut r, 20, 4, 0, 8000).0,
         E_AGAIN,
         "asking again does not answer early"
     );
     r.settle();
-    let (status, total, bytes) = read(&mut r, 20, 4, 0, 4000);
+    let (status, total, bytes) = read(&mut r, 20, 4, 0, 8000);
     assert_eq!(
         (status, total),
         (RAW_MAX as i32, other.len() as u32),
-        "one read keeps RAW_MAX bytes"
+        "one read keeps a window of RAW_MAX bytes"
     );
     assert_eq!(bytes, other[..RAW_MAX]);
-    // the next range is another read
+    // a range inside the window needs no read; the next window is another read
     let reads = r.f.reads;
-    assert_eq!(read(&mut r, 20, 4, RAW_MAX as u32, 4000).0, E_AGAIN);
+    assert_eq!(read(&mut r, 20, 4, 100, 8000).2, other[100..RAW_MAX]);
+    assert_eq!(r.f.reads, reads);
+    assert_eq!(read(&mut r, 20, 4, RAW_MAX as u32, 8000).0, E_AGAIN);
     r.settle();
     assert!(r.f.reads > reads);
-    let (status, total, bytes) = read(&mut r, 20, 4, RAW_MAX as u32, 4000);
+    let (status, total, bytes) = read(&mut r, 20, 4, RAW_MAX as u32, 8000);
     assert_eq!(total, other.len() as u32);
     assert_eq!(bytes, other[RAW_MAX..RAW_MAX + status as usize]);
     assert_eq!(r.p.slot(), 7, "reading it binds nothing");

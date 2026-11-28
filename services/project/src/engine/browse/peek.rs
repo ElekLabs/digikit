@@ -40,8 +40,9 @@ pub enum PeekAnswer {
 /// The most settings entries one read of another project's file keeps for `dk_project_settings` (the caller's `max` may be less).
 pub const PAGE_MAX: usize = 4;
 
-/// The most bytes one read of another project's file keeps for `dk_project_read` (the caller's `max` may be less).
-pub const RAW_MAX: usize = 768;
+/// The most bytes one read of another project's file keeps for `dk_project_read`: a window of the file image (a file up to this size is kept whole, a larger one in windows that
+/// start at the offset asked for). It is the service's one extra RAM for reading other projects' files.
+pub const RAW_MAX: usize = 4096;
 
 /// One summary: the last slot asked for. A request for another slot replaces it.
 pub struct PeekCache {
@@ -58,7 +59,7 @@ pub struct PeekCache {
     more: bool,
     count: u8,
     page: [ProjectSetting; PAGE_MAX],
-    /// Raw bytes were asked for with the read: from `raw_offset`, `raw_len` bytes kept of a file of `raw_total`.
+    /// Raw bytes were asked for with the read: the window starts at `raw_offset` and holds `raw_len` bytes of a file of `raw_total`.
     raw_asked: bool,
     raw_offset: u32,
     raw_len: u16,
@@ -112,29 +113,37 @@ impl PeekCache {
         &self.summary
     }
 
-    /// `slot` is asked for: it replaces what the cache held.
+    /// `slot` is asked for: it replaces what the cache held. A read of the same slot again keeps what the earlier requests asked it to keep (the settings page and the raw
+    /// window), so one read of the file serves a summary, a page and a raw range together.
     pub fn want(&mut self, slot: u32) {
+        if self.slot != slot || self.state == PeekState::Idle {
+            self.asked = false;
+            self.raw_asked = false;
+        }
         self.slot = slot;
         self.state = PeekState::Wanted;
-        self.asked = false;
-        self.raw_asked = false;
     }
 
-    /// `slot` is asked for with the raw bytes of its file from `offset`: the read keeps up to `RAW_MAX` of them.
+    /// `slot` is asked for with the raw bytes of its file from `offset`: the read keeps a window of up to `RAW_MAX` of them.
     pub fn want_raw(&mut self, slot: u32, offset: u32) {
         self.want(slot);
         self.raw_asked = true;
         self.raw_offset = offset;
     }
 
-    /// Does the kept raw range belong to this request?
+    /// Does the kept window cover this offset: it holds the byte there, or it ends the file and the offset is at or past the end?
     pub fn holds_raw(&self, offset: u32) -> bool {
-        self.raw_asked && self.raw_offset == offset
+        let end = self.raw_offset as usize + self.raw_len as usize;
+        self.raw_asked
+            && offset >= self.raw_offset
+            && ((offset as usize) < end || end >= self.raw_total as usize)
     }
 
-    /// The raw bytes the read kept and the length of the whole file image.
-    pub fn raw(&self) -> (&[u8], u32) {
-        (&self.raw[..self.raw_len as usize], self.raw_total)
+    /// The bytes of the kept window from `offset` (empty at or past the file's end) and the length of the whole file image. Call after `holds_raw(offset)`.
+    pub fn raw(&self, offset: u32) -> (&[u8], u32) {
+        let kept = &self.raw[..self.raw_len as usize];
+        let from = (offset.saturating_sub(self.raw_offset) as usize).min(kept.len());
+        (&kept[from..], self.raw_total)
     }
 
     /// `slot` is asked for with a page of the settings of `module` from `cursor`: the read of the file keeps that page too. `module` is at most `ID_MAX` bytes.
