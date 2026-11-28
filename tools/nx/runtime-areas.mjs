@@ -36,6 +36,9 @@ export const entriesOf = (area, areas) =>
       : [entry],
   );
 
+// An entry file is `*` (all), a record file name, or a glob over the record file (`tests/shot-*-pool.device.test.ts`).
+const matches = (f, file) => file === '*' || file === f || (/[*?]/.test(file) && matchesGlob(f, file));
+
 /** The test records of a 'project:file' / 'project:*' entry: [{ project, file, dsp, targets }]; [] when it names none. */
 const recordsOf = (entry, projects) => {
   const at = entry.indexOf(':');
@@ -44,7 +47,7 @@ const recordsOf = (entry, projects) => {
   const out = [];
   for (const rec of project?.metadata?.runtimeAcceptance ?? [])
     for (const f of rec.files ?? []) {
-      if (file !== '*' && file !== f) continue;
+      if (!matches(f, file)) continue;
       const targets = leavesOf(f, project.targets);
       if (targets.length) out.push({ project: name, file: f, dsp: rec.dsp ?? 'zero', targets });
     }
