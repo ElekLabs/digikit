@@ -310,35 +310,41 @@
       "globs": [
         "runtime/platform/expansion/**"
       ],
-      "tests": []
+      "tests": [
+        "core/fx:tests/patched-dsp-startup.device.test.ts"
+      ]
     },
     "platform-health": {
       "globs": [
         "runtime/platform/health/**"
       ],
-      "tests": []
+      "tests": [],
+      "note": "No device test names this module; the smoke set and the full tier cover it."
     },
     "platform-card-guard": {
       "globs": [
         "runtime/platform/card-guard/**"
       ],
       "tests": [
-        "core/runtime-storage-tests:card-guard.device.test.ts",
-        "core/runtime-storage-tests:card-safety.device.test.ts"
+        "core/runtime-storage-tests:*"
       ]
     },
     "platform-peer-image": {
       "globs": [
         "runtime/platform/peer-image/**"
       ],
-      "tests": []
+      "tests": [],
+      "note": "Syntakt-only and no acceptance cell: no device test can boot this module, and the smoke set has no Syntakt member, so a change here is proven by the host tests only."
     },
     "platform-sample-pool": {
       "globs": [
         "runtime/platform/sample-pool/**"
       ],
       "tests": [
-        "core/services/samples-tests:*"
+        "core/services/samples-tests:*",
+        "digikit/shot:tests/shot-dn2-pool.device.test.ts",
+        "digikit/shot:tests/shot-dn2-link.device.test.ts",
+        "digikit/shot:tests/shot-dt2.device.test.ts"
       ]
     },
     "platform-dyndsp": {
@@ -346,8 +352,10 @@
         "runtime/platform/dyndsp/**"
       ],
       "tests": [
-        "core/runtime-machines-tests:*",
-        "core/runtime-fixture-tests:*"
+        "core/runtime-fixture-tests:*",
+        "core/services/fx-tests:fx-kit.device.test.ts",
+        "core/runtime-diag-tests:addrmap.device.test.ts",
+        "core/runtime-capacity-tests:commit.device.test.ts"
       ]
     },
     "platform-dsp-link": {
@@ -355,8 +363,13 @@
         "runtime/platform/dsp-link/**"
       ],
       "tests": [
-        "core/runtime-fixture-tests:module-load.device.test.ts",
-        "core/runtime-machines-tests:*"
+        "core/runtime-fixture-tests:*",
+        "digikit/shot:tests/shot-dn2-link.device.test.ts",
+        "digikit/shot:tests/shot-dn2-pool.device.test.ts",
+        "digikit/shot:tests/shot-dn2-supersede.device.test.ts",
+        "digikit/debug:tests/debug-dsp-stats.device.test.ts",
+        "core/fx:tests/patched-dsp-startup.device.test.ts",
+        "core/runtime-tests:modules-capacity.device.test.ts"
       ]
     },
     "platform-ui": {
@@ -370,7 +383,8 @@
         "sdk-settings-page-tests:*",
         "sdk-ui-views-tests:*",
         "sdk-ui-zero-tests:*",
-        "native-page-proof-tests:*"
+        "native-page-proof-tests:*",
+        "digikit/shot:*"
       ]
     },
     "platform-lfo-table": {
