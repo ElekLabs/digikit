@@ -82,7 +82,7 @@ export default function ProjectRaw(props: { client: ModuleClient; slot: number }
                   <div class="pm-hex-line">
                     <span class="pm-hex-offset">{offsetText(line.offset)}</span>
                     <For each={line.cells}>
-                      {(cell) => <span class={cell.kind ? `pm-byte pm-${cell.kind}` : 'pm-byte'}>{cell.hex}</span>}
+                      {(cell) => <span class={cell.kind ? `pm-byte pm-k-${cell.kind}` : 'pm-byte'}>{cell.hex}</span>}
                     </For>
                   </div>
                 )}

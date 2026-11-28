@@ -1,115 +1,91 @@
 {
- "_doc": "Shared by packages/module-ui/tests/save-files.test.ts and apps/desktop/src-tauri/src/files_save/tests.rs: the one save-name rule and the list limits.",
- "limits": {
-  "maxNameBytes": 255,
-  "maxFiles": 256,
-  "maxTotalBytes": 67108864
- },
- "accept": [
-  "a.wav",
-  "b c.txt",
-  "a..b",
-  "é.txt",
-  ".hidden",
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  "CONSOLE",
-  "com10",
-  "COM0",
-  "nul_x",
-  "a.b.c",
-  "LPT",
-  "aux1",
-  "CONIN",
-  "COM²²",
-  "digikit-save-a",
-  ".digikit-sav",
-  "COM¹x"
- ],
- "refuse": [
-  "",
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
-  "a/b",
-  "a\\b",
-  "a:b",
-  "a*b",
-  "a?b",
-  "a\"b",
-  "a<b",
-  "a>b",
-  "a|b",
-  "a\u0000b",
-  "a\u001fb",
-  "a\tb",
-  "ab",
-  "..",
-  ".",
-  "...",
-  "....",
-  "a.",
-  "a ",
-  "a..",
-  "CON",
-  "con",
-  "Prn",
-  "AUX",
-  "NUL",
-  "COM1",
-  "com9",
-  "LPT1",
-  "lpt9",
-  "CON.txt",
-  "nul.tar.gz",
-  "Aux.WAV",
-  "CON .txt",
-  "../x",
-  ".digikit-save-1.tmp",
-  ".DIGIKIT-SAVE-x",
-  "COM¹",
-  "com²",
-  "COM³.txt",
-  "LPT¹",
-  "lpt².wav",
-  "LPT³",
-  "CONIN$",
-  "conout$",
-  "CONOUT$.txt",
-  "conin$ .x"
- ],
- "acceptLists": [
-  [
-   "a",
-   "b"
+  "_doc": "Shared by packages/module-ui/tests/save-files.test.ts and apps/desktop/src-tauri/src/files_save/tests.rs: the one save-name rule and the list limits.",
+  "limits": {
+    "maxNameBytes": 255,
+    "maxFiles": 256,
+    "maxTotalBytes": 67108864
+  },
+  "accept": [
+    "a.wav",
+    "b c.txt",
+    "a..b",
+    "é.txt",
+    ".hidden",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "CONSOLE",
+    "com10",
+    "COM0",
+    "nul_x",
+    "a.b.c",
+    "LPT",
+    "aux1",
+    "CONIN",
+    "COM²²",
+    "digikit-save-a",
+    ".digikit-sav",
+    "COM¹x"
   ],
-  [
-   "a.wav",
-   "a.wav2"
+  "refuse": [
+    "",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+    "a/b",
+    "a\\b",
+    "a:b",
+    "a*b",
+    "a?b",
+    "a\"b",
+    "a<b",
+    "a>b",
+    "a|b",
+    "a\u0000b",
+    "a\u001fb",
+    "a\tb",
+    "ab",
+    "..",
+    ".",
+    "...",
+    "....",
+    "a.",
+    "a ",
+    "a..",
+    "CON",
+    "con",
+    "Prn",
+    "AUX",
+    "NUL",
+    "COM1",
+    "com9",
+    "LPT1",
+    "lpt9",
+    "CON.txt",
+    "nul.tar.gz",
+    "Aux.WAV",
+    "CON .txt",
+    "../x",
+    ".digikit-save-1.tmp",
+    ".DIGIKIT-SAVE-x",
+    "COM¹",
+    "com²",
+    "COM³.txt",
+    "LPT¹",
+    "lpt².wav",
+    "LPT³",
+    "CONIN$",
+    "conout$",
+    "CONOUT$.txt",
+    "conin$ .x"
   ],
-  [
-   "e.txt",
-   "é.txt"
+  "acceptLists": [
+    ["a", "b"],
+    ["a.wav", "a.wav2"],
+    ["e.txt", "é.txt"]
+  ],
+  "refuseLists": [
+    ["a", "a"],
+    ["a.WAV", "a.wav"],
+    ["Ab", "aB"],
+    ["é.txt", "é.txt"],
+    ["É", "é"]
   ]
- ],
- "refuseLists": [
-  [
-   "a",
-   "a"
-  ],
-  [
-   "a.WAV",
-   "a.wav"
-  ],
-  [
-   "Ab",
-   "aB"
-  ],
-  [
-   "é.txt",
-   "é.txt"
-  ],
-  [
-   "É",
-   "é"
-  ]
- ]
 }

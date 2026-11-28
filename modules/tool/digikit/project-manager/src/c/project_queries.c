@@ -88,7 +88,8 @@ int32_t project_manager_get_settings(dk_module_ctx *ctx,
     return 0;
 }
 
-int32_t project_manager_read_file(dk_module_ctx *ctx, const project_manager_ReadFileRequest *request,
+int32_t project_manager_read_file(dk_module_ctx *ctx,
+                                  const project_manager_ReadFileRequest *request,
                                   project_manager_ReadFileReply *reply)
 {
     (void)ctx;

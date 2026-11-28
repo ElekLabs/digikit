@@ -39,7 +39,8 @@ export function checkSaveName(name: string): void {
     throw new SaveFilesError(`The file name is longer than ${SAVE_LIMITS.maxNameBytes} bytes: ${name.slice(0, 40)}`);
   // eslint-disable-next-line no-control-regex
   if (/[/\\:*?"<>|\u0000-\u001f\u007f]/.test(name)) throw new SaveFilesError(`Not a plain file name: ${name}`);
-  if (name.toLowerCase().startsWith(TEMP_PREFIX)) throw new SaveFilesError(`A name reserved for temporary files: ${name}`);
+  if (name.toLowerCase().startsWith(TEMP_PREFIX))
+    throw new SaveFilesError(`A name reserved for temporary files: ${name}`);
   if (/^\.+$/.test(name) || /[. ]$/.test(name)) throw new SaveFilesError(`Not a plain file name: ${name}`);
   if (RESERVED.test(name.split('.')[0]!.trimEnd())) throw new SaveFilesError(`A reserved device name: ${name}`);
 }

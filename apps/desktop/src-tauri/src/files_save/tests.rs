@@ -110,9 +110,11 @@ fn the_count_and_the_total_size_are_limited_before_any_write() {
         max_files
     );
     let dir2 = folder("limits2");
-    assert!(write_all(&dir2, &pack_names(&names(max_files + 1)))
-        .unwrap_err()
-        .contains("at most"));
+    assert!(
+        write_all(&dir2, &pack_names(&names(max_files + 1)))
+            .unwrap_err()
+            .contains("at most")
+    );
     assert_eq!(std::fs::read_dir(&dir2).unwrap().count(), 0);
     let big = vec![0u8; max_total / 2 + 1];
     let err = write_all(&dir2, &pack(&[("a", &big), ("b", &big)])).unwrap_err();

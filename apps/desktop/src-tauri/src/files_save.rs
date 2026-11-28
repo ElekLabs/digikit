@@ -54,10 +54,9 @@ fn check_name(name: &str) -> Result<(), String> {
     ) || matches!(
         stem.as_str(),
         "COM¹" | "COM²" | "COM³" | "LPT¹" | "LPT²" | "LPT³"
-    )
-        || ((stem.starts_with("COM") || stem.starts_with("LPT"))
-            && stem.len() == 4
-            && matches!(stem.as_bytes()[3], b'1'..=b'9'));
+    ) || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+        && stem.len() == 4
+        && matches!(stem.as_bytes()[3], b'1'..=b'9'));
     if reserved {
         return Err(format!("a reserved device name: {name}"));
     }
@@ -152,7 +151,7 @@ fn write_all(folder: &Path, packed: &[u8]) -> Result<u32, String> {
         let path = folder.join(name);
         match std::fs::symlink_metadata(&path) {
             Ok(m) if m.file_type().is_symlink() => {
-                return Err(format!("{}: is a symbolic link", path.display()))
+                return Err(format!("{}: is a symbolic link", path.display()));
             }
             Ok(m) if !m.is_file() => return Err(format!("{}: is not a file", path.display())),
             Ok(_) => {}

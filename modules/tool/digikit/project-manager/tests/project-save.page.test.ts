@@ -61,7 +61,7 @@ describe('the Raw tab', () => {
     expect(lines[1].querySelector('.pm-hex-offset')?.textContent).toBe('0010');
     expect(lines[1].querySelectorAll('.pm-byte')).toHaveLength(4);
     // 0x50 0x51 0x52 0x53 is no known version: the bytes are plain
-    expect(view.host.querySelector('.pm-byte.pm-magic')).toBeNull();
+    expect(view.host.querySelector('.pm-byte.pm-k-magic')).toBeNull();
     view.dispose();
   });
 
@@ -87,8 +87,16 @@ describe('the Raw tab', () => {
     view.rows()[1].click();
     await vi.waitFor(() => expect(view.button('Raw')).toBeDefined());
     view.button('Raw')!.click();
-    await vi.waitFor(() => expect(view.host.querySelector('.pm-byte.pm-magic')).not.toBeNull());
-    const kinds = (kind: string) => view.host.querySelectorAll(`.pm-byte.pm-${kind}`).length;
+    await vi.waitFor(() => expect(view.host.querySelector('.pm-byte.pm-k-magic')).not.toBeNull());
+    const kinds = (kind: string) => view.host.querySelectorAll(`.pm-byte.pm-k-${kind}`).length;
+    // every full row has 16 byte cells of one structure: pm-byte, plus at most a pm-k-* section colour
+    const lines = [...view.host.querySelectorAll('.pm-hex-line')];
+    for (const [index, line] of lines.entries()) {
+      const cells = [...line.querySelectorAll('.pm-byte')];
+      if (index < lines.length - 1) expect(cells).toHaveLength(16);
+      for (const cell of cells) expect([...cell.classList].filter((c) => !c.startsWith('pm-k-'))).toEqual(['pm-byte']);
+      for (const cell of cells) expect(cell.classList.length).toBeLessThanOrEqual(2);
+    }
     expect([kinds('magic'), kinds('version'), kinds('device'), kinds('slot'), kinds('counter'), kinds('used'), kinds('crc')]).toEqual([4, 2, 2, 1, 4, 4, 4]);
     view.dispose();
   });

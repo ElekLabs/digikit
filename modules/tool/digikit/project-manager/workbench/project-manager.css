@@ -152,34 +152,39 @@
   color: var(--ink-3);
   margin-right: 6px;
 }
-.pm-byte.pm-magic,
-.pm-byte.pm-version {
+.pm-byte {
+  display: inline-block;
+  width: 2ch;
+  flex: none;
+}
+.pm-byte.pm-k-magic,
+.pm-byte.pm-k-version {
   color: var(--action);
 }
-.pm-byte.pm-device,
-.pm-byte.pm-slot,
-.pm-byte.pm-name,
-.pm-byte.pm-stamp {
+.pm-byte.pm-k-device,
+.pm-byte.pm-k-slot,
+.pm-byte.pm-k-name,
+.pm-byte.pm-k-stamp {
   color: var(--status-ok, var(--action));
 }
-.pm-byte.pm-counter,
-.pm-byte.pm-used,
-.pm-byte.pm-crc {
+.pm-byte.pm-k-counter,
+.pm-byte.pm-k-used,
+.pm-byte.pm-k-crc {
   color: var(--status-err, var(--action));
 }
-.pm-byte.pm-section,
-.pm-byte.pm-unknown {
+.pm-byte.pm-k-section,
+.pm-byte.pm-k-unknown {
   color: var(--ink-3);
 }
-.pm-byte.pm-module-id,
-.pm-byte.pm-owner {
+.pm-byte.pm-k-module-id,
+.pm-byte.pm-k-owner {
   color: var(--action);
 }
-.pm-byte.pm-module-hash,
-.pm-byte.pm-key {
+.pm-byte.pm-k-module-hash,
+.pm-byte.pm-k-key {
   color: var(--status-ok, var(--action));
 }
-.pm-byte.pm-value {
+.pm-byte.pm-k-value {
   color: inherit;
 }
 .pm-list-head {
