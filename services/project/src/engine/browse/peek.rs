@@ -40,6 +40,9 @@ pub enum PeekAnswer {
 /// The most settings entries one read of another project's file keeps for `dk_project_settings` (the caller's `max` may be less).
 pub const PAGE_MAX: usize = 4;
 
+/// The most bytes one read of another project's file keeps for `dk_project_read` (the caller's `max` may be less).
+pub const RAW_MAX: usize = 768;
+
 /// One summary: the last slot asked for. A request for another slot replaces it.
 pub struct PeekCache {
     slot: u32,
@@ -55,6 +58,12 @@ pub struct PeekCache {
     more: bool,
     count: u8,
     page: [ProjectSetting; PAGE_MAX],
+    /// Raw bytes were asked for with the read: from `raw_offset`, `raw_len` bytes kept of a file of `raw_total`.
+    raw_asked: bool,
+    raw_offset: u32,
+    raw_len: u16,
+    raw_total: u32,
+    raw: [u8; RAW_MAX],
 }
 
 impl PeekCache {
@@ -72,6 +81,11 @@ impl PeekCache {
             more: false,
             count: 0,
             page: [ProjectSetting::EMPTY; PAGE_MAX],
+            raw_asked: false,
+            raw_offset: 0,
+            raw_len: 0,
+            raw_total: 0,
+            raw: [0; RAW_MAX],
         }
     }
 
@@ -103,6 +117,24 @@ impl PeekCache {
         self.slot = slot;
         self.state = PeekState::Wanted;
         self.asked = false;
+        self.raw_asked = false;
+    }
+
+    /// `slot` is asked for with the raw bytes of its file from `offset`: the read keeps up to `RAW_MAX` of them.
+    pub fn want_raw(&mut self, slot: u32, offset: u32) {
+        self.want(slot);
+        self.raw_asked = true;
+        self.raw_offset = offset;
+    }
+
+    /// Does the kept raw range belong to this request?
+    pub fn holds_raw(&self, offset: u32) -> bool {
+        self.raw_asked && self.raw_offset == offset
+    }
+
+    /// The raw bytes the read kept and the length of the whole file image.
+    pub fn raw(&self) -> (&[u8], u32) {
+        (&self.raw[..self.raw_len as usize], self.raw_total)
     }
 
     /// `slot` is asked for with a page of the settings of `module` from `cursor`: the read of the file keeps that page too. `module` is at most `ID_MAX` bytes.
@@ -189,6 +221,14 @@ impl PeekCache {
                 self.count = count as u8;
                 self.more = more;
             }
+        }
+        if self.raw_asked {
+            let total = head.used as usize;
+            let from = (self.raw_offset as usize).min(total);
+            let n = (total - from).min(RAW_MAX);
+            self.raw[..n].copy_from_slice(&buffer.0[from..from + n]);
+            self.raw_len = n as u16;
+            self.raw_total = total as u32;
         }
         self.state = PeekState::Ready;
         Ok(())

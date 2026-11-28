@@ -112,6 +112,21 @@ impl<H: Host> Project<H> {
     }
 }
 
+impl<H: Host> Project<H> {
+    /// `dk_project_read`: the raw file bytes written to `out` (their number), `E_AGAIN` while the read runs, `E_NOT_FOUND`, `E_CHANGED` for another write counter.
+    pub fn read(
+        &mut self,
+        slot: u32,
+        version: u32,
+        offset: u32,
+        out: &mut [u8],
+        total: &mut u32,
+    ) -> i32 {
+        self.engine
+            .read(&self.host, slot, version, offset, out, total)
+    }
+}
+
 impl<C: CoreApi, H: Host> Provider<C> for Project<H> {
     /// The state is made where it lives: all-zero bytes are the initial state (`Host`'s contract, and `ProjectService::new` is zero: `tests/state.rs` checks it), so this is one fill
     /// and no copy of the engine's buffers through the stack. Then the handles open and the settings overlay is set, as `setup` of the file did.

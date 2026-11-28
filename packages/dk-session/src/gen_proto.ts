@@ -160,7 +160,7 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-14, 'E_TABLE_FULL', 'no free module record'],
   [-15, 'E_LOST', 'the sample backing was lost and the reload failed'],
   [-16, 'E_POOL', 'the sample pool is full'],
-  [-17, 'E_CHANGED', 'the sample file differs from the selection snapshot'],
+  [-17, 'E_CHANGED', 'the data changed since it was read'],
   [-18, 'E_EXISTS', 'the file exists already (dk_files_create does not overwrite)'],
   [-19, 'E_CONTEXT', 'the call is not allowed in this context (dk_files_* writes run in an I/O step)'],
   [-20, 'E_NO_REGISTRY', 'register records, but the image has no registry'],

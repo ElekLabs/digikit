@@ -14,6 +14,7 @@ mod module_restore;
 mod paste;
 mod refusals;
 mod rename;
+mod read;
 mod rig;
 mod save;
 mod scope;

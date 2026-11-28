@@ -11,14 +11,16 @@ const _: api::DkProjectStatusFn = crate::glue::dk_project_status;
 const _: api::DkProjectListFn = crate::glue::dk_project_list;
 const _: api::DkProjectGetFn = crate::glue::dk_project_get;
 const _: api::DkProjectSettingsFn = crate::glue::dk_project_settings;
+const _: api::DkProjectReadFn = crate::glue::dk_project_read;
 
 /// The entries `service!` declares, by name hash, in the order of `sdk/sdk.toml`.
-pub fn exports() -> [(u32, *const u8); 5] {
+pub fn exports() -> [(u32, *const u8); 6] {
     [
         (dkrt_svc_rt::name_hash("dk_project_current"), crate::glue::dk_project_current as *const u8),
         (dkrt_svc_rt::name_hash("dk_project_status"), crate::glue::dk_project_status as *const u8),
         (dkrt_svc_rt::name_hash("dk_project_list"), crate::glue::dk_project_list as *const u8),
         (dkrt_svc_rt::name_hash("dk_project_get"), crate::glue::dk_project_get as *const u8),
         (dkrt_svc_rt::name_hash("dk_project_settings"), crate::glue::dk_project_settings as *const u8),
+        (dkrt_svc_rt::name_hash("dk_project_read"), crate::glue::dk_project_read as *const u8),
     ]
 }

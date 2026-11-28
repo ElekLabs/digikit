@@ -18,7 +18,7 @@
 #define DK_E_TABLE_FULL (-14) /* no free module record */
 #define DK_E_LOST (-15) /* the sample backing was lost and the reload failed */
 #define DK_E_POOL (-16) /* the sample pool is full */
-#define DK_E_CHANGED (-17) /* the sample file differs from the selection snapshot */
+#define DK_E_CHANGED (-17) /* the data changed since it was read */
 #define DK_E_EXISTS (-18) /* the file exists already (dk_files_create does not overwrite) */
 #define DK_E_CONTEXT (-19) /* the call is not allowed in this context (dk_files_* writes run in an I/O step) */
 #define DK_E_NO_REGISTRY (-20) /* register records, but the image has no registry */
