@@ -5,7 +5,7 @@ import { globSync, readFileSync } from 'node:fs';
 import { join, matchesGlob } from 'node:path';
 import { parse } from 'smol-toml';
 import { deviceShorts, filesOf } from './device-files.mjs';
-import { declaredUsers, portEntryUsers } from './port-entries.mjs';
+import { canonical, declaredUsers, portEntryUsers } from './port-entries.mjs';
 
 const readIfThere = (path) => {
   try {
@@ -39,10 +39,9 @@ export const gateContext = (root, base) => {
       let entries = entriesOf(text);
       if (base) {
         const before = entriesOf(gitShow(root, base, file));
-        const key = (e) => JSON.stringify(e, Object.keys(e ?? {}).sort());
-        const was = new Set(before.map(key));
-        const is = new Set(entries.map(key));
-        entries = [...entries.filter((e) => !was.has(key(e))), ...before.filter((e) => !is.has(key(e)))];
+        const was = new Set(before.map(canonical));
+        const is = new Set(entries.map(canonical));
+        entries = [...entries.filter((e) => !was.has(canonical(e))), ...before.filter((e) => !is.has(canonical(e)))];
       }
       return [...new Set(entries.flatMap((e) => (Array.isArray(e?.users) ? e.users : [])))];
     },

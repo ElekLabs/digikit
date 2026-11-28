@@ -5,7 +5,18 @@
 // keeps the rule for a device file (every affected half of the device).
 import { parse } from 'smol-toml';
 
-const key = (e) => JSON.stringify(e, Object.keys(e ?? {}).sort());
+/** JSON text of `v` with the keys sorted at every depth: two entries are equal exactly when every nested value is. */
+export const canonical = (v) =>
+  JSON.stringify(v, (_, x) =>
+    x && typeof x === 'object' && !Array.isArray(x)
+      ? Object.fromEntries(
+          Object.keys(x)
+            .sort()
+            .map((k) => [k, x[k]]),
+        )
+      : x,
+  );
+const key = canonical;
 
 /** `text` -> { named: Map('table:name' -> canonical entry), other: Map(table -> canonical value) }. */
 const entriesOf = (text) => {
@@ -14,7 +25,7 @@ const entriesOf = (text) => {
   for (const [table, v] of Object.entries(text === undefined ? {} : parse(text))) {
     if (Array.isArray(v) && v.every((e) => typeof e?.name === 'string'))
       for (const e of v) named.set(`${table}:${e.name}`, key(e));
-    else other.set(table, JSON.stringify(v));
+    else other.set(table, canonical(v));
   }
   return { named, other };
 };

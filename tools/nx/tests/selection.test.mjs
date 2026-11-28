@@ -57,6 +57,13 @@ describe('users of a changed generated port file', () => {
     expect(got).toEqual({ users: ['core/input'], wide: false });
   });
 
+  it('sees a change nested inside an entry', () => {
+    const nested = (v) =>
+      `[port]\ndevice = "${DEV}"\n[[hook]]\nname = "cf.input.hook.key_event"\n[hook.args]\nreg = { a = 1, b = ${v} }\n`;
+    const got = portEntryUsers({ head: nested(2), base: nested(1), declared: DECLARED });
+    expect(got).toEqual({ users: ['core/input'], wide: false });
+  });
+
   it('is wide when the header or a limit changes', () => {
     const got = portEntryUsers({
       head: GENERATED('before', 'sha = "b"'),
