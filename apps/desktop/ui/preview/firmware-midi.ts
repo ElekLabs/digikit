@@ -34,7 +34,7 @@ type Device = {
 type CardModules = (key: string, profile: DeviceProfile) => Promise<readonly string[]>;
 type Link = { name: string; queue: Uint8Array[]; wake?: () => void };
 /** The reply's status byte of a runtime status name (sdk.toml `[protocol.status]`). */
-const statusByte = (name: string): number => (STATUS.find(([, n]) => n === name)![0] & 0xff);
+const statusByte = (name: string): number => STATUS.find(([, n]) => n === name)![0] & 0xff;
 const E_MSG = statusByte('E_MSG');
 const E_PROTO = statusByte('E_PROTO');
 
@@ -206,7 +206,13 @@ export function createFirmwareMidi(query: URLSearchParams, fixture: FirmwareFixt
     if (op === 3) logConfig.cardOn = body[1] ? 1 : 0;
     if (op === 2 || op === 3)
       // u8 on, u8 file, u8 state, u8 0, u32 writes, i32 last_status, u32 ms_since_write
-      return reply(to, cmd, seq, 0, concat([logConfig.cardOn, 0, logConfig.cardOn], [0], be32(0), be32(0), be32(0xffffffff)));
+      return reply(
+        to,
+        cmd,
+        seq,
+        0,
+        concat([logConfig.cardOn, 0, logConfig.cardOn], [0], be32(0), be32(0), be32(0xffffffff)),
+      );
     reply(to, cmd, seq, E_PROTO);
   }
 

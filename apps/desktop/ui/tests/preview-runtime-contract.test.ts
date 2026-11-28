@@ -3,8 +3,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DkSession, hasCap, readSettingsRecord, type DkTransport } from '@digi/dk-session';
 import { CAP, CMD, SERVICE_CMD, STATUS } from '@digi/dk-session/gen_proto';
+import { deviceProfiles, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
 
-const fixture = { dev: 'dt2', state: 'runtime', os: '1.17', flashMs: 0, goneMs: 0, sent: 0 };
+const dev = runtimeDeviceIds[0]!;
+const fixture = {
+  dev,
+  state: 'runtime',
+  os: deviceProfiles[dev].firmware.at(-1)!.version,
+  flashMs: 0,
+  goneMs: 0,
+  sent: 0,
+};
 type Cap = keyof typeof CAP;
 
 // Every capability bit of sdk.toml `[protocol.caps]` and the commands it gates (`[protocol.commands]`, `[protocol.service]`). A capability that gates
@@ -64,7 +73,7 @@ async function runtime(modules: string[]) {
     });
   };
   const transport: DkTransport = {
-    send: (msg) => midi.usbIn('dt2', msg),
+    send: (msg) => midi.usbIn(dev, msg),
     async recv(timeoutMs) {
       const end = Date.now() + timeoutMs;
       for (;;) {

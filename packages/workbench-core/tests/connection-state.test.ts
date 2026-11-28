@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createRoot } from 'solid-js';
 import { createConnection, DISCONNECT_GRACE_MS } from '../src/transfer/connection-state.ts';
+import { deviceProfiles, runtimeDeviceIds } from '../src/data/device-profiles.ts';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -18,7 +19,10 @@ it('dispose while disconnected stops the grace timer', () => {
 it('a lost optional request changes nothing and starts no re-read; a lost core request does both', () => {
   const lost = vi.fn();
   const c = createRoot(() => createConnection({ deviceName: async () => 'x' }, undefined, { lost }));
-  c.noteConnection({ type: 'answered', device: { id: 'dt2', name: 'Digitakt II' } });
+  c.noteConnection({
+    type: 'answered',
+    device: { id: runtimeDeviceIds[0]!, name: deviceProfiles[runtimeDeviceIds[0]!].name },
+  });
   c.noteConnection({ type: 'lost', reason: 'no reply', optional: true });
   expect(c.connection().state).toBe('connected');
   expect(lost).not.toHaveBeenCalled();
