@@ -1,3 +1,5 @@
+import { targetKey } from '@digi/workbench-core/transfer/session-core.ts';
+import { watchOpenModule } from './shell/open-module';
 import {
   For,
   Match,
@@ -152,9 +154,16 @@ export default function WorkbenchShell(
     setPage('module');
   }
   const modulePage = () => modulePages().find((item) => item.id === moduleId())?.view;
-  createEffect(() => {
-    if (page() === 'module' && !app.target.switching() && !modulePage()) setPage('transfer');
-  });
+  watchOpenModule(
+    {
+      target: () => targetKey(app.target.target()),
+      switching: app.target.switching,
+      inventory: app.inventory,
+      hasPage: (module) => module.uiInstance !== undefined || filePages.get(module.name) !== undefined,
+    },
+    () => (page() === 'module' ? { id: moduleId() } : undefined),
+    () => setPage('transfer'),
+  );
   const [card, setCard] = createSignal<CardStatus>();
   let live: LivePanelApi | undefined;
   let folderInput: HTMLInputElement | undefined;
