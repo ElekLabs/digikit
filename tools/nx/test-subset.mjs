@@ -171,10 +171,13 @@ export const skipText = (skipped) => {
 export const halvesOfDevices = (halves, devices) =>
   devices ? halves.filter((id) => devices.some((d) => id.endsWith(`--${d}`))) : halves;
 
-// Files changed since `base`: the tracked diff (committed and working tree) and the untracked files. `git`: runs git in `root`.
-export const changedFiles = (root, base, git = defaultGit) => [
-  ...new Set([...git(root, 'diff', '--name-only', base), ...git(root, 'ls-files', '--others', '--exclude-standard')]),
-];
+// Files changed since `base`: the tracked diff (committed and working tree), plus the untracked files unless `untracked` is false (the
+// gate and `test:plan`: an untracked build dir or scratch file must not select device tests). `git`: runs git in `root`.
+export const changedFiles = (root, base, { untracked = true, git = defaultGit } = {}) => {
+  const tracked = git(root, 'diff', '--name-only', base);
+  const loose = git(root, 'ls-files', '--others', '--exclude-standard');
+  return { files: [...new Set(untracked ? [...tracked, ...loose] : tracked)], ignoredUntracked: untracked ? 0 : loose.length };
+};
 const defaultGit = (root, ...args) => {
   const done = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
   if (done.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${done.stderr}`);
@@ -229,7 +232,11 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   let selection;
   if (base) {
     // Ownership gate (device-owners.mjs): what owns a changed file selects the tests; the named projects join as a union.
-    const changed = changedFiles(root, base);
+    const { files: changed, ignoredUntracked } = changedFiles(root, base, { untracked: !gate });
+    if (ignoredUntracked)
+      console.log(
+        `test:subset: ${ignoredUntracked} untracked file(s) ignored by the gate; a change to untracked inputs needs named targets`,
+      );
     const importInputs = testImportInputs(root);
     const ctx = gateContext(root, base);
     // Runtime source files are decided by their area (runtime-areas.json); the rest by ownership.
