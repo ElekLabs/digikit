@@ -140,10 +140,10 @@ describe('declaring area of a changed port binding', () => {
 describe('gate context against the base', () => {
   const decl = (users) =>
     `[[hook]]\nname = "cf.input.hook.key_event"\nusers = [${users.map((u) => `"${u}"`).join(', ')}]\n`;
-  const ctx = ({ now = {}, then = {}, ...rest }) =>
+  const ctx = ({ now = {}, before = {}, ...rest }) =>
     gateContext('/x', 'base' in rest ? rest.base : 'main', {
       read: (f) => now[f],
-      show: (f) => then[f],
+      show: (f) => before[f],
       declarationTexts: () => [decl(['core/input'])],
       deviceGlobs: () => [{ short: DEV, globs: [`ports/${DEV}-*.toml`] }],
     });
@@ -157,32 +157,32 @@ describe('gate context against the base', () => {
     const two = `${decl(['core/input'])}[[hook]]\nname = "b"\nusers = ["core/ui"]\n`;
     const three = `${decl(['core/input'])}[[hook]]\nname = "b"\nusers = ["core/ui", "core/x"]\n`;
     expect(
-      ctx({ now: { [F]: three }, then: { [F]: two } })
+      ctx({ now: { [F]: three }, before: { [F]: two } })
         .portUsers(F)
         .sort(),
     ).toEqual(['core/ui', 'core/x']);
   });
 
   it('names the users of a declaration removed since the base: the file is gone, so none', () => {
-    expect(ctx({ then: { [F]: decl(['core/input']) } }).portUsers(F)).toEqual([]);
+    expect(ctx({ before: { [F]: decl(['core/input']) } }).portUsers(F)).toEqual([]);
   });
 
   it('counts every declaration as changed when no base is given', () => {
-    const none = ctx({ now: { [F]: decl(['core/a']) }, then: { [F]: decl(['core/b']) }, base: undefined });
+    const none = ctx({ now: { [F]: decl(['core/a']) }, before: { [F]: decl(['core/b']) }, base: undefined });
     expect(none.portUsers(F)).toEqual(['core/a']);
   });
 
   it('reads a generated port file against the base text', () => {
     const file = `ports/${DEV}-1.0.toml`;
     const port = (mode) => GENERATED(mode);
-    const changed = ctx({ now: { [file]: port('before') }, then: { [file]: port('replace') } }).portEntries(file);
+    const changed = ctx({ now: { [file]: port('before') }, before: { [file]: port('replace') } }).portEntries(file);
     expect(changed).toEqual({ users: ['core/input'], wide: false });
   });
 
   it('is wide for a generated port file without a base, a new one or a removed one', () => {
     const file = `ports/${DEV}-1.0.toml`;
     expect(ctx({ now: { [file]: GENERATED('before') }, base: undefined }).portEntries(file).wide).toBe(true);
-    expect(ctx({ then: { [file]: GENERATED('before') } }).portEntries(file).wide).toBe(true);
+    expect(ctx({ before: { [file]: GENERATED('before') } }).portEntries(file).wide).toBe(true);
     expect(ctx({ now: { [file]: GENERATED('before') } }).portEntries(file).wide).toBe(true);
   });
 
